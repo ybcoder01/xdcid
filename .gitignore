@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment and local auth
+.env
+.env.local
+.env.*.local
+.vercel/
+.vercel-localappdata/
+.vercel-xdg-data/
+
+# Build output
+.next/
+out/
+outputs/
+
+# Hardhat generated output
+artifacts/
+cache/
+typechain-types/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

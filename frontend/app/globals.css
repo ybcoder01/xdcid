@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(21, 94, 117, 0.12), transparent 34%),
+    linear-gradient(315deg, rgba(22, 163, 74, 0.1), transparent 30%),
+    #f6f8f7;
+  color: #111827;
+  text-rendering: geometricPrecision;
+}
+
+input,
+textarea {
+  outline: none;
+}
+
+input,
+textarea,
+button {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+}
