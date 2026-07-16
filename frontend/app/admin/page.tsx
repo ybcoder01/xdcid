@@ -22,6 +22,7 @@ export default function AdminPage() {
     functionName: "owner"
   });
   const balance = useBalance({ address: addresses.registrar });
+  const refetchBalance = balance.refetch;
   const withdrawal = useWriteContract();
   const receipt = useWaitForTransactionReceipt({ hash: withdrawal.data });
 
@@ -54,8 +55,8 @@ export default function AdminPage() {
   }, [account]);
 
   useEffect(() => {
-    if (receipt.isSuccess) void balance.refetch();
-  }, [balance, receipt.isSuccess]);
+    if (receipt.isSuccess) void refetchBalance();
+  }, [receipt.isSuccess, refetchBalance]);
 
   function withdraw() {
     if (!canWithdraw) return;
