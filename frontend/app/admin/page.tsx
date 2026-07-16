@@ -1,124 +1,72 @@
 "use client";
 
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useEffect, useMemo, useState } from "react";
-import { createPublicClient, createWalletClient, custom, formatEther, http, isAddress } from "viem";
-import { addresses, registrarAbi, xdcMainnet } from "../../config/contracts";
-
-type BrowserEthereum = {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-};
-
-const publicClient = createPublicClient({
-  chain: xdcMainnet,
-  transport: http(xdcMainnet.rpcUrls.default.http[0])
-});
-
-function getEthereum() {
-  if (typeof window === "undefined") return undefined;
-  return (window as Window & { ethereum?: BrowserEthereum }).ethereum;
-}
+import { formatEther, isAddress } from "viem";
+import {
+  useAccount,
+  useBalance,
+  useReadContract,
+  useWaitForTransactionReceipt,
+  useWriteContract
+} from "wagmi";
+import { addresses, registrarAbi } from "../../config/contracts";
 
 export default function AdminPage() {
-  const [mounted, setMounted] = useState(false);
-  const [account, setAccount] = useState("");
-  const [owner, setOwner] = useState("");
-  const [balance, setBalance] = useState<bigint | undefined>();
+  const { address: account, isConnected } = useAccount();
   const [recipient, setRecipient] = useState("");
-  const [hash, setHash] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [withdrawing, setWithdrawing] = useState(false);
 
+  const owner = useReadContract({
+    address: addresses.registrar,
+    abi: registrarAbi,
+    functionName: "owner"
+  });
+  const balance = useBalance({ address: addresses.registrar });
+  const withdrawal = useWriteContract();
+  const receipt = useWaitForTransactionReceipt({ hash: withdrawal.data });
+
+  const ownerAddress = owner.data || "";
+  const contractBalance = balance.data?.value;
   const isOwner = useMemo(
-    () => !!account && !!owner && owner.toLowerCase() === account.toLowerCase(),
-    [account, owner]
+    () =>
+      !!account &&
+      !!ownerAddress &&
+      ownerAddress.toLowerCase() === account.toLowerCase(),
+    [account, ownerAddress]
   );
-  const canWithdraw = isOwner && isAddress(recipient) && !!balance && balance > 0n && !withdrawing;
-
-  async function refresh() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const [contractOwner, contractBalance] = await Promise.all([
-        publicClient.readContract({
-          address: addresses.registrar,
-          abi: registrarAbi,
-          functionName: "owner"
-        }),
-        publicClient.getBalance({ address: addresses.registrar })
-      ]);
-
-      setOwner(contractOwner);
-      setBalance(contractBalance);
-
-      const ethereum = getEthereum();
-      if (ethereum) {
-        const accounts = (await ethereum.request({ method: "eth_accounts" })) as string[];
-        const connected = accounts[0] || "";
-        setAccount(connected);
-        if (connected && !recipient) setRecipient(connected);
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load admin data");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function connect() {
-    const ethereum = getEthereum();
-    if (!ethereum) {
-      setError("No browser wallet found");
-      return;
-    }
-
-    try {
-      const accounts = (await ethereum.request({ method: "eth_requestAccounts" })) as string[];
-      const connected = accounts[0] || "";
-      setAccount(connected);
-      if (connected && !recipient) setRecipient(connected);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Wallet connection failed");
-    }
-  }
-
-  async function withdraw() {
-    const ethereum = getEthereum();
-    if (!ethereum || !canWithdraw) return;
-
-    setWithdrawing(true);
-    setError("");
-    setHash("");
-
-    try {
-      const walletClient = createWalletClient({
-        chain: xdcMainnet,
-        transport: custom(ethereum)
-      });
-      const [walletAccount] = await walletClient.requestAddresses();
-      const txHash = await walletClient.writeContract({
-        address: addresses.registrar,
-        abi: registrarAbi,
-        functionName: "withdraw",
-        args: [recipient as `0x${string}`],
-        account: walletAccount
-      });
-
-      setHash(txHash);
-      await refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Withdraw transaction failed");
-    } finally {
-      setWithdrawing(false);
-    }
-  }
+  const canWithdraw =
+    isOwner &&
+    isAddress(recipient) &&
+    !!contractBalance &&
+    contractBalance > 0n &&
+    !withdrawal.isPending &&
+    !receipt.isLoading;
+  const loading = owner.isLoading || balance.isLoading;
+  const error =
+    owner.error?.message ||
+    balance.error?.message ||
+    withdrawal.error?.message ||
+    receipt.error?.message ||
+    "";
 
   useEffect(() => {
-    setMounted(true);
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setRecipient(account || "");
+  }, [account]);
+
+  useEffect(() => {
+    if (receipt.isSuccess) void balance.refetch();
+  }, [balance, receipt.isSuccess]);
+
+  function withdraw() {
+    if (!canWithdraw) return;
+
+    withdrawal.writeContract({
+      address: addresses.registrar,
+      abi: registrarAbi,
+      functionName: "withdraw",
+      args: [recipient as `0x${string}`]
+    });
+  }
 
   if (!isOwner) {
     return (
@@ -127,23 +75,24 @@ export default function AdminPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Owner only</p>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">Owner access required</h1>
           <p className="mt-2 text-sm text-neutral-600">
-            Connect the registrar owner wallet to view withdrawal controls.
+            {!isConnected
+              ? "Connect the registrar owner wallet to view withdrawal controls."
+              : loading
+                ? "Checking registrar ownership..."
+                : "The connected wallet is not the registrar owner."}
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <button
-              className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-              disabled={!mounted || loading}
-              onClick={connect}
-            >
-              {account ? "Wallet connected" : loading ? "Checking access..." : "Connect owner wallet"}
-            </button>
+          <div className="mt-8">
+            <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />
           </div>
 
-          {account && owner && account.toLowerCase() !== owner.toLowerCase() ? (
+          {isConnected &&
+          account &&
+          ownerAddress &&
+          account.toLowerCase() !== ownerAddress.toLowerCase() ? (
             <p className="mt-4 text-xs text-red-600">Connected wallet is not the registrar owner.</p>
           ) : null}
-          {error ? <p className="mt-4 text-xs text-red-600">{error}</p> : null}
+          {error ? <p className="mt-4 break-words text-xs text-red-600">{error}</p> : null}
         </section>
       </main>
     );
@@ -161,7 +110,11 @@ export default function AdminPage() {
             <div className="rounded-md border border-black/10 bg-neutral-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Registrar balance</p>
               <p className="mt-2 text-3xl font-semibold text-slate-950">
-                {balance !== undefined ? `${formatEther(balance)} XDC` : loading ? "Loading..." : "Unavailable"}
+                {contractBalance !== undefined
+                  ? `${formatEther(contractBalance)} XDC`
+                  : loading
+                    ? "Loading..."
+                    : "Unavailable"}
               </p>
               <p className="mt-2 break-all text-xs text-neutral-500">{addresses.registrar}</p>
             </div>
@@ -176,25 +129,26 @@ export default function AdminPage() {
               />
             </label>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                className="rounded-md border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-neutral-50 disabled:opacity-50"
-                disabled={!mounted}
-                onClick={connect}
-              >
-                {account ? "Wallet connected" : "Connect owner wallet"}
-              </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />
               <button
                 className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
                 disabled={!canWithdraw}
                 onClick={withdraw}
               >
-                {withdrawing ? "Withdrawing..." : "Withdraw all funds"}
+                {withdrawal.isPending
+                  ? "Confirm in wallet..."
+                  : receipt.isLoading
+                    ? "Withdrawing..."
+                    : "Withdraw all funds"}
               </button>
             </div>
 
-            {hash ? <p className="break-all text-xs text-neutral-500">Transaction sent: {hash}</p> : null}
-            {error ? <p className="text-xs text-red-600">{error}</p> : null}
+            {withdrawal.data ? (
+              <p className="break-all text-xs text-neutral-500">Transaction sent: {withdrawal.data}</p>
+            ) : null}
+            {receipt.isSuccess ? <p className="text-xs text-teal-700">Withdrawal confirmed.</p> : null}
+            {error ? <p className="break-words text-xs text-red-600">{error}</p> : null}
           </div>
         </div>
 
@@ -207,11 +161,11 @@ export default function AdminPage() {
             </div>
             <div className="border-t border-white/10 pt-4">
               <p className="text-slate-300">Registrar owner</p>
-              <p className="mt-1 break-all">{owner || (loading ? "Loading..." : "Unavailable")}</p>
+              <p className="mt-1 break-all">{ownerAddress || (loading ? "Loading..." : "Unavailable")}</p>
             </div>
             <div className="border-t border-white/10 pt-4">
               <p className="text-slate-300">Status</p>
-              <p className="mt-1">{isOwner ? "Owner wallet connected" : "Connect owner wallet to withdraw"}</p>
+              <p className="mt-1">Owner wallet connected</p>
             </div>
           </div>
         </aside>
