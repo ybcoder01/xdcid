@@ -4,11 +4,7 @@ import { useMemo, useState } from "react";
 import { isAddress, parseEther, zeroAddress } from "viem";
 import { useAccount, useReadContract, useSendTransaction } from "wagmi";
 import { addresses, contractsConfigured, registrarAbi, registryAbi, resolverAbi } from "../../config/contracts";
-
-function normalizeName(value: string) {
-  const label = value.trim().toLowerCase().replace(/\.xdc$/i, "");
-  return { label, name: `${label}.xdc` };
-}
+import { parseXnsName } from "../../lib/names";
 
 export default function SendPage() {
   const [recipient, setRecipient] = useState("");
@@ -16,8 +12,9 @@ export default function SendPage() {
   const { isConnected } = useAccount();
   const { sendTransaction, isPending, data: hash, error } = useSendTransaction();
 
-  const { label, name } = useMemo(() => normalizeName(recipient), [recipient]);
-  const enabled = contractsConfigured && label.length >= 3;
+  const parsedName = useMemo(() => parseXnsName(recipient), [recipient]);
+  const { label, name, isValid, error: validationError } = parsedName;
+  const enabled = contractsConfigured && isValid;
 
   const value = useMemo(() => {
     try {
@@ -65,7 +62,7 @@ export default function SendPage() {
     resolvedAddress.data && resolvedAddress.data !== zeroAddress && isAddress(resolvedAddress.data)
       ? resolvedAddress.data
       : undefined;
-  const canSend = isConnected && hasOwner && !!paymentAddress && value > 0n && !isPending;
+  const canSend = isConnected && isValid && hasOwner && !!paymentAddress && value > 0n && !isPending;
 
   function send() {
     if (!paymentAddress || value <= 0n) return;
@@ -89,11 +86,15 @@ export default function SendPage() {
                   value={recipient}
                   onChange={(event) => setRecipient(event.target.value)}
                   placeholder="name or name.xdc"
+                  aria-invalid={recipient.trim().length > 0 && !isValid}
                 />
                 <span className="grid min-w-20 place-items-center rounded-md bg-teal-500 px-4 py-4 text-sm font-semibold text-slate-950">
                   .XDC
                 </span>
               </div>
+              {recipient.trim().length > 0 && !isValid ? (
+                <span className="text-red-600">{validationError}</span>
+              ) : null}
             </label>
 
             <label className="grid gap-2 text-sm">
@@ -118,12 +119,12 @@ export default function SendPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Resolution</p>
           {label.length > 0 ? (
             <div className="mt-5">
-              <p className="text-2xl font-semibold text-slate-950">{name}</p>
+              <p className="text-2xl font-semibold text-slate-950">{isValid ? name : recipient.trim()}</p>
               <p className="mt-3 break-all text-sm text-neutral-600">
-                {!contractsConfigured
-                  ? "Contracts not configured"
-                  : label.length < 3
-                    ? "Name must be at least 3 characters"
+                {!isValid
+                  ? validationError
+                  : !contractsConfigured
+                    ? "Contracts not configured"
                     : node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading
                       ? "Resolving..."
                       : node.isError || owner.isError || expiry.isError || resolvedAddress.isError

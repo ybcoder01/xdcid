@@ -32,6 +32,43 @@ describe("XNS Protocol", function () {
     expect(await registry.ownerOf(node)).to.equal(alice.address);
   });
 
+  it("canonicalizes label and suffix casing", async function () {
+    const { registrar } = await deploy();
+
+    expect(await registrar.canonicalize("Alice.XDC")).to.equal("alice.xdc");
+    expect(await registrar.nodeFor("Alice.XDC")).to.equal(await registrar.nodeFor("alice.xdc"));
+  });
+
+  it("rejects invalid labels", async function () {
+    const { registrar } = await deploy();
+    const invalidNames = [
+      "ab.xdc",
+      "-alice.xdc",
+      "alice-.xdc",
+      "ali ce.xdc",
+      "ali_ce.xdc",
+      "alice.eth",
+      "alice.xdc.xdc",
+      "a".repeat(64) + ".xdc"
+    ];
+
+    for (const name of invalidNames) {
+      await expect(registrar.canonicalize(name)).to.be.revertedWithCustomError(registrar, "InvalidName");
+    }
+  });
+
+  it("prevents duplicate registration through case variants", async function () {
+    const { alice, bob, registrar } = await deploy();
+    const price = await registrar.price("Alice.XDC");
+
+    await registrar.connect(alice).register("Alice.XDC", alice.address, 1, { value: price });
+
+    expect(await registrar.available("alice.xdc")).to.equal(false);
+    await expect(
+      registrar.connect(bob).register("alice.xdc", bob.address, 1, { value: price })
+    ).to.be.revertedWithCustomError(registrar, "Unavailable");
+  });
+
   it("fails duplicate registration", async function () {
     const { alice, bob, registrar } = await deploy();
     const price = await registrar.price("alice.xdc");
