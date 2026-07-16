@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import { isAddress, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { addresses, registrarAbi, registryAbi, resolverAbi, reverseResolverAbi } from "../../../config/contracts";
+import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
 
 export default function NamePage({ params }: { params: { name: string } }) {
-  const name = decodeURIComponent(params.name).toLowerCase();
+  const parsedName = useMemo(() => parseXnsName(decodeURIComponent(params.name)), [params.name]);
+  const { name, isValid, error: validationError } = parsedName;
   const { address } = useAccount();
   const { writeContract, isPending } = useWriteContract();
   const [addr, setAddr] = useState("");
@@ -19,7 +21,8 @@ export default function NamePage({ params }: { params: { name: string } }) {
     address: addresses.registrar,
     abi: registrarAbi,
     functionName: "nodeFor",
-    args: [name]
+    args: [name],
+    query: { enabled: isValid }
   });
 
   const owner = useReadContract({
@@ -27,7 +30,7 @@ export default function NamePage({ params }: { params: { name: string } }) {
     abi: registryAbi,
     functionName: "ownerOf",
     args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data }
+    query: { enabled: isValid && !!node.data }
   });
 
   const resolvedAddress = useReadContract({
@@ -35,7 +38,7 @@ export default function NamePage({ params }: { params: { name: string } }) {
     abi: resolverAbi,
     functionName: "addresses",
     args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data }
+    query: { enabled: isValid && !!node.data }
   });
 
   const primaryName = useReadContract({
@@ -55,7 +58,7 @@ export default function NamePage({ params }: { params: { name: string } }) {
           args: [node.data, key]
         }))
       : [],
-    query: { enabled: !!node.data }
+    query: { enabled: isValid && !!node.data }
   });
 
   const isOwner = useMemo(
@@ -101,6 +104,18 @@ export default function NamePage({ params }: { params: { name: string } }) {
       functionName: "transferName",
       args: [node.data, newOwner]
     });
+  }
+
+  if (!isValid) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <section className="rounded-md border border-red-200 bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-700">Invalid XDCID name</p>
+          <h1 className="mt-3 text-3xl font-semibold text-slate-950">This name cannot be resolved</h1>
+          <p className="mt-2 text-sm text-neutral-600">{validationError}</p>
+        </section>
+      </main>
+    );
   }
 
   return (
