@@ -40,7 +40,7 @@ function configuredRpcUrls(): string[] {
     new Set(
       candidates
         .map((value) => value?.trim())
-        .filter((value): value is string => Boolean(value) && isHttpUrl(value))
+        .filter((value): value is string => value !== undefined && isHttpUrl(value))
     )
   );
 }
