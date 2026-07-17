@@ -56,7 +56,7 @@ pnpm install
 
 Fill `PRIVATE_KEY` only in a local or protected deployment environment for deploys and owner-only maintenance scripts. Never commit a production key. The default XDC mainnet RPC is `https://earpc.xinfin.network`.
 
-## Test
+## TestSet `XDC_RPC_URLS` to a comma-separated, ordered list of server-side RPC endpoints. `XDC_RPC_URL` and `XDC_MAINNET_RPC_URL` remain supported for compatibility. Keep authenticated provider URLs server-side and never place secrets in `NEXT_PUBLIC_*` variables.
 
 ```bash
 pnpm test
@@ -106,7 +106,7 @@ The first API version exposes two XDC mainnet read endpoints:
 
 The name endpoint accepts either a bare label or a `.xdc` name. The optional `years` parameter must be an integer from 1 through 100 and controls the total registration-price quote.
 
-Set `XDC_RPC_URL` to override the server-side RPC endpoint. API reads are intentionally uncached until the RPC fallback and caching phase is implemented.
+Each endpoint has a 3.5-second timeout by default (`XDC_RPC_TIMEOUT_MS`, bounded from 1 to 10 seconds). Successful name and reverse lookups are cached in memory for 15 seconds by default (`XDC_API_CACHE_TTL_MS`, bounded from 1 to 60 seconds). The cache is limited to 500 entries per warm server instance, coalesces concurrent identical reads, and never retains failed RPC requests. API reads are intentionally uncached until the RPC fallback and caching phase is implemented.
 
 ### Error responses
 
