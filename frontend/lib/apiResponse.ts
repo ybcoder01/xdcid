@@ -8,9 +8,15 @@ export type ApiErrorCode =
   | "INVALID_NAME"
   | "INVALID_ADDRESS"
   | "INVALID_YEARS"
+  | "UNAUTHORIZED"
+  | "NOT_FOUND"
+  | "GATEWAY_UNAVAILABLE"
   | "XDC_RPC_UNAVAILABLE";
 
-type InputErrorCode =\n  | "INVALID_NAME"\n  | "INVALID_ADDRESS"\n  | "INVALID_YEARS";
+type InputErrorCode =
+  | "INVALID_NAME"
+  | "INVALID_ADDRESS"
+  | "INVALID_YEARS";
 
 export class ApiInputError extends Error {
   constructor(
