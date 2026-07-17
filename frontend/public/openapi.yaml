@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: XDCID Read API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Versioned, read-only access to XDCID name and reverse-resolution data on
     XDC mainnet. The API version is present in both the URL and every
@@ -12,6 +12,7 @@ servers:
 tags:
   - name: Names
   - name: Reverse resolution
+  - name: XDC AI gateway
 paths:
   /api/v1/names/{name}:
     get:
@@ -125,7 +126,133 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/RpcUnavailable"
+  /api/xdcai/v1/resolve/{name}:
+    get:
+      operationId: getGatewayResolution
+      summary: Resolve an XDCID name
+      description: Protected upstream endpoint for the paid XDC AI capability.
+      tags:
+        - XDC AI gateway
+      security:
+        - XdcAiGatewayKey: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ownership, forward resolution, and expiry returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/GatewayUnauthorized"
+        "503":
+          $ref: "#/components/responses/GatewayServiceUnavailable"
+  /api/xdcai/v1/reverse/{address}:
+    get:
+      operationId: getGatewayReverseResolution
+      summary: Reverse-resolve an XDC address
+      description: Protected upstream endpoint for the paid XDC AI capability.
+      tags:
+        - XDC AI gateway
+      security:
+        - XdcAiGatewayKey: []
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          description: Verified reverse-resolution result returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReverseResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/GatewayUnauthorized"
+        "503":
+          $ref: "#/components/responses/GatewayServiceUnavailable"
+  /api/xdcai/v1/availability/{name}:
+    get:
+      operationId: getGatewayAvailability
+      summary: Check availability and pricing
+      description: Protected upstream endpoint for the paid XDC AI capability.
+      tags:
+        - XDC AI gateway
+      security:
+        - XdcAiGatewayKey: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: years
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 1
+      responses:
+        "200":
+          description: Availability, expiry, and pricing returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/GatewayUnauthorized"
+        "503":
+          $ref: "#/components/responses/GatewayServiceUnavailable"
+  /api/xdcai/v1/profile/{name}:
+    get:
+      operationId: getGatewayProfile
+      summary: Read XDCID profile records
+      description: Protected upstream endpoint for the paid XDC AI capability.
+      tags:
+        - XDC AI gateway
+      security:
+        - XdcAiGatewayKey: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Profile records returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/GatewayUnauthorized"
+        "503":
+          $ref: "#/components/responses/GatewayServiceUnavailable"
 components:
+  securitySchemes:
+    XdcAiGatewayKey:
+      type: apiKey
+      in: header
+      name: X-XDCID-Gateway-Key
+      description: Server-only key injected by the XDC AI Gateway.
   headers:
     CacheControl:
       description: Application responses are not stored by shared or browser caches.
@@ -138,6 +265,29 @@ components:
         type: integer
         minimum: 1
   responses:
+    InvalidRequest:
+      description: A path or query value is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+    GatewayUnauthorized:
+      description: The gateway key is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            version: v1
+            error:
+              code: UNAUTHORIZED
+              message: Invalid gateway credentials
+    GatewayServiceUnavailable:
+      description: The gateway key is not configured or XDC RPC is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
     RateLimited:
       description: |
         The Vercel edge rate limit was exceeded. Because this response is
@@ -214,9 +364,129 @@ components:
                 - INVALID_NAME
                 - INVALID_ADDRESS
                 - INVALID_YEARS
+                - UNAUTHORIZED
+                - NOT_FOUND
+                - GATEWAY_UNAVAILABLE
                 - XDC_RPC_UNAVAILABLE
             message:
               type: string
+    ResolveResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - data
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"
+        data:
+          $ref: "#/components/schemas/ResolveData"
+    AvailabilityResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - data
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"
+        data:
+          $ref: "#/components/schemas/AvailabilityData"
+    ProfileResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - data
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"
+        data:
+          $ref: "#/components/schemas/ProfileData"
+    ResolveData:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - label
+        - node
+        - network
+        - registered
+        - owner
+        - resolvedAddress
+        - expiry
+      properties:
+        name:
+          $ref: "#/components/schemas/NameData/properties/name"
+        label:
+          $ref: "#/components/schemas/NameData/properties/label"
+        node:
+          $ref: "#/components/schemas/NameData/properties/node"
+        network:
+          $ref: "#/components/schemas/NameData/properties/network"
+        registered:
+          $ref: "#/components/schemas/NameData/properties/registered"
+        owner:
+          $ref: "#/components/schemas/NameData/properties/owner"
+        resolvedAddress:
+          $ref: "#/components/schemas/NameData/properties/resolvedAddress"
+        expiry:
+          $ref: "#/components/schemas/NameData/properties/expiry"
+    AvailabilityData:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - label
+        - node
+        - network
+        - available
+        - registered
+        - expiry
+        - pricing
+      properties:
+        name:
+          $ref: "#/components/schemas/NameData/properties/name"
+        label:
+          $ref: "#/components/schemas/NameData/properties/label"
+        node:
+          $ref: "#/components/schemas/NameData/properties/node"
+        network:
+          $ref: "#/components/schemas/NameData/properties/network"
+        available:
+          $ref: "#/components/schemas/NameData/properties/available"
+        registered:
+          $ref: "#/components/schemas/NameData/properties/registered"
+        expiry:
+          $ref: "#/components/schemas/NameData/properties/expiry"
+        pricing:
+          $ref: "#/components/schemas/Pricing"
+    ProfileData:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - label
+        - node
+        - network
+        - registered
+        - owner
+        - profile
+      properties:
+        name:
+          $ref: "#/components/schemas/NameData/properties/name"
+        label:
+          $ref: "#/components/schemas/NameData/properties/label"
+        node:
+          $ref: "#/components/schemas/NameData/properties/node"
+        network:
+          $ref: "#/components/schemas/NameData/properties/network"
+        registered:
+          $ref: "#/components/schemas/NameData/properties/registered"
+        owner:
+          $ref: "#/components/schemas/NameData/properties/owner"
+        profile:
+          $ref: "#/components/schemas/Profile"
     NameData:
       type: object
       additionalProperties: false
