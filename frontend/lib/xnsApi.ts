@@ -16,14 +16,13 @@ import {
   reverseResolverAbi,
   xdcMainnet
 } from "../config/contracts";
+import { ApiInputError } from "./apiResponse";
 import { parseXnsName } from "./names";
 
 export const profileKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
 
 type ProfileKey = (typeof profileKeys)[number];
 type Profile = Record<ProfileKey, string | null>;
-
-export class ApiInputError extends Error {}
 
 const rpcUrl =
   process.env.XDC_RPC_URL ||
@@ -40,7 +39,10 @@ export function parseYears(value: string | null): number {
 
   const years = Number(value);
   if (!Number.isSafeInteger(years) || years < 1 || years > 100) {
-    throw new ApiInputError("years must be an integer between 1 and 100");
+    throw new ApiInputError(
+      "INVALID_YEARS",
+      "years must be an integer between 1 and 100"
+    );
   }
 
   return years;
@@ -49,7 +51,10 @@ export function parseYears(value: string | null): number {
 export async function getNameData(input: string, years: number) {
   const parsed = parseXnsName(input);
   if (!parsed.isValid) {
-    throw new ApiInputError(parsed.error || "Invalid XDCID name");
+    throw new ApiInputError(
+      "INVALID_NAME",
+      parsed.error || "Invalid XDCID name"
+    );
   }
 
   const node = keccak256(stringToHex(parsed.name));
@@ -137,7 +142,10 @@ export async function getNameData(input: string, years: number) {
 
 export async function getReverseData(input: string) {
   if (!isAddress(input)) {
-    throw new ApiInputError("address must be a valid EVM address");
+    throw new ApiInputError(
+      "INVALID_ADDRESS",
+      "address must be a valid EVM address"
+    );
   }
 
   const address = getAddress(input);
