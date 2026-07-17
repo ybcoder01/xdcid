@@ -99,6 +99,8 @@ Open the Next.js URL and connect a wallet on XDC mainnet, chain ID `50`.
 
 ## Read-only API
 
+The complete OpenAPI 3.1 contract is published at [`/openapi.yaml`](frontend/public/openapi.yaml) and is served by the deployed frontend at `/openapi.yaml`.
+
 The first API version exposes two XDC mainnet read endpoints:
 
 - `GET /api/v1/names/{name}?years=1` returns canonical name data, forward resolution, availability, pricing, expiry, and profile records.
@@ -109,6 +111,12 @@ The name endpoint accepts either a bare label or a `.xdc` name. The optional `ye
 Set `XDC_RPC_URLS` to a comma-separated, ordered list of server-side RPC endpoints. `XDC_RPC_URL` and `XDC_MAINNET_RPC_URL` remain supported as single-endpoint compatibility settings, and public XDC endpoints are appended as fallbacks. Keep authenticated provider URLs in server-only variables; never put a secret provider URL in a `NEXT_PUBLIC_*` variable.
 
 Each endpoint has a 3.5-second timeout by default (`XDC_RPC_TIMEOUT_MS`, bounded from 1 to 10 seconds). Successful name and reverse lookups are cached in memory for 15 seconds by default (`XDC_API_CACHE_TTL_MS`, bounded from 1 to 60 seconds). The cache is limited to 500 entries per warm server instance, coalesces concurrent identical reads, and never retains failed RPC requests.
+
+### Versioning and compatibility
+
+The URL and every application JSON response identify version `v1`. New optional response fields may be added without changing the version; removing or renaming fields, changing their types, or changing documented semantics requires a new `/api/v2` path. Clients should ignore unknown response fields.
+
+The Vercel edge may return HTTP 429 before the application route runs. That platform-managed response is documented in the OpenAPI contract but does not use the application JSON envelope.
 
 ### Error responses
 
