@@ -78,3 +78,14 @@ pnpm dev
 ```
 
 Open the Next.js URL and connect a wallet on XDC mainnet, chain ID `50`.
+
+## Read-only API
+
+The first API version exposes two XDC mainnet read endpoints:
+
+- `GET /api/v1/names/{name}?years=1` returns canonical name data, forward resolution, availability, pricing, expiry, and profile records.
+- `GET /api/v1/reverse/{address}` returns the wallet's verified primary name, or `null` when the stored reverse record is stale or missing.
+
+The name endpoint accepts either a bare label or a `.xdc` name. The optional `years` parameter must be an integer from 1 through 100 and controls the total registration-price quote.
+
+Set `XDC_RPC_URL` to override the server-side RPC endpoint. API reads are intentionally uncached until the RPC fallback and caching phase is implemented.
