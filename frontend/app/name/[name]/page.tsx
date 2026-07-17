@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { isAddress, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { addresses, registrarAbi, registryAbi, resolverAbi, reverseResolverAbi } from "../../../config/contracts";
@@ -8,7 +9,8 @@ import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
 
-export default function NamePage({ params }: { params: { name: string } }) {
+export default function NamePage() {
+  const params = useParams<{ name: string }>();
   const parsedName = useMemo(() => parseXnsName(decodeURIComponent(params.name)), [params.name]);
   const { name, isValid, error: validationError } = parsedName;
   const { address } = useAccount();
