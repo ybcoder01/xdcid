@@ -108,6 +108,17 @@ The first API version exposes two XDC mainnet read endpoints:
 
 The name endpoint accepts either a bare label or a `.xdc` name. The optional `years` parameter must be an integer from 1 through 100 and controls the total registration-price quote.
 
+### XDC AI gateway upstream
+
+Four focused upstream routes are available for the XDC AI Gateway:
+
+- `GET /api/xdcai/v1/resolve/{name}` returns ownership, forward resolution, and expiry.
+- `GET /api/xdcai/v1/reverse/{address}` returns the verified primary name.
+- `GET /api/xdcai/v1/availability/{name}?years=1` returns availability, expiry, and pricing.
+- `GET /api/xdcai/v1/profile/{name}` returns the profile records.
+
+These routes require the `X-XDCID-Gateway-Key` request header to match the server-only `XDCID_GATEWAY_API_KEY` environment variable. If the variable is missing, the routes fail closed with HTTP 503; invalid credentials return HTTP 401. Never commit the key or expose it through a `NEXT_PUBLIC_*` variable. Agents call the paid `api.xdcai.tech` service URL rather than these protected upstream URLs directly.
+
 Set `XDC_RPC_URLS` to a comma-separated, ordered list of server-side RPC endpoints. `XDC_RPC_URL` and `XDC_MAINNET_RPC_URL` remain supported as single-endpoint compatibility settings, and public XDC endpoints are appended as fallbacks. Keep authenticated provider URLs in server-only variables; never put a secret provider URL in a `NEXT_PUBLIC_*` variable.
 
 Each endpoint has a 3.5-second timeout by default (`XDC_RPC_TIMEOUT_MS`, bounded from 1 to 10 seconds). Successful name and reverse lookups are cached in memory for 15 seconds by default (`XDC_API_CACHE_TTL_MS`, bounded from 1 to 60 seconds). The cache is limited to 500 entries per warm server instance, coalesces concurrent identical reads, and never retains failed RPC requests.
