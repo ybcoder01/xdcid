@@ -110,6 +110,14 @@ Set `XDC_RPC_URLS` to a comma-separated, ordered list of server-side RPC endpoin
 
 Each endpoint has a 3.5-second timeout by default (`XDC_RPC_TIMEOUT_MS`, bounded from 1 to 10 seconds). Successful name and reverse lookups are cached in memory for 15 seconds by default (`XDC_API_CACHE_TTL_MS`, bounded from 1 to 60 seconds). The cache is limited to 500 entries per warm server instance, coalesces concurrent identical reads, and never retains failed RPC requests.
 
+### Rate limiting
+
+Set `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and a private high-entropy `API_RATE_LIMIT_HASH_SALT` in the server environment to enable distributed rate limiting. The default policy allows 60 requests per 60 seconds across the v1 API and can be adjusted with `API_RATE_LIMIT_MAX_REQUESTS` and `API_RATE_LIMIT_WINDOW_SECONDS`.
+
+Client IP addresses are salted and SHA-256 hashed before they are used in Redis keys; raw addresses are never stored. The counter update is atomic, successful responses include `X-RateLimit-*` headers, and rejected requests return HTTP 429 with `RATE_LIMITED` and `Retry-After`.
+
+Rate limiting stays disabled until all three required server-only values are configured. Redis failures time out quickly and fail open to preserve API availability while emitting a generic server log. Never expose the Redis token or hash salt through a `NEXT_PUBLIC_*` variable.
+
 ### Error responses
 
 Every API error uses the same versioned envelope:
@@ -124,4 +132,4 @@ Every API error uses the same versioned envelope:
 }
 ```
 
-Validation errors return HTTP 400 with one of `INVALID_NAME`, `INVALID_ADDRESS`, or `INVALID_YEARS`. XDC RPC failures return HTTP 503 with `XDC_RPC_UNAVAILABLE`. Internal error details are logged server-side and are never included in API responses.
+Validation errors return HTTP 400 with one of `INVALID_NAME`, `INVALID_ADDRESS`, or `INVALID_YEARS`. Rate-limited requests return HTTP 429 with `RATE_LIMITED`. XDC RPC failures return HTTP 503 with `XDC_RPC_UNAVAILABLE`. Internal error details are logged server-side and are never included in API responses.
