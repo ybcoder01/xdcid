@@ -10,7 +10,7 @@ export type ApiErrorCode =
   | "INVALID_YEARS"
   | "XDC_RPC_UNAVAILABLE";
 
-type InputErrorCode = Exclude<ApiErrorCode, "XDC_RPC_UNAVAILABLE">;
+type InputErrorCode =\n  | "INVALID_NAME"\n  | "INVALID_ADDRESS"\n  | "INVALID_YEARS";
 
 export class ApiInputError extends Error {
   constructor(
