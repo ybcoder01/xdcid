@@ -1,0 +1,26 @@
+{
+  "name": "@xdcid/sdk",
+  "version": "0.1.0",
+  "description": "Read-only XDCID name resolution SDK for XDC mainnet",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "viem": ">=2.55.1 <3"
+  }
+}
