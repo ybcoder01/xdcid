@@ -3,7 +3,8 @@
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "test": "hardhat test",
+    "test": "hardhat test && pnpm test:sdk",
+    "test:sdk": "pnpm build:sdk && node --test sdk/test/*.test.mjs",
     "compile": "hardhat compile",
     "build:sdk": "tsc -p sdk/tsconfig.json",
     "deploy:apothem": "hardhat run scripts/deploy.ts --network apothem",
