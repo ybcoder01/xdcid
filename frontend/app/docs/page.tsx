@@ -27,9 +27,9 @@ const paidCapabilities = [
   ["Profile", "Read the public profile records attached to an XDCID name."]
 ];
 
-const exampleResponse = '{\\n  "version": "v1",\\n  "data": {\\n    "name": "alice.xdc",\\n    "available": false,\\n    "resolvedAddress": "0x..."\\n  }\\n}';
+const exampleResponse = '{\n  "version": "v1",\n  "data": {\n    "name": "alice.xdc",\n    "available": false,\n    "resolvedAddress": "0x..."\n  }\n}';
 
-const errorResponse = '{\\n  "version": "v1",\\n  "error": {\\n    "code": "INVALID_NAME",\\n    "message": "Invalid XDCID name"\\n  }\\n}';
+const errorResponse = '{\n  "version": "v1",\n  "error": {\n    "code": "INVALID_NAME",\n    "message": "Invalid XDCID name"\n  }\n}';
 
 export default function DocsPage() {
   return (
