@@ -231,7 +231,9 @@ export function nodeForName(value: string): Hash {
   return keccak256(toBytes(normalizeName(value)));
 }
 
-export function createXdcidPublicClient(rpcUrls: readonly string[] = DEFAULT_RPC_URLS) {
+export function createXdcidPublicClient(
+  rpcUrls: readonly string[] = DEFAULT_RPC_URLS
+): PublicClient {
   if (rpcUrls.length === 0) {
     throw new XdcidSdkError("INVALID_CONFIG", "At least one XDC RPC URL is required");
   }
