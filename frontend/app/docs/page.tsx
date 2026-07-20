@@ -31,6 +31,8 @@ const exampleResponse = '{\n  "version": "v1",\n  "data": {\n    "name": "alice.
 
 const errorResponse = '{\n  "version": "v1",\n  "error": {\n    "code": "INVALID_NAME",\n    "message": "Invalid XDCID name"\n  }\n}';
 
+const sdkExample = 'import { createXdcidClient } from "@xdcid/sdk";\n\nconst xdcid = createXdcidClient();\nconst result = await xdcid.resolveName("alice.xdc");';
+
 export default function DocsPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
@@ -61,6 +63,14 @@ export default function DocsPage() {
           <a className="rounded-md border border-white/20 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10" href="/api/v1/names/alice.xdc?years=1">
             Try a name lookup
           </a>
+          <a
+            className="rounded-md border border-white/20 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10"
+            href="https://github.com/ybcoder01/xdcid/tree/main/sdk"
+            rel="noreferrer"
+            target="_blank"
+          >
+            View TypeScript SDK
+          </a>
         </div>
       </section>
 
@@ -81,6 +91,38 @@ export default function DocsPage() {
               <p className="mt-1 text-sm leading-6 text-neutral-600">{endpoint.description}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">TypeScript SDK</p>
+        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Resolve XDCID directly on-chain</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+          The read-only SDK provides name validation, forward and reverse resolution, availability, pricing, expiry, and profile lookups with XDC RPC fallback. It never requests a private key or wallet signature.
+        </p>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+          The source is available now and is compiled with this project. Public npm installation instructions will be added after the package is released.
+        </p>
+        <pre className="mt-5 overflow-x-auto rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-200">
+          <code>{sdkExample}</code>
+        </pre>
+        <div className="mt-5 flex flex-wrap gap-4">
+          <a
+            className="text-sm font-semibold text-teal-800 hover:text-teal-950"
+            href="https://github.com/ybcoder01/xdcid/tree/main/sdk"
+            rel="noreferrer"
+            target="_blank"
+          >
+            View SDK source →
+          </a>
+          <a
+            className="text-sm font-semibold text-teal-800 hover:text-teal-950"
+            href="https://github.com/ybcoder01/xdcid/blob/main/sdk/README.md"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Read the SDK guide →
+          </a>
         </div>
       </section>
 
