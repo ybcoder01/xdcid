@@ -11,6 +11,7 @@ export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "NOT_FOUND"
   | "GATEWAY_UNAVAILABLE"
+  | "XDC_INDEX_UNAVAILABLE"
   | "XDC_RPC_UNAVAILABLE";
 
 type InputErrorCode =
@@ -28,6 +29,17 @@ export class ApiInputError extends Error {
   }
 }
 
+export class ApiServiceError extends Error {
+  constructor(
+    public readonly code: ApiErrorCode,
+    message: string,
+    public readonly status = 503
+  ) {
+    super(message);
+    this.name = "ApiServiceError";
+  }
+}
+
 export function apiSuccess<T>(data: T) {
   return NextResponse.json({ version: API_VERSION, data }, { headers });
 }
@@ -42,6 +54,10 @@ export function apiError(code: ApiErrorCode, message: string, status: number) {
 export function handleApiError(error: unknown, logMessage: string) {
   if (error instanceof ApiInputError) {
     return apiError(error.code, error.message, 400);
+  }
+
+  if (error instanceof ApiServiceError) {
+    return apiError(error.code, error.message, error.status);
   }
 
   console.error(logMessage, error);
