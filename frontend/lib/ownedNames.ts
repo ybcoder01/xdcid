@@ -101,7 +101,7 @@ async function fetchRegistrarTransactions(registrar: Address) {
       action: "txlist",
       address: registrar,
       startblock: "0",
-      endblock: "99999999",
+      endblock: "999999999",
       page: String(page),
       offset: String(PAGE_SIZE),
       sort: "asc",
