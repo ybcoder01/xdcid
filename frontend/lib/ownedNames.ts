@@ -19,7 +19,7 @@ import { withShortCache } from "./shortCache";
 import { xdcClient } from "./xdcClient";
 
 const LEGACY_REGISTRAR = "0x31c41237A551FCadf22F8B231D8accA2c16f669b";
-const DEFAULT_XDCSCAN_API_URL = "https://api.xdcscan.io/api";
+const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 const CATALOG_TTL_MS = 60_000;
@@ -97,6 +97,7 @@ async function fetchRegistrarTransactions(registrar: Address) {
       process.env.XDCSCAN_API_URL?.trim() || DEFAULT_XDCSCAN_API_URL
     );
     url.search = new URLSearchParams({
+      chainid: String(xdcMainnet.id),
       module: "account",
       action: "txlist",
       address: registrar,
