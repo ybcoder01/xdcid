@@ -3,6 +3,7 @@ import {
   apiSuccess,
   handleApiError
 } from "../../../../../../lib/apiResponse";
+import { getOwnedNamesData } from "../../../../../../lib/ownedNames";
 import {
   getNameData,
   getReverseData,
@@ -65,6 +66,10 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     if (capability === "reverse") {
       return apiSuccess(await getReverseData(value));
+    }
+
+    if (capability === "owned-names") {
+      return apiSuccess(await getOwnedNamesData(value));
     }
 
     const years =
