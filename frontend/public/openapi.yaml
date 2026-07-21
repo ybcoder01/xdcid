@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: XDCID Read API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Versioned, read-only access to XDCID name and reverse-resolution data on
     XDC mainnet. The API version is present in both the URL and every
@@ -12,6 +12,7 @@ servers:
 tags:
   - name: Names
   - name: Reverse resolution
+  - name: Wallet names
   - name: XDC AI gateway
 paths:
   /api/v1/names/{name}:
@@ -126,6 +127,36 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/RpcUnavailable"
+  /api/v1/addresses/{address}/names:
+    get:
+      operationId: getOwnedNames
+      summary: List all active XDCID names owned by an address
+      description: |
+        Discovers registrations through XDCScan, then verifies current
+        ownership and expiry directly against the XDCID registry. The response
+        includes the address's verified primary ID and every active owned name.
+      tags:
+        - Wallet names
+      parameters:
+        - name: address
+          in: path
+          required: true
+          description: EVM-compatible XDC address.
+          schema:
+            $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          description: Verified primary ID and owned names returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnedNamesResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/IndexUnavailable"
   /api/xdcai/v1/resolve/{name}:
     get:
       operationId: getGatewayResolution
@@ -176,6 +207,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReverseResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/GatewayUnauthorized"
+        "503":
+          $ref: "#/components/responses/GatewayServiceUnavailable"
+  /api/xdcai/v1/owned-names/{address}:
+    get:
+      operationId: getGatewayOwnedNames
+      summary: List all active XDCID names owned by an address
+      description: Protected upstream endpoint for the paid XDC AI capability.
+      tags:
+        - XDC AI gateway
+      security:
+        - XdcAiGatewayKey: []
+      parameters:
+        - name: address
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          description: Verified primary ID and owned names returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnedNamesResponse"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "401":
@@ -296,6 +355,15 @@ components:
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"
+    IndexUnavailable:
+      description: XDCScan indexing or configured XDC RPC access is unavailable.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
     RpcUnavailable:
       description: All configured XDC RPC providers were unavailable.
       headers:
@@ -342,6 +410,69 @@ components:
           $ref: "#/components/schemas/ApiVersion"
         data:
           $ref: "#/components/schemas/ReverseData"
+    OwnedNamesResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+        - data
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"
+        data:
+          $ref: "#/components/schemas/OwnedNamesData"
+    OwnedNamesData:
+      type: object
+      additionalProperties: false
+      required:
+        - address
+        - network
+        - primaryName
+        - names
+      properties:
+        address:
+          $ref: "#/components/schemas/Address"
+        network:
+          $ref: "#/components/schemas/NameData/properties/network"
+        primaryName:
+          type:
+            - string
+            - "null"
+          description: Verified canonical primary .xdc name, or null.
+        names:
+          type: array
+          items:
+            $ref: "#/components/schemas/OwnedName"
+    OwnedName:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - node
+        - primary
+        - expiry
+      properties:
+        name:
+          type: string
+          description: Canonical lowercase name ending in .xdc.
+        node:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{64}$"
+        primary:
+          type: boolean
+        expiry:
+          type: object
+          additionalProperties: false
+          required:
+            - timestamp
+            - iso
+          properties:
+            timestamp:
+              type: string
+              pattern: "^[0-9]+$"
+            iso:
+              type: string
+              format: date-time
     ApiErrorResponse:
       type: object
       additionalProperties: false
@@ -367,6 +498,7 @@ components:
                 - UNAUTHORIZED
                 - NOT_FOUND
                 - GATEWAY_UNAVAILABLE
+                - XDC_INDEX_UNAVAILABLE
                 - XDC_RPC_UNAVAILABLE
             message:
               type: string
