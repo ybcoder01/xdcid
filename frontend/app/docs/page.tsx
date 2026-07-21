@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Docs | XDCID",
-  description: "Integrate XDCID name and reverse resolution on XDC mainnet."
+  description: "Integrate XDCID name, reverse resolution, and wallet inventory on XDC mainnet."
 };
 
 const publicEndpoints = [
@@ -17,6 +17,12 @@ const publicEndpoints = [
     path: "/api/v1/reverse/{address}",
     title: "Reverse lookup",
     description: "Returns the verified primary XDCID name for a wallet address, or null when no current record exists."
+  },
+  {
+    method: "GET",
+    path: "/api/v1/addresses/{address}/names",
+    title: "Owned names",
+    description: "Returns the verified primary ID and every active XDCID name currently owned by a wallet."
   }
 ];
 
@@ -24,7 +30,8 @@ const paidCapabilities = [
   ["Resolve", "Resolve an XDCID name to its owner, payment address, and expiry."],
   ["Reverse", "Find the verified primary XDCID name for an XDC address."],
   ["Availability", "Check whether a name is available and retrieve its registration price."],
-  ["Profile", "Read the public profile records attached to an XDCID name."]
+  ["Profile", "Read the public profile records attached to an XDCID name."],
+  ["Owned names", "List every active XDCID name owned by an address, including its verified primary ID."]
 ];
 
 const exampleResponse = '{\n  "version": "v1",\n  "data": {\n    "name": "alice.xdc",\n    "available": false,\n    "resolvedAddress": "0x..."\n  }\n}';
