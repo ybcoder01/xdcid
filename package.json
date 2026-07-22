@@ -6,6 +6,7 @@
     "test": "hardhat test && pnpm test:sdk",
     "test:sdk": "pnpm build:sdk && node --test sdk/test/*.test.mjs",
     "compile": "hardhat compile",
+    "index:legacy-domains": "hardhat run --no-compile scripts/index-legacy-domains.ts",
     "build:sdk": "tsc -p sdk/tsconfig.json",
     "deploy:apothem": "hardhat run scripts/deploy.ts --network apothem",
     "deploy:xdc": "hardhat run scripts/deploy.ts --network xdc",
