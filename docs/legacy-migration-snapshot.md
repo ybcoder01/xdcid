@@ -39,7 +39,7 @@ Every active legacy record is placed in exactly one category:
 
 - `eligible` — the name passes XDCID naming rules, is not a later duplicate in the legacy snapshot, and has no active XDCID registry record at the snapshot block.
 - `invalid` — the label does not satisfy the current XDCID registrar rules. Validation is applied before duplicate classification.
-- `legacy-duplicate` — another active legacy token already claims the same valid canonical name. The lowest token ID is the deterministic candidate; later token IDs are reported as duplicates.
+- `legacy-duplicate` — multiple active legacy tokens share the same valid canonical name. Every record in that duplicate set is excluded from eligibility and reported for human ownership review.
 - `xdcid-collision` — the valid canonical name already has an unexpired XDCID registry owner at the same snapshot block.
 
 The XDCID collision check reads `records(bytes32)` from registry `0x05fa64a05bc205DeDF47e023d2D90c2d119cd097` using historical `eth_call` requests at the selected block.
