@@ -20,7 +20,7 @@ Organizations may subscribe for one through ten years. Renewals extend from the 
 - Managers can issue and revoke subnames but cannot renew the workspace, change protocol pricing, withdraw revenue, or transfer the parent name.
 - A manager grant is bound to the parent owner who created it. Transferring the parent automatically invalidates every old-owner manager grant.
 - Subnames stop resolving when the workspace subscription or parent XDCID expires.
-- The current parent owner inherits control of an existing paid workspace after a parent transfer.
+- A parent transfer suspends the workspace. The new parent owner must buy a fresh subscription, which starts a new generation and keeps every old subname and manager grant inactive.
 
 ## Issuance and resolution
 
