@@ -16,7 +16,8 @@ export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
   resolver: (process.env.NEXT_PUBLIC_XNS_RESOLVER || xnsAddresses.resolver) as `0x${string}`,
-  reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`
+  reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`,
+  organization: (process.env.NEXT_PUBLIC_XNS_ORGANIZATION || "0x0000000000000000000000000000000000000000") as `0x${string}`
 };
 
 export const zeroAddress = "0x0000000000000000000000000000000000000000";
@@ -26,6 +27,8 @@ export const contractsConfigured =
   addresses.registrar !== zeroAddress &&
   addresses.resolver !== zeroAddress &&
   addresses.reverseResolver !== zeroAddress;
+
+export const organizationConfigured = addresses.organization !== zeroAddress;
 
 export const registrarAbi = [
   {
@@ -181,5 +184,79 @@ export const reverseResolverAbi = [
       { name: "node", type: "bytes32" }
     ],
     outputs: []
+  }
+] as const;
+
+export const organizationAbi = [
+  {
+    type: "function",
+    name: "annualFee",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "organizationStatus",
+    stateMutability: "view",
+    inputs: [{ name: "parentName", type: "string" }],
+    outputs: [
+      { name: "parentNode", type: "bytes32" },
+      { name: "parentOwner", type: "address" },
+      { name: "paidUntil", type: "uint256" },
+      { name: "active", type: "bool" }
+    ]
+  },
+  {
+    type: "function",
+    name: "subscribe",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "years_", type: "uint256" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "setManager",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "manager", type: "address" },
+      { name: "approved", type: "bool" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "bulkIssue",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "labels", type: "string[]" },
+      { name: "parentName", type: "string" },
+      { name: "targets", type: "address[]" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "revokeSubname",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "label", type: "string" },
+      { name: "parentName", type: "string" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "resolve",
+    stateMutability: "view",
+    inputs: [
+      { name: "label", type: "string" },
+      { name: "parentName", type: "string" }
+    ],
+    outputs: [{ type: "address" }]
   }
 ] as const;
