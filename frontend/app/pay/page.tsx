@@ -47,7 +47,7 @@ export default function PayLinksPage() {
       amount,
       token: normalizePayToken(token),
       memo: memo || undefined,
-      expires,
+      expires: expiry,
     });
   }, [amount, canCreate, expiry, memo, origin, parsedName.name, token]);
 
