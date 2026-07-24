@@ -13,6 +13,9 @@ importers:
 
   .:
     dependencies:
+      '@noble/curves':
+        specifier: 1.9.7
+        version: 1.9.7
       '@openzeppelin/contracts':
         specifier: 5.0.2
         version: 5.0.2

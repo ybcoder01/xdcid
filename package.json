@@ -19,6 +19,7 @@
     "build": "pnpm build:sdk && cd frontend && next build"
   },
   "dependencies": {
+    "@noble/curves": "1.9.7",
     "@openzeppelin/contracts": "5.0.2",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "5.101.2",
