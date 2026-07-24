@@ -97,7 +97,7 @@ describe("XNSOrganization", function () {
     ).to.be.revertedWithCustomError(organization, "InvalidDuration");
   });
 
-  it("lets current-owner managers issue while invalidating grants after transfer", async function () {
+  it("requires a fresh workspace after transfer and invalidates old records", async function () {
     const {
       parentOwner,
       manager,
@@ -133,6 +133,22 @@ describe("XNSOrganization", function () {
         .connect(manager)
         .issueSubname("ops", "company.xdc", recipient.address)
     ).to.be.revertedWithCustomError(organization, "NotParentController");
+
+    expect(await organization.resolve("treasury", "company.xdc")).to.equal(
+      ethers.ZeroAddress
+    );
+    await expect(
+      organization
+        .connect(newParentOwner)
+        .issueSubname("ops", "company.xdc", newParentOwner.address)
+    ).to.be.revertedWithCustomError(organization, "NotParentController");
+
+    await organization
+      .connect(newParentOwner)
+      .subscribe("company.xdc", 1, { value: ORGANIZATION_FEE });
+    expect(await organization.resolve("treasury", "company.xdc")).to.equal(
+      ethers.ZeroAddress
+    );
 
     await organization
       .connect(newParentOwner)
