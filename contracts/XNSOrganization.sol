@@ -13,10 +13,13 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
 
     struct Organization {
         uint64 paidUntil;
+        uint64 generation;
+        address controller;
     }
 
     struct Subname {
         bytes32 parentNode;
+        uint64 generation;
         address target;
         bool issued;
     }
@@ -25,7 +28,7 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
     uint256 public annualFee;
 
     mapping(bytes32 => Organization) public organizations;
-    mapping(bytes32 => mapping(address => address)) private _managerGrantors;
+    mapping(bytes32 => mapping(address => uint64)) private _managerGenerations;
     mapping(bytes32 => Subname) private _subnames;
 
     error InvalidName();
@@ -38,7 +41,13 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
     error InactiveOrganization();
     error WithdrawalFailed();
 
-    event OrganizationSubscribed(bytes32 indexed parentNode, address indexed owner, uint256 paidUntil, uint256 amount);
+    event OrganizationSubscribed(
+        bytes32 indexed parentNode,
+        address indexed owner,
+        uint256 paidUntil,
+        uint64 generation,
+        uint256 amount
+    );
     event ManagerUpdated(bytes32 indexed parentNode, address indexed manager, bool approved);
     event SubnameIssued(
         bytes32 indexed parentNode,
@@ -64,12 +73,28 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
         uint256 cost = annualFee * years_;
         if (msg.value != cost) revert WrongPrice();
 
-        uint256 currentPaidUntil = organizations[parentNode].paidUntil;
-        uint256 base = currentPaidUntil > block.timestamp ? currentPaidUntil : block.timestamp;
-        uint256 paidUntil = base + (years_ * YEAR);
-        organizations[parentNode].paidUntil = uint64(paidUntil);
+        Organization storage organization = organizations[parentNode];
+        uint256 base;
+        if (organization.controller != msg.sender) {
+            organization.controller = msg.sender;
+            organization.generation += 1;
+            base = block.timestamp;
+        } else {
+            base = organization.paidUntil > block.timestamp
+                ? organization.paidUntil
+                : block.timestamp;
+        }
 
-        emit OrganizationSubscribed(parentNode, msg.sender, paidUntil, msg.value);
+        uint256 paidUntil = base + (years_ * YEAR);
+        organization.paidUntil = uint64(paidUntil);
+
+        emit OrganizationSubscribed(
+            parentNode,
+            msg.sender,
+            paidUntil,
+            organization.generation,
+            msg.value
+        );
     }
 
     function setManager(string calldata parentName, address manager, bool approved) external {
@@ -78,14 +103,19 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
         bytes32 parentNode = parentNodeFor(parentName);
         address parentOwner = registry.ownerOf(parentNode);
         if (parentOwner == address(0) || parentOwner != msg.sender) revert NotParentOwner();
+        _requireActive(parentNode);
 
-        _managerGrantors[parentNode][manager] = approved ? parentOwner : address(0);
+        _managerGenerations[parentNode][manager] = approved
+            ? organizations[parentNode].generation
+            : 0;
         emit ManagerUpdated(parentNode, manager, approved);
     }
 
     function isManager(bytes32 parentNode, address account) public view returns (bool) {
-        address parentOwner = registry.ownerOf(parentNode);
-        return parentOwner != address(0) && _managerGrantors[parentNode][account] == parentOwner;
+        Organization memory organization = organizations[parentNode];
+        return _isActive(parentNode)
+            && organization.generation != 0
+            && _managerGenerations[parentNode][account] == organization.generation;
     }
 
     function issueSubname(string calldata label, string calldata parentName, address target) external {
@@ -117,11 +147,17 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
     function revokeSubname(string calldata label, string calldata parentName) external {
         bytes32 parentNode = parentNodeFor(parentName);
         _requireController(parentNode);
+        _requireActive(parentNode);
 
         string memory name = canonicalSubname(label, parentName);
         bytes32 subnameNode = keccak256(bytes(name));
         Subname storage record = _subnames[subnameNode];
-        if (record.parentNode != parentNode || !record.issued) revert InvalidName();
+        Organization memory organization = organizations[parentNode];
+        if (
+            record.parentNode != parentNode
+                || !record.issued
+                || record.generation != organization.generation
+        ) revert InvalidName();
 
         delete _subnames[subnameNode];
         emit SubnameRevoked(parentNode, subnameNode, name);
@@ -133,7 +169,12 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
 
     function resolveNode(bytes32 subnameNode) public view returns (address) {
         Subname memory record = _subnames[subnameNode];
-        if (!record.issued || !_isActive(record.parentNode)) return address(0);
+        Organization memory organization = organizations[record.parentNode];
+        if (
+            !record.issued
+                || record.generation != organization.generation
+                || !_isActive(record.parentNode)
+        ) return address(0);
         return record.target;
     }
 
@@ -143,7 +184,11 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
         returns (bytes32 parentNode, address target, bool active)
     {
         Subname memory record = _subnames[subnameNode];
-        return (record.parentNode, record.target, record.issued && _isActive(record.parentNode));
+        Organization memory organization = organizations[record.parentNode];
+        active = record.issued
+            && record.generation == organization.generation
+            && _isActive(record.parentNode);
+        return (record.parentNode, record.target, active);
     }
 
     function organizationStatus(string calldata parentName)
@@ -154,7 +199,7 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
         parentNode = parentNodeFor(parentName);
         parentOwner = registry.ownerOf(parentNode);
         paidUntil = organizations[parentNode].paidUntil;
-        active = parentOwner != address(0) && paidUntil >= block.timestamp;
+        active = _isActive(parentNode);
     }
 
     function parentNodeFor(string calldata parentName) public pure returns (bytes32) {
@@ -195,17 +240,26 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
 
         string memory name = canonicalSubname(label, parentName);
         bytes32 subnameNode = keccak256(bytes(name));
-        _subnames[subnameNode] = Subname({parentNode: parentNode, target: target, issued: true});
+        _subnames[subnameNode] = Subname({
+            parentNode: parentNode,
+            generation: organizations[parentNode].generation,
+            target: target,
+            issued: true
+        });
 
         emit SubnameIssued(parentNode, subnameNode, name, target);
     }
 
     function _requireController(bytes32 parentNode) internal view {
+        Organization memory organization = organizations[parentNode];
         address parentOwner = registry.ownerOf(parentNode);
-        if (parentOwner == address(0)) revert NotParentController();
-        if (msg.sender != parentOwner && _managerGrantors[parentNode][msg.sender] != parentOwner) {
+        if (parentOwner == address(0) || organization.controller != parentOwner) {
             revert NotParentController();
         }
+        if (
+            msg.sender != parentOwner
+                && _managerGenerations[parentNode][msg.sender] != organization.generation
+        ) revert NotParentController();
     }
 
     function _requireActive(bytes32 parentNode) internal view {
@@ -213,8 +267,10 @@ contract XNSOrganization is Ownable, ReentrancyGuard {
     }
 
     function _isActive(bytes32 parentNode) internal view returns (bool) {
-        return registry.ownerOf(parentNode) != address(0)
-            && organizations[parentNode].paidUntil >= block.timestamp;
+        Organization memory organization = organizations[parentNode];
+        return organization.controller != address(0)
+            && registry.ownerOf(parentNode) == organization.controller
+            && organization.paidUntil >= block.timestamp;
     }
 
     function _canonicalParent(string calldata parentName) internal pure returns (string memory) {
