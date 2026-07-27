@@ -133,7 +133,7 @@ export default function PayLinksPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">XDCID Payment Requests</p>
       <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950">Create a verifiable payment request</h1>
       <p className="mt-4 max-w-2xl text-lg text-slate-600">
-        Sign a versioned XDC or USDC request with the current XNS owner wallet. Signing is gasless and XDCID never holds funds.
+        Sign a versioned XDC or USDC request with the current XNS owner account. Signing is gasless and XDCID never holds funds.
       </p>
 
       <section className="mt-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -188,7 +188,7 @@ export default function PayLinksPage() {
           <p className="text-sm font-semibold text-slate-700">Owner verification</p>
           <p className="mt-2 text-sm text-slate-600">
             {!isConnected
-              ? "Connect the wallet that currently owns this XNS ID."
+              ? "Connect the wallet or smart account that currently owns this XNS ID."
               : wrongNetwork
                 ? "Switch to XDC Network (chain ID 50)."
                 : resolving
@@ -196,8 +196,8 @@ export default function PayLinksPage() {
                   : domainExpired
                     ? "This XNS ID is unregistered or expired."
                     : ownerMatches
-                      ? "Connected wallet matches the current XNS owner."
-                      : "Connected wallet is not the current XNS owner."}
+                      ? "Connected account matches the current XNS owner."
+                      : "Connected account is not the current XNS owner."}
           </p>
           <button type="button" disabled={!canCreate} onClick={createSignedLink} className="mt-5 rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
             {signRequest.isPending ? "Waiting for wallet signature..." : "Sign payment request"}
