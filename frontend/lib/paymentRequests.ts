@@ -54,7 +54,13 @@ export function paymentRequestTypedData(request: PaymentRequest) {
     },
     types: paymentRequestTypes,
     primaryType: "PaymentRequest" as const,
-    message: request,
+    message: {
+      ...request,
+      version: BigInt(request.version),
+      chainId: BigInt(request.chainId),
+      issuedAt: BigInt(request.issuedAt),
+      expires: BigInt(request.expires),
+    },
   };
 }
 
