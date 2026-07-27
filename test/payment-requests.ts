@@ -1,6 +1,10 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { zeroAddress, type Hex } from "viem";
+import { zeroAddress, type Address, type Hex, type PublicClient } from "viem";
+import {
+  verifyPaymentRequestSignature,
+  ERC1271_MAGIC_VALUE,
+} from "../frontend/lib/accountSignatures";
 import {
   buildSignedPaymentLink,
   decodePaymentRequest,
@@ -13,6 +17,28 @@ import {
 } from "../frontend/lib/paymentRequests";
 
 describe("Signed payment requests", function () {
+  function hardhatPublicClient(): PublicClient {
+    return {
+      getBytecode: async ({ address }: { address: Address }) => {
+        const bytecode = await ethers.provider.getCode(address);
+        return bytecode === "0x" ? undefined : bytecode as Hex;
+      },
+      readContract: async ({ address, args }: { address: Address; args: readonly [Hex, Hex] }) => {
+        const wallet = await ethers.getContractAt("MockERC1271Wallet", address);
+        return wallet.isValidSignature(args[0], args[1]);
+      },
+    } as unknown as PublicClient;
+  }
+
+  async function signRequest(request: PaymentRequest, signer: Awaited<ReturnType<typeof ethers.getSigners>>[number]): Promise<Hex> {
+    const typedData = paymentRequestTypedData(request);
+    return signer.signTypedData(
+      typedData.domain,
+      { PaymentRequest: [...typedData.types.PaymentRequest] },
+      typedData.message,
+    ) as Promise<Hex>;
+  }
+
   function validRequest(overrides: Partial<PaymentRequest> = {}): PaymentRequest {
     const now = Math.floor(Date.now() / 1000);
     return {
@@ -90,4 +116,75 @@ describe("Signed payment requests", function () {
     expect(url.searchParams.get("signature")).to.equal(signature);
     expect(url.searchParams.has("amount")).to.equal(false);
   });
+  it("verifies an ordinary wallet against the expected XNS owner", async function () {
+    const [owner] = await ethers.getSigners();
+    const request = validRequest();
+    const verification = await verifyPaymentRequestSignature(
+      hardhatPublicClient(),
+      request,
+      await signRequest(request, owner),
+      await owner.getAddress() as Address,
+    );
+
+    expect(verification).to.include({ valid: true, accountType: "eoa" });
+  });
+
+  it("accepts a signature authorized by an ERC-1271 smart account", async function () {
+    const [authorizedSigner] = await ethers.getSigners();
+    const walletFactory = await ethers.getContractFactory("MockERC1271Wallet");
+    const wallet = await walletFactory.deploy(await authorizedSigner.getAddress());
+    const request = validRequest();
+    const verification = await verifyPaymentRequestSignature(
+      hardhatPublicClient(),
+      request,
+      await signRequest(request, authorizedSigner),
+      await wallet.getAddress() as Address,
+    );
+
+    expect(verification).to.include({ valid: true, accountType: "contract" });
+  });
+
+  it("rejects an ERC-1271 signature after the smart-account signer changes", async function () {
+    const [authorizedSigner, replacementSigner] = await ethers.getSigners();
+    const walletFactory = await ethers.getContractFactory("MockERC1271Wallet");
+    const wallet = await walletFactory.deploy(await authorizedSigner.getAddress());
+    const request = validRequest();
+    const signature = await signRequest(request, authorizedSigner);
+    await wallet.setSigner(await replacementSigner.getAddress());
+
+    const verification = await verifyPaymentRequestSignature(
+      hardhatPublicClient(), request, signature, await wallet.getAddress() as Address,
+    );
+    expect(verification).to.include({ valid: false, accountType: "contract" });
+  });
+
+  it("rejects a smart account that returns the wrong ERC-1271 value", async function () {
+    const [authorizedSigner] = await ethers.getSigners();
+    const walletFactory = await ethers.getContractFactory("MockERC1271Wallet");
+    const wallet = await walletFactory.deploy(await authorizedSigner.getAddress());
+    const request = validRequest();
+    await wallet.setValidResult("0xffffffff");
+
+    const verification = await verifyPaymentRequestSignature(
+      hardhatPublicClient(), request, await signRequest(request, authorizedSigner), await wallet.getAddress() as Address,
+    );
+    expect(verification.valid).to.equal(false);
+    expect(verification.error).to.equal("The smart account rejected this signature.");
+    expect(ERC1271_MAGIC_VALUE).to.equal("0x1626ba7e");
+  });
+
+  it("fails closed when an ERC-1271 signature check reverts", async function () {
+    const [authorizedSigner] = await ethers.getSigners();
+    const walletFactory = await ethers.getContractFactory("MockERC1271Wallet");
+    const wallet = await walletFactory.deploy(await authorizedSigner.getAddress());
+    const request = validRequest();
+    await wallet.setShouldRevert(true);
+
+    const verification = await verifyPaymentRequestSignature(
+      hardhatPublicClient(), request, await signRequest(request, authorizedSigner), await wallet.getAddress() as Address,
+    );
+    expect(verification).to.include({ valid: false, accountType: "contract" });
+    expect(verification.error).to.equal("The smart account signature check failed or reverted.");
+  });
+
 });

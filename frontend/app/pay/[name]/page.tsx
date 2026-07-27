@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getAddress, isAddress, isHex, zeroAddress, type Address, type Hex } from "viem";
+import { isAddress, isHex, zeroAddress, type Hex } from "viem";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   useAccount,
+  usePublicClient,
   useReadContract,
   useSendTransaction,
   useWaitForTransactionReceipt,
@@ -13,6 +14,10 @@ import {
 import { addresses, contractsConfigured, registrarAbi, registryAbi, resolverAbi } from "../../../config/contracts";
 import { erc20TransferAbi, XDC_USDC_ADDRESS } from "../../../config/tokens";
 import { parseXnsName } from "../../../lib/names";
+import {
+  verifyPaymentRequestSignature,
+  type PaymentRequestSignatureVerification,
+} from "../../../lib/accountSignatures";
 import {
   normalizePayToken,
   parsePayAmount,
@@ -23,7 +28,6 @@ import {
 import {
   decodePaymentRequest,
   isDesignatedPayer,
-  recoverPaymentRequestSigner,
   type PaymentRequest,
 } from "../../../lib/paymentRequests";
 
@@ -74,29 +78,14 @@ export default function PayRequestPage() {
   }, [amount, token]);
 
   const { address, isConnected, chainId } = useAccount();
-  const [recoveredSigner, setRecoveredSigner] = useState<Address>();
+  const publicClient = usePublicClient();
+  const [signatureVerification, setSignatureVerification] = useState<PaymentRequestSignatureVerification>();
+  const [signatureChecking, setSignatureChecking] = useState(false);
   const [signatureError, setSignatureError] = useState("");
   const nativePayment = useSendTransaction();
   const tokenPayment = useWriteContract();
   const transactionHash = token === "USDC" ? tokenPayment.data : nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
-
-  useEffect(() => {
-    let current = true;
-    setRecoveredSigner(undefined);
-    setSignatureError("");
-    if (!signedRequest || !signedPayload.signature) return;
-    recoverPaymentRequestSigner(signedRequest, signedPayload.signature)
-      .then((signer) => {
-        if (current) setRecoveredSigner(signer);
-      })
-      .catch(() => {
-        if (current) setSignatureError("Payment request signature could not be verified.");
-      });
-    return () => {
-      current = false;
-    };
-  }, [signedRequest, signedPayload.signature]);
 
   const enabled = contractsConfigured && parsedName.isValid;
   const node = useReadContract({
@@ -128,6 +117,34 @@ export default function PayRequestPage() {
     query: { enabled: !!node.data },
   });
 
+  useEffect(() => {
+    let current = true;
+    setSignatureVerification(undefined);
+    setSignatureError("");
+    setSignatureChecking(false);
+    if (!signedRequest || !signedPayload.signature || !owner.data || !publicClient) return;
+
+    setSignatureChecking(true);
+    verifyPaymentRequestSignature(publicClient, signedRequest, signedPayload.signature, owner.data)
+      .then((verification) => {
+        if (!current) return;
+        setSignatureVerification(verification);
+        if (!verification.valid) {
+          setSignatureError(verification.error || "Payment request signature is not authorized by the current XNS owner.");
+        }
+      })
+      .catch(() => {
+        if (current) setSignatureError("Payment request signature could not be verified.");
+      })
+      .finally(() => {
+        if (current) setSignatureChecking(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [owner.data, publicClient, signedRequest, signedPayload.signature]);
+
   const domainExpired = expiry.data ? expiry.data <= BigInt(Math.floor(Date.now() / 1000)) : true;
   const hasOwner = !!owner.data && owner.data !== zeroAddress && !domainExpired;
   const paymentAddress =
@@ -136,15 +153,15 @@ export default function PayRequestPage() {
       : undefined;
   const resolving = node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading;
   const resolutionFailed = node.isError || owner.isError || expiry.isError || resolvedAddress.isError;
-  const signaturePending = Boolean(signedRequest && signedPayload.signature && !recoveredSigner && !signatureError);
-  const signerOwnerMismatch = Boolean(
-    signedRequest && recoveredSigner && owner.data && getAddress(recoveredSigner) !== getAddress(owner.data),
+  const signaturePending = Boolean(
+    signedRequest && signedPayload.signature && !signatureError &&
+    (!owner.data || !publicClient || signatureChecking || !signatureVerification),
   );
   const payerAllowed = signedRequest ? isDesignatedPayer(signedRequest, address) : true;
   const pending = nativePayment.isPending || tokenPayment.isPending || receipt.isLoading;
   const wrongNetwork = isConnected && chainId !== 50;
   const signedRequestValid = legacyRequest || Boolean(
-    signedRequest && recoveredSigner && !signatureError && !signerOwnerMismatch && payerAllowed,
+    signedRequest && signatureVerification?.valid && !signatureError && payerAllowed,
   );
   const canPay = Boolean(
     isConnected && !wrongNetwork && !requestError && hasOwner && paymentAddress && value > 0n &&
@@ -193,25 +210,22 @@ export default function PayRequestPage() {
           </p>
         )}
         {signatureError && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{signatureError}</p>}
-        {signerOwnerMismatch && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            The signer is no longer the current owner of this XNS ID. Payment is blocked.
-          </p>
-        )}
         {signedRequest && signedRequest.payer !== zeroAddress && isConnected && !payerAllowed && (
           <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             This request is designated for a different payer wallet.
           </p>
         )}
 
-        {signedRequest && !requestError && !signatureError && !signerOwnerMismatch && (
+        {signedRequest && !requestError && !signatureError && (
           <div className="mt-7 rounded-2xl border border-teal-200 bg-teal-50 p-5">
             <p className="text-sm font-semibold text-teal-900">Signed request verification</p>
             <p className="mt-2 break-all text-sm text-teal-800">
               {signaturePending
-                ? "Recovering the request signer..."
-                : recoveredSigner
-                  ? "Verified against current XNS owner: " + recoveredSigner
+                ? "Checking the current XNS owner signature..."
+                : signatureVerification?.valid
+                  ? (signatureVerification.accountType === "contract"
+                      ? "Verified smart account (ERC-1271): "
+                      : "Verified ordinary wallet: ") + signatureVerification.signer
                   : "Signature verification unavailable."}
             </p>
           </div>
