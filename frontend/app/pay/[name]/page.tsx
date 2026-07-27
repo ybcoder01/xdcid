@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getAddress, isAddress, isHex, zeroAddress, type Address, type Hex } from "viem";
 import { useParams, useSearchParams } from "next/navigation";
-import { isAddress, zeroAddress } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -20,19 +20,51 @@ import {
   validatePayExpiry,
   validatePayMemo,
 } from "../../../lib/paylinks";
+import {
+  decodePaymentRequest,
+  isDesignatedPayer,
+  recoverPaymentRequestSigner,
+  type PaymentRequest,
+} from "../../../lib/paymentRequests";
 
 export default function PayRequestPage() {
   const params = useParams<{ name: string }>();
   const searchParams = useSearchParams();
   const parsedName = useMemo(() => parseXnsName(params.name ?? ""), [params.name]);
-  const amount = searchParams.get("amount") ?? "";
-  const token = normalizePayToken(searchParams.get("token"));
-  const memo = searchParams.get("memo") ?? "";
-  const expires = searchParams.get("expires");
+  const encodedRequest = searchParams.get("request");
+  const encodedSignature = searchParams.get("signature");
+
+  const signedPayload = useMemo((): {
+    request?: PaymentRequest;
+    signature?: Hex;
+    error?: string;
+  } => {
+    if (!encodedRequest && !encodedSignature) return {};
+    if (!encodedRequest || !encodedSignature) return { error: "Signed payment request is incomplete." };
+    if (!isHex(encodedSignature)) return { error: "Payment request signature is invalid." };
+    try {
+      return { request: decodePaymentRequest(encodedRequest), signature: encodedSignature };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Payment request is invalid." };
+    }
+  }, [encodedRequest, encodedSignature]);
+
+  const signedRequest = signedPayload.request;
+  const legacyRequest = !encodedRequest && !encodedSignature;
+  const amount = signedRequest?.amount ?? searchParams.get("amount") ?? "";
+  const token = signedRequest?.token ?? normalizePayToken(searchParams.get("token"));
+  const memo = signedRequest?.description ?? searchParams.get("memo") ?? "";
+  const reference = signedRequest?.reference ?? "";
+  const expires = signedRequest ? (signedRequest.expires ? String(signedRequest.expires) : undefined) : searchParams.get("expires");
   const amountError = validatePayAmount(amount, token);
   const memoError = validatePayMemo(memo);
   const expiryError = validatePayExpiry(expires);
-  const requestError = !parsedName.isValid ? parsedName.error : amountError || memoError || expiryError;
+  const pathError = signedRequest && parsedName.isValid && signedRequest.name !== parsedName.name
+    ? "The signed XNS ID does not match this checkout URL."
+    : undefined;
+  const requestError = !parsedName.isValid
+    ? parsedName.error
+    : signedPayload.error || pathError || amountError || memoError || expiryError;
   const value = useMemo(() => {
     try {
       return parsePayAmount(amount, token);
@@ -41,11 +73,30 @@ export default function PayRequestPage() {
     }
   }, [amount, token]);
 
-  const { isConnected, chainId } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
+  const [recoveredSigner, setRecoveredSigner] = useState<Address>();
+  const [signatureError, setSignatureError] = useState("");
   const nativePayment = useSendTransaction();
   const tokenPayment = useWriteContract();
   const transactionHash = token === "USDC" ? tokenPayment.data : nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
+
+  useEffect(() => {
+    let current = true;
+    setRecoveredSigner(undefined);
+    setSignatureError("");
+    if (!signedRequest || !signedPayload.signature) return;
+    recoverPaymentRequestSigner(signedRequest, signedPayload.signature)
+      .then((signer) => {
+        if (current) setRecoveredSigner(signer);
+      })
+      .catch(() => {
+        if (current) setSignatureError("Payment request signature could not be verified.");
+      });
+    return () => {
+      current = false;
+    };
+  }, [signedRequest, signedPayload.signature]);
 
   const enabled = contractsConfigured && parsedName.isValid;
   const node = useReadContract({
@@ -77,7 +128,7 @@ export default function PayRequestPage() {
     query: { enabled: !!node.data },
   });
 
-  const domainExpired = expiry.data ? expiry.data < BigInt(Math.floor(Date.now() / 1000)) : true;
+  const domainExpired = expiry.data ? expiry.data <= BigInt(Math.floor(Date.now() / 1000)) : true;
   const hasOwner = !!owner.data && owner.data !== zeroAddress && !domainExpired;
   const paymentAddress =
     resolvedAddress.data && resolvedAddress.data !== zeroAddress && isAddress(resolvedAddress.data)
@@ -85,10 +136,19 @@ export default function PayRequestPage() {
       : undefined;
   const resolving = node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading;
   const resolutionFailed = node.isError || owner.isError || expiry.isError || resolvedAddress.isError;
+  const signaturePending = Boolean(signedRequest && signedPayload.signature && !recoveredSigner && !signatureError);
+  const signerOwnerMismatch = Boolean(
+    signedRequest && recoveredSigner && owner.data && getAddress(recoveredSigner) !== getAddress(owner.data),
+  );
+  const payerAllowed = signedRequest ? isDesignatedPayer(signedRequest, address) : true;
   const pending = nativePayment.isPending || tokenPayment.isPending || receipt.isLoading;
   const wrongNetwork = isConnected && chainId !== 50;
+  const signedRequestValid = legacyRequest || Boolean(
+    signedRequest && recoveredSigner && !signatureError && !signerOwnerMismatch && payerAllowed,
+  );
   const canPay = Boolean(
-    isConnected && !wrongNetwork && !requestError && hasOwner && paymentAddress && value > 0n && !pending,
+    isConnected && !wrongNetwork && !requestError && hasOwner && paymentAddress && value > 0n &&
+    !pending && !signaturePending && signedRequestValid,
   );
   const paymentError = token === "USDC" ? tokenPayment.error : nativePayment.error;
 
@@ -109,15 +169,21 @@ export default function PayRequestPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">XDCID Pay Link</p>
-      <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+      <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
         <p className="text-sm text-slate-500">Payment requested by</p>
         <h1 className="mt-2 text-4xl font-bold text-slate-950">{parsedName.name}</h1>
-        <div className="mt-8 rounded-2xl bg-slate-950 p-7 text-white">
-          <p className="text-sm text-slate-300">Amount due</p>
+        <div className="mt-8 rounded-2xl bg-slate-950 p-7 text-white print:border print:border-slate-300 print:bg-white print:text-slate-950">
+          <p className="text-sm text-slate-300 print:text-slate-500">Amount due</p>
           <p className="mt-2 text-4xl font-semibold">{amount || "—"} {token}</p>
-          {memo && <p className="mt-5 border-t border-white/15 pt-5 text-slate-200">{memo}</p>}
+          {reference && <p className="mt-5 border-t border-white/15 pt-5 print:border-slate-200">Reference: {reference}</p>}
+          {memo && <p className="mt-2 text-slate-200 print:text-slate-700">{memo}</p>}
         </div>
 
+        {legacyRequest && (
+          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 print:hidden">
+            Unsigned legacy request: verify the amount and recipient independently before paying.
+          </p>
+        )}
         {requestError && (
           <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{requestError}</p>
         )}
@@ -125,6 +191,30 @@ export default function PayRequestPage() {
           <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             Switch your wallet to XDC Network (chain ID 50).
           </p>
+        )}
+        {signatureError && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{signatureError}</p>}
+        {signerOwnerMismatch && (
+          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            The signer is no longer the current owner of this XNS ID. Payment is blocked.
+          </p>
+        )}
+        {signedRequest && signedRequest.payer !== zeroAddress && isConnected && !payerAllowed && (
+          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            This request is designated for a different payer wallet.
+          </p>
+        )}
+
+        {signedRequest && !requestError && !signatureError && !signerOwnerMismatch && (
+          <div className="mt-7 rounded-2xl border border-teal-200 bg-teal-50 p-5">
+            <p className="text-sm font-semibold text-teal-900">Signed request verification</p>
+            <p className="mt-2 break-all text-sm text-teal-800">
+              {signaturePending
+                ? "Recovering the request signer..."
+                : recoveredSigner
+                  ? "Verified against current XNS owner: " + recoveredSigner
+                  : "Signature verification unavailable."}
+            </p>
+          </div>
         )}
 
         <div className="mt-7 rounded-2xl border border-slate-200 p-5">
@@ -141,41 +231,48 @@ export default function PayRequestPage() {
                     : paymentAddress || "No payment address is set for this XNS ID."}
           </p>
           {paymentAddress && (
-            <a
-              className="mt-3 inline-block text-sm font-semibold text-teal-700 underline"
-              href={`https://xdcscan.com/address/${paymentAddress}`}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a className="mt-3 inline-block text-sm font-semibold text-teal-700 underline print:hidden" href={"https://xdcscan.com/address/" + paymentAddress} target="_blank" rel="noreferrer">
               Verify recipient on XDCScan
             </a>
           )}
         </div>
 
-        <button
-          type="button"
-          disabled={!canPay}
-          onClick={pay}
-          className="mt-7 w-full rounded-xl bg-slate-950 px-5 py-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {pending ? "Waiting for confirmation..." : isConnected ? `Review ${amount || ""} ${token} in wallet` : "Connect wallet to pay"}
+        <button type="button" disabled={!canPay} onClick={pay} className="mt-7 w-full rounded-xl bg-slate-950 px-5 py-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 print:hidden">
+          {pending ? "Waiting for confirmation..." : isConnected ? "Review " + (amount || "") + " " + token + " in wallet" : "Connect wallet to pay"}
         </button>
 
-        {transactionHash && (
-          <a
-            className="mt-4 block break-all text-sm font-semibold text-teal-700 underline"
-            href={`https://xdcscan.com/tx/${transactionHash}`}
-            target="_blank"
-            rel="noreferrer"
-          >
+        {transactionHash && !receipt.isSuccess && (
+          <a className="mt-4 block break-all text-sm font-semibold text-teal-700 underline" href={"https://xdcscan.com/tx/" + transactionHash} target="_blank" rel="noreferrer">
             View transaction on XDCScan
           </a>
         )}
-        {receipt.isSuccess && <p className="mt-4 text-sm font-semibold text-teal-700">Payment confirmed on XDC.</p>}
         {paymentError && <p className="mt-4 text-sm text-red-600">{paymentError.message}</p>}
 
-        <p className="mt-7 text-xs leading-5 text-slate-500">
-          Check the amount, token, and resolved address before signing. The memo is descriptive only and is not written on-chain.
+        {receipt.isSuccess && transactionHash && (
+          <section className="mt-8 border-t border-slate-200 pt-8" aria-label="Payment confirmation receipt">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-700">Payment confirmation</p>
+            <h2 className="mt-2 text-3xl font-bold text-slate-950">Confirmed on XDC Network</h2>
+            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+              <div><dt className="font-semibold text-slate-500">XNS ID</dt><dd className="mt-1 break-all text-slate-900">{parsedName.name}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Amount</dt><dd className="mt-1 text-slate-900">{amount} {token}</dd></div>
+              {reference && <div><dt className="font-semibold text-slate-500">Reference</dt><dd className="mt-1 break-all text-slate-900">{reference}</dd></div>}
+              <div><dt className="font-semibold text-slate-500">Recipient</dt><dd className="mt-1 break-all text-slate-900">{paymentAddress}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Payer</dt><dd className="mt-1 break-all text-slate-900">{receipt.data?.from || address}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Block</dt><dd className="mt-1 text-slate-900">{receipt.data?.blockNumber?.toString()}</dd></div>
+              <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Transaction hash</dt><dd className="mt-1 break-all text-slate-900">{transactionHash}</dd></div>
+            </dl>
+            <div className="mt-6 flex flex-wrap gap-3 print:hidden">
+              <button type="button" onClick={() => window.print()} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white">Print or save receipt</button>
+              <a className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-800" href={"https://xdcscan.com/tx/" + transactionHash} target="_blank" rel="noreferrer">Verify on XDCScan</a>
+            </div>
+            <p className="mt-5 text-xs leading-5 text-slate-500">
+              This is evidence of blockchain confirmation shown with the signed request. It is not a tax invoice or accounting document.
+            </p>
+          </section>
+        )}
+
+        <p className="mt-7 text-xs leading-5 text-slate-500 print:hidden">
+          Check the amount, token, and resolved address before signing. The reference and description are not written into the payment transaction.
         </p>
       </section>
     </main>
