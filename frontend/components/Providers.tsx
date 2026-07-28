@@ -8,6 +8,7 @@ import {
   metaMaskWallet,
   phantomWallet,
   rabbyWallet,
+  safeWallet,
   walletConnectWallet
 } from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, createConfig, http } from "wagmi";
@@ -23,6 +24,7 @@ const connectors = walletConnectProjectId
         {
           groupName: "Wallets",
           wallets: [
+            safeWallet,
             metaMaskWallet,
             rabbyWallet,
             phantomWallet,
