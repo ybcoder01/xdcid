@@ -2,7 +2,14 @@
 
 import type React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import { connectorsForWallets, RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import {
+  injectedWallet,
+  metaMaskWallet,
+  phantomWallet,
+  rabbyWallet,
+  walletConnectWallet
+} from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { xdcMainnet } from "../config/contracts";
@@ -10,23 +17,36 @@ import { xdcMainnet } from "../config/contracts";
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 const transport = http(xdcMainnet.rpcUrls.default.http[0]);
 
-const config = walletConnectProjectId
-  ? getDefaultConfig({
-      appName: "XDCID",
-      projectId: walletConnectProjectId,
-      chains: [xdcMainnet],
-      transports: {
-        [xdcMainnet.id]: transport
-      },
-      ssr: true
-    })
-  : createConfig({
-      chains: [xdcMainnet],
-      connectors: [injected()],
-      transports: {
-        [xdcMainnet.id]: transport
+const connectors = walletConnectProjectId
+  ? connectorsForWallets(
+      [
+        {
+          groupName: "Wallets",
+          wallets: [
+            metaMaskWallet,
+            rabbyWallet,
+            phantomWallet,
+            walletConnectWallet,
+            injectedWallet
+          ]
+        }
+      ],
+      {
+        appName: "XDCID",
+        projectId: walletConnectProjectId
       }
-    });
+    )
+  : [injected()];
+
+const config = createConfig({
+  chains: [xdcMainnet],
+  connectors,
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [xdcMainnet.id]: transport
+  },
+  ssr: true
+});
 
 const queryClient = new QueryClient();
 
