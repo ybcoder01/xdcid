@@ -3,6 +3,7 @@
 import type React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import { injectedWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { xdcMainnet } from "../config/contracts";
@@ -15,6 +16,12 @@ const config = walletConnectProjectId
       appName: "XDCID",
       projectId: walletConnectProjectId,
       chains: [xdcMainnet],
+      wallets: [
+        {
+          groupName: "Wallets",
+          wallets: [injectedWallet, walletConnectWallet]
+        }
+      ],
       transports: {
         [xdcMainnet.id]: transport
       },
