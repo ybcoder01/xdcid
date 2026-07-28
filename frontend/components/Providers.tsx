@@ -2,18 +2,31 @@
 
 import type React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { xdcMainnet } from "../config/contracts";
 
-const config = createConfig({
-  chains: [xdcMainnet],
-  connectors: [injected()],
-  transports: {
-    [xdcMainnet.id]: http(xdcMainnet.rpcUrls.default.http[0])
-  }
-});
+const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
+const transport = http(xdcMainnet.rpcUrls.default.http[0]);
+
+const config = walletConnectProjectId
+  ? getDefaultConfig({
+      appName: "XDCID",
+      projectId: walletConnectProjectId,
+      chains: [xdcMainnet],
+      transports: {
+        [xdcMainnet.id]: transport
+      },
+      ssr: true
+    })
+  : createConfig({
+      chains: [xdcMainnet],
+      connectors: [injected()],
+      transports: {
+        [xdcMainnet.id]: transport
+      }
+    });
 
 const queryClient = new QueryClient();
 
