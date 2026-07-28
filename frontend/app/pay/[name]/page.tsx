@@ -15,6 +15,11 @@ import { addresses, contractsConfigured, registrarAbi, registryAbi, resolverAbi 
 import { erc20TransferAbi, XDC_USDC_ADDRESS } from "../../../config/tokens";
 import { parseXnsName } from "../../../lib/names";
 import {
+  inspectAccountDeployment,
+  paymentReceiptActors,
+  type AccountDeploymentState,
+} from "../../../lib/accountAbstraction";
+import {
   verifyPaymentRequestSignature,
   type PaymentRequestSignatureVerification,
 } from "../../../lib/accountSignatures";
@@ -82,6 +87,7 @@ export default function PayRequestPage() {
   const [signatureVerification, setSignatureVerification] = useState<PaymentRequestSignatureVerification>();
   const [signatureChecking, setSignatureChecking] = useState(false);
   const [signatureError, setSignatureError] = useState("");
+  const [accountDeployment, setAccountDeployment] = useState<AccountDeploymentState>("unknown");
   const nativePayment = useSendTransaction();
   const tokenPayment = useWriteContract();
   const transactionHash = token === "USDC" ? tokenPayment.data : nativePayment.data;
@@ -145,6 +151,19 @@ export default function PayRequestPage() {
     };
   }, [owner.data, publicClient, signedRequest, signedPayload.signature]);
 
+
+  useEffect(() => {
+    let current = true;
+    setAccountDeployment("unknown");
+    if (!address || !publicClient) return;
+    inspectAccountDeployment(publicClient, address).then((deployment) => {
+      if (current) setAccountDeployment(deployment);
+    });
+    return () => {
+      current = false;
+    };
+  }, [address, publicClient]);
+
   const domainExpired = expiry.data ? expiry.data <= BigInt(Math.floor(Date.now() / 1000)) : true;
   const hasOwner = !!owner.data && owner.data !== zeroAddress && !domainExpired;
   const paymentAddress =
@@ -168,6 +187,7 @@ export default function PayRequestPage() {
     !pending && !signaturePending && signedRequestValid,
   );
   const paymentError = token === "USDC" ? tokenPayment.error : nativePayment.error;
+  const receiptActors = paymentReceiptActors(address, receipt.data?.from);
 
   function pay() {
     if (!paymentAddress || !canPay) return;
@@ -231,6 +251,18 @@ export default function PayRequestPage() {
           </div>
         )}
 
+        {isConnected && (
+          <div className="mt-7 rounded-2xl border border-indigo-200 bg-indigo-50 p-5 print:hidden">
+            <p className="text-sm font-semibold text-indigo-900">Wallet execution</p>
+            <p className="mt-2 text-sm leading-6 text-indigo-800">
+              {accountDeployment === "deployed-contract"
+                ? "A deployed contract account is connected. Its wallet may submit this payment through ERC-4337."
+                : "XDCID sends this payment request to your connected wallet. If it uses ERC-4337, the wallet handles its UserOperation and bundler."}
+              {" "}Gas sponsorship depends on the wallet and its paymaster; XDCID does not control or store either service.
+            </p>
+          </div>
+        )}
+
         <div className="mt-7 rounded-2xl border border-slate-200 p-5">
           <p className="text-sm font-semibold text-slate-700">Resolved recipient</p>
           <p className="mt-2 break-all text-sm text-slate-600">
@@ -271,7 +303,8 @@ export default function PayRequestPage() {
               <div><dt className="font-semibold text-slate-500">Amount</dt><dd className="mt-1 text-slate-900">{amount} {token}</dd></div>
               {reference && <div><dt className="font-semibold text-slate-500">Reference</dt><dd className="mt-1 break-all text-slate-900">{reference}</dd></div>}
               <div><dt className="font-semibold text-slate-500">Recipient</dt><dd className="mt-1 break-all text-slate-900">{paymentAddress}</dd></div>
-              <div><dt className="font-semibold text-slate-500">Payer</dt><dd className="mt-1 break-all text-slate-900">{receipt.data?.from || address}</dd></div>
+              <div><dt className="font-semibold text-slate-500">Payer</dt><dd className="mt-1 break-all text-slate-900">{receiptActors.payer || address}</dd></div>
+              {receiptActors.networkSubmitter && <div><dt className="font-semibold text-slate-500">Network submitter</dt><dd className="mt-1 break-all text-slate-900">{receiptActors.networkSubmitter}</dd></div>}
               <div><dt className="font-semibold text-slate-500">Block</dt><dd className="mt-1 text-slate-900">{receipt.data?.blockNumber?.toString()}</dd></div>
               <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Transaction hash</dt><dd className="mt-1 break-all text-slate-900">{transactionHash}</dd></div>
             </dl>
