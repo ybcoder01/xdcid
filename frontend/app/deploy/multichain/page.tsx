@@ -5,45 +5,108 @@ import { useState } from "react";
 const EXPECTED_ACCOUNT = "0xe82a4267cc310fc6db334601671a043dfc8ce06a";
 const DEPLOYMENT_DATA = "0x60a06040523480156200001157600080fd5b5060405162000f5a38038062000f5a833981810160405281019062000037919062000157565b600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff16036200009e576040517f82d5d76a00000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b8073ffffffffffffffffffffffffffffffffffffffff1660808173ffffffffffffffffffffffffffffffffffffffff16815250505062000189565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006200010b82620000de565b9050919050565b60006200011f82620000fe565b9050919050565b620001318162000112565b81146200013d57600080fd5b50565b600081519050620001518162000126565b92915050565b60006020828403121562000170576200016f620000d9565b5b6000620001808482850162000140565b91505092915050565b608051610d99620001c16000396000818161015301528181610375015281816106470152818161068301526109800152610d996000f3fe608060405234801561001057600080fd5b50600436106100575760003560e01c806338c989ed1461005c5780635e771e751461008c5780637b103999146100a8578063caa1aff2146100c6578063daa17a12146100e2575b600080fd5b61007660048036038101906100719190610b10565b610114565b6040516100839190610b91565b60405180910390f35b6100a660048036038101906100a19190610bd8565b61035b565b005b6100b0610645565b6040516100bd9190610c8a565b60405180910390f35b6100e060048036038101906100db9190610b10565b610669565b005b6100fc60048036038101906100f79190610b10565b610860565b60405161010b93929190610cc0565b60405180910390f35b600080820361014f576040517f7a47c9a200000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b60007f000000000000000000000000000000000000000000000000000000000000000073ffffffffffffffffffffffffffffffffffffffff16637dd56411856040518263ffffffff1660e01b81526004016101aa9190610d06565b602060405180830381865afa1580156101c7573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906101eb9190610d36565b9050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff160361022b576000915050610355565b600080600086815260200190815260200160002060008581526020019081526020016000206040518060400160405290816000820160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020016001820160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152505090508173ffffffffffffffffffffffffffffffffffffffff16816020015173ffffffffffffffffffffffffffffffffffffffff161461034b57600092505050610355565b8060000151925050505b92915050565b823373ffffffffffffffffffffffffffffffffffffffff167f000000000000000000000000000000000000000000000000000000000000000073ffffffffffffffffffffffffffffffffffffffff16637dd56411836040518263ffffffff1660e01b81526004016103cc9190610d06565b602060405180830381865afa1580156103e9573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061040d9190610d36565b73ffffffffffffffffffffffffffffffffffffffff161461045a576040517f42f058b400000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b60008303610494576040517f7a47c9a200000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b600073ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff16036104fa576040517f82d5d76a00000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b60405180604001604052808373ffffffffffffffffffffffffffffffffffffffff1681526020013373ffffffffffffffffffffffffffffffffffffffff16815250600080868152602001908152602001600020600085815260200190815260200160002060008201518160000160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555060208201518160010160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055509050508173ffffffffffffffffffffffffffffffffffffffff1683857f6c2d70f408742f4ca098428af47557aef4978825dc4ba97d7f6696ccd5f09dfc336040516106379190610b91565b60405180910390a450505050565b7f000000000000000000000000000000000000000000000000000000000000000081565b813373ffffffffffffffffffffffffffffffffffffffff167f000000000000000000000000000000000000000000000000000000000000000073ffffffffffffffffffffffffffffffffffffffff16637dd56411836040518263ffffffff1660e01b81526004016106da9190610d06565b602060405180830381865afa1580156106f7573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061071b9190610d36565b73ffffffffffffffffffffffffffffffffffffffff1614610768576040517f42f058b400000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b600082036107a2576040517f7a47c9a200000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b6000808481526020019081526020016000206000838152602001908152602001600020600080820160006101000a81549073ffffffffffffffffffffffffffffffffffffffff02191690556001820160006101000a81549073ffffffffffffffffffffffffffffffffffffffff021916905550503373ffffffffffffffffffffffffffffffffffffffff1682847f7c318f714c412a860224b3f0d388a1ff7fc639f9ca1a7747aefa7b2439b496e660405160405180910390a4505050565b600080600080840361089e576040517f7a47c9a200000000000000000000000000000000000000000000000000000000815260040160405180910390fd5b600080600087815260200190815260200160002060008681526020019081526020016000206040518060400160405290816000820160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020016001820160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681525050905060007f000000000000000000000000000000000000000000000000000000000000000073ffffffffffffffffffffffffffffffffffffffff16637dd56411886040518263ffffffff1660e01b81526004016109d79190610d06565b602060405180830381865afa1580156109f4573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610a189190610d36565b9050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614158015610a8657508073ffffffffffffffffffffffffffffffffffffffff16826020015173ffffffffffffffffffffffffffffffffffffffff16145b9250816000015182602001519450945050509250925092565b600080fd5b6000819050919050565b610ab781610aa4565b8114610ac257600080fd5b50565b600081359050610ad481610aae565b92915050565b6000819050919050565b610aed81610ada565b8114610af857600080fd5b50565b600081359050610b0a81610ae4565b92915050565b60008060408385031215610b2757610b26610a9f565b5b6000610b3585828601610ac5565b9250506020610b4685828601610afb565b9150509250929050565b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b6000610b7b82610b50565b9050919050565b610b8b81610b70565b82525050565b6000602082019050610ba66000830184610b82565b92915050565b610bb581610b70565b8114610bc057600080fd5b50565b600081359050610bd281610bac565b92915050565b600080600060608486031215610bf157610bf0610a9f565b5b6000610bff86828701610ac5565b9350506020610c1086828701610afb565b9250506040610c2186828701610bc3565b9150509250925092565b6000819050919050565b6000610c50610c4b610c4684610b50565b610c2b565b610b50565b9050919050565b6000610c6282610c35565b9050919050565b6000610c7482610c57565b9050919050565b610c8481610c69565b82525050565b6000602082019050610c9f6000830184610c7b565b92915050565b60008115159050919050565b610cba81610ca5565b82525050565b6000606082019050610cd56000830186610b82565b610ce26020830185610b82565b610cef6040830184610cb1565b949350505050565b610d0081610aa4565b82525050565b6000602082019050610d1b6000830184610cf7565b92915050565b600081519050610d3081610bac565b92915050565b600060208284031215610d4c57610d4b610a9f565b5b6000610d5a84828501610d21565b9150509291505056fea2646970667358221220da85cd3304b16cf06ca15185db77d94649c1f8ae481a7c979c5051294e5c8cff64736f6c6343000818003300000000000000000000000005fa64a05bc205dedf47e023d2d90c2d119cd097";
 
+type EthereumProvider = {
+  isMetaMask?: boolean;
+  isRabby?: boolean;
+  providers?: EthereumProvider[];
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+};
+
+type ProviderAnnouncement = CustomEvent<{
+  info?: { rdns?: string };
+  provider?: EthereumProvider;
+}>;
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { message?: unknown }).message || fallback);
+  }
+  return fallback;
+}
+
+async function findMetaMaskProvider(): Promise<EthereumProvider> {
+  const injected = window.ethereum as EthereumProvider | undefined;
+  const fallbackProvider = () => {
+    const providers = Array.isArray(injected?.providers) ? injected.providers : injected ? [injected] : [];
+    return providers.find((candidate) => candidate.isMetaMask && !candidate.isRabby) || null;
+  };
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (provider: EthereumProvider) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("eip6963:announceProvider", onAnnouncement as EventListener);
+      resolve(provider);
+    };
+    const onAnnouncement = (event: Event) => {
+      const detail = (event as ProviderAnnouncement).detail;
+      if (
+        detail?.provider &&
+        (detail.info?.rdns === "io.metamask" ||
+          (detail.provider.isMetaMask && !detail.provider.isRabby))
+      ) {
+        finish(detail.provider);
+      }
+    };
+
+    window.addEventListener("eip6963:announceProvider", onAnnouncement as EventListener);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    window.setTimeout(() => {
+      const provider = fallbackProvider();
+      if (provider) {
+        finish(provider);
+        return;
+      }
+      window.removeEventListener("eip6963:announceProvider", onAnnouncement as EventListener);
+      reject(new Error("MetaMask was not detected. Unlock MetaMask in this Chrome window and try again."));
+    }, 500);
+  });
+}
+
 export default function MultichainDeploymentPage() {
   const [account, setAccount] = useState("");
+  const [provider, setProvider] = useState<EthereumProvider | null>(null);
   const [status, setStatus] = useState("Connect the owner wallet to begin.");
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function connect() {
     try {
-      if (!window.ethereum) throw new Error("MetaMask was not detected in this Chrome tab.");
-      const chainId = String(await window.ethereum.request({ method: "eth_chainId" })).toLowerCase();
+      const selectedProvider = await findMetaMaskProvider();
+      const chainId = String(await selectedProvider.request({ method: "eth_chainId" })).toLowerCase();
       if (chainId !== "0x32") throw new Error("Switch MetaMask to XDC Network (chain ID 50).");
-      const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
+      const accounts = (await selectedProvider.request({ method: "eth_requestAccounts" })) as string[];
       const selected = (accounts[0] || "").toLowerCase();
       if (selected !== EXPECTED_ACCOUNT) {
         throw new Error("Select the required owner account in MetaMask, then reconnect.");
       }
+      setProvider(selectedProvider);
       setAccount(selected);
       setReady(true);
       setStatus("Connected to the required owner account on XDC Network.");
     } catch (error) {
+      setProvider(null);
       setReady(false);
-      setStatus(error instanceof Error ? error.message : "Wallet connection failed.");
+      setStatus(errorMessage(error, "Wallet connection failed."));
     }
   }
 
   async function deploy() {
     try {
-      if (!window.ethereum || !ready) return;
+      if (!provider || !ready) return;
       setBusy(true);
       setStatus("Confirm the contract deployment in MetaMask.");
       const hash = String(
-        await window.ethereum.request({
+        await provider.request({
           method: "eth_sendTransaction",
           params: [{ from: account, data: DEPLOYMENT_DATA, value: "0x0" }]
         })
       );
       setStatus("Submitted: " + hash + "\nWaiting for confirmation...");
       for (;;) {
-        const receipt = (await window.ethereum.request({
+        const receipt = (await provider.request({
           method: "eth_getTransactionReceipt",
           params: [hash]
         })) as { contractAddress?: string; status?: string } | null;
@@ -61,7 +124,7 @@ export default function MultichainDeploymentPage() {
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Deployment failed.");
+      setStatus(errorMessage(error, "Deployment failed."));
     } finally {
       setBusy(false);
     }
