@@ -25,11 +25,11 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-async function findMetaMaskProvider(): Promise<EthereumProvider> {
+async function findRabbyProvider(): Promise<EthereumProvider> {
   const injected = window.ethereum as EthereumProvider | undefined;
   const fallbackProvider = () => {
     const providers = Array.isArray(injected?.providers) ? injected.providers : injected ? [injected] : [];
-    return providers.find((candidate) => candidate.isMetaMask && !candidate.isRabby) || null;
+    return providers.find((candidate) => candidate.isRabby) || null;
   };
 
   return new Promise((resolve, reject) => {
@@ -44,8 +44,7 @@ async function findMetaMaskProvider(): Promise<EthereumProvider> {
       const detail = (event as ProviderAnnouncement).detail;
       if (
         detail?.provider &&
-        (detail.info?.rdns === "io.metamask" ||
-          (detail.provider.isMetaMask && !detail.provider.isRabby))
+        (detail.info?.rdns === "io.rabby" || detail.provider.isRabby)
       ) {
         finish(detail.provider);
       }
@@ -60,7 +59,7 @@ async function findMetaMaskProvider(): Promise<EthereumProvider> {
         return;
       }
       window.removeEventListener("eip6963:announceProvider", onAnnouncement as EventListener);
-      reject(new Error("MetaMask was not detected. Unlock MetaMask in this Chrome window and try again."));
+      reject(new Error("Rabby was not detected. Unlock Rabby in this Chrome window and try again."));
     }, 500);
   });
 }
@@ -74,13 +73,13 @@ export default function MultichainDeploymentPage() {
 
   async function connect() {
     try {
-      const selectedProvider = await findMetaMaskProvider();
+      const selectedProvider = await findRabbyProvider();
       const chainId = String(await selectedProvider.request({ method: "eth_chainId" })).toLowerCase();
-      if (chainId !== "0x32") throw new Error("Switch MetaMask to XDC Network (chain ID 50).");
+      if (chainId !== "0x32") throw new Error("Switch Rabby to XDC Network (chain ID 50).");
       const accounts = (await selectedProvider.request({ method: "eth_requestAccounts" })) as string[];
       const selected = (accounts[0] || "").toLowerCase();
       if (selected !== EXPECTED_ACCOUNT) {
-        throw new Error("Select the required owner account in MetaMask, then reconnect.");
+        throw new Error("Select the required owner account in Rabby, then reconnect.");
       }
       setProvider(selectedProvider);
       setAccount(selected);
@@ -97,7 +96,7 @@ export default function MultichainDeploymentPage() {
     try {
       if (!provider || !ready) return;
       setBusy(true);
-      setStatus("Confirm the contract deployment in MetaMask.");
+      setStatus("Confirm the contract deployment in Rabby.");
       const hash = String(
         await provider.request({
           method: "eth_sendTransaction",
@@ -165,7 +164,7 @@ export default function MultichainDeploymentPage() {
             onClick={connect}
             disabled={busy}
           >
-            Connect MetaMask
+            Connect Rabby
           </button>
           <button
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
