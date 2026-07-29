@@ -1,0 +1,56 @@
+name: Verify multichain resolver on XDC
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build/multichain-wallet-deployment
+    paths:
+      - ".github/workflows/verify-multichain-resolver.yml"
+      - "contracts/**"
+      - "hardhat.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile contracts
+        run: pnpm hardhat compile
+
+      - name: Verify XNSMultichainResolver
+        env:
+          XDCSCAN_API_KEY: ${{ secrets.XDCSCAN_API_KEY }}
+          XDC_MAINNET_RPC_URL: https://earpc.xinfin.network
+        run: |
+          if [ -z "$XDCSCAN_API_KEY" ]; then
+            echo "XDCSCAN_API_KEY repository secret is required"
+            exit 1
+          fi
+          pnpm hardhat verify \
+            --network xdc \
+            --contract contracts/XNSMultichainResolver.sol:XNSMultichainResolver \
+            0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240 \
+            0x05fa64a05bc205DeDF47e023d2D90c2d119cd097
