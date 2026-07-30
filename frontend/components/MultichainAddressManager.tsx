@@ -85,7 +85,7 @@ export function MultichainAddressManager({
     );
     setActiveChainId(null);
     void addressReads.refetch();
-  }, [receipt.isSuccess, activeChainId, addressReads]);
+  }, [receipt.isSuccess, activeChainId]);
 
   function useConnectedAddressForAll() {
     if (!connectedAddress) return;
