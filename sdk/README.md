@@ -1,8 +1,8 @@
 # @xdcid/sdk
 
-Read-only TypeScript SDK for resolving XDCID `.xdc` names on XDC mainnet.
+TypeScript SDK for resolving XDCID ".xdc" names and managing chain-qualified address records on XDC mainnet.
 
-The package reads the deployed XDCID contracts directly. It does not require an API key, hold a private key, submit transactions, or collect user data.
+The package reads the deployed XDCID contracts directly and prepares contract-call requests that a user's existing wallet can sign. It does not require an API key, hold a private key, sign or submit transactions, bridge or transfer funds, or collect user data.
 
 ## Status
 
@@ -29,6 +29,25 @@ const reverse = await xdcid.reverseResolve(
 const availability = await xdcid.checkAvailability("alice", 1);
 const profile = await xdcid.getProfile("alice.xdc");
 const matched = await xdcid.verifyForwardReverse("alice.xdc");
+
+const baseAddress = await xdcid.resolveMultichainAddress("alice.xdc", 8453);
+const setBaseAddress = xdcid.prepareSetMultichainAddress(
+  "alice.xdc",
+  8453,
+  "0x1111111111111111111111111111111111111111"
+);
+```
+
+The prepared request must be submitted on XDC mainnet by the current name owner's wallet. For example, after confirming that the wallet is connected to chain 50:
+
+```ts
+await walletClient.writeContract({
+  account,
+  address: setBaseAddress.address,
+  abi: setBaseAddress.abi,
+  functionName: setBaseAddress.functionName,
+  args: setBaseAddress.args
+});
 ```
 
 Use an existing Viem client when a wallet already manages RPC access:
@@ -56,13 +75,23 @@ const xdcid = createXdcidClient({
 });
 ```
 
+## Multichain networks
+
+`SUPPORTED_MULTICHAIN_NETWORKS` lists the initial application networks: XDC (50), Ethereum (1), Base (8453), Arbitrum One (42161), and Polygon (137). The resolver supports other positive EVM chain IDs as well.
+
+Address records are stored and updated in the verified multichain resolver on XDC. The SDK does not read from or submit transactions to the target chain.
+
 ## API
 
 - `parseXdcidName(value)` returns validation details without throwing.
-- `normalizeName(value)` returns a canonical lowercase `.xdc` name.
+- `normalizeName(value)` returns a canonical lowercase ".xdc" name.
 - `nodeForName(value)` derives the deployed protocol node hash.
 - `resolveName(value)` returns ownership, address, expiry, and registration state.
-- `resolveAddress(value)` returns the active payment address or `null`.
+- `resolveAddress(value)` returns the active XDC payment address or `null`.
+- `resolveMultichainAddress(value, chainId)` returns the active address for an EVM chain or `null`.
+- `getMultichainAddressRecord(value, chainId)` returns the target, record owner, and active state.
+- `prepareSetMultichainAddress(value, chainId, target)` prepares an owner-signed XDC contract call.
+- `prepareClearMultichainAddress(value, chainId)` prepares an owner-signed XDC record-clear call.
 - `reverseResolve(address)` returns a primary name only after verifying current ownership.
 - `checkAvailability(value, years)` returns availability and registration pricing.
 - `getProfile(value)` reads supported public profile records.
@@ -73,11 +102,11 @@ const xdcid = createXdcidClient({
 The SDK:
 
 - rejects names that do not match the registrar's 3–63 character ASCII label rules;
-- requires XDC mainnet chain ID 50;
+- requires XDC mainnet chain ID 50 for contract reads;
 - treats zero-address or expired ownership as unregistered;
 - verifies reverse records against the current registry owner;
-- validates contract overrides and RPC URL protocols;
-- uses read-only contract calls and never requests a wallet signature;
+- validates contract overrides, RPC URL protocols, target addresses, and chain IDs;
+- prepares write requests without holding keys, requesting signatures, or submitting transactions;
 - wraps RPC failures in `XdcidSdkError` with a stable error code.
 
 ## Development
@@ -85,7 +114,7 @@ The SDK:
 From the repository root:
 
 ```bash
-pnpm test
+pnpm test:sdk
 pnpm build:sdk
 ```
 

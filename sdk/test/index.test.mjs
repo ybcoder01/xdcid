@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddress, keccak256, toBytes, zeroAddress } from "viem";
 import {
+  SUPPORTED_MULTICHAIN_NETWORKS,
+  XDCID_CONTRACTS,
   XdcidClient,
   XdcidSdkError,
   nodeForName,
@@ -34,6 +36,17 @@ test("reports validation errors without throwing from parseXdcidName", () => {
   );
 });
 
+test("exposes the verified resolver and initial multichain network metadata", () => {
+  assert.equal(
+    XDCID_CONTRACTS.multichainResolver,
+    getAddress("0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240")
+  );
+  assert.deepEqual(
+    SUPPORTED_MULTICHAIN_NETWORKS.map(({ chainId }) => chainId),
+    [50, 1, 8453, 42161, 137]
+  );
+});
+
 test("resolves an active name and its configured payment address", async () => {
   const owner = getAddress("0x1111111111111111111111111111111111111111");
   const paymentAddress = getAddress("0x2222222222222222222222222222222222222222");
@@ -54,6 +67,67 @@ test("resolves an active name and its configured payment address", async () => {
   assert.equal(result.owner, owner);
   assert.equal(result.address, paymentAddress);
   assert.equal(await sdk.resolveAddress("alice.xdc"), paymentAddress);
+});
+
+test("resolves multichain addresses and converts empty records to null", async () => {
+  const target = getAddress("0x5555555555555555555555555555555555555555");
+  const reads = [];
+  const sdk = new XdcidClient(
+    mockClient((request) => {
+      reads.push(request);
+      return request.args[1] === 8453n ? target : zeroAddress;
+    })
+  );
+
+  assert.equal(await sdk.resolveMultichainAddress("alice", 8453), target);
+  assert.equal(await sdk.resolveMultichainAddress("alice", 42161), null);
+  assert.equal(reads[0].functionName, "addressFor");
+  assert.equal(reads[0].args[1], 8453n);
+});
+
+test("returns a normalized multichain address record", async () => {
+  const target = getAddress("0x6666666666666666666666666666666666666666");
+  const recordOwner = getAddress("0x7777777777777777777777777777777777777777");
+  const sdk = new XdcidClient(mockClient(() => [target, recordOwner, true]));
+
+  const result = await sdk.getMultichainAddressRecord("Alice", 1);
+  assert.equal(result.name, "alice.xdc");
+  assert.equal(result.node, nodeForName("alice.xdc"));
+  assert.equal(result.chainId, 1);
+  assert.equal(result.target, target);
+  assert.equal(result.recordOwner, recordOwner);
+  assert.equal(result.active, true);
+});
+
+test("prepares owner-signed set and clear requests for XDC", () => {
+  const target = getAddress("0x8888888888888888888888888888888888888888");
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  const setRequest = sdk.prepareSetMultichainAddress("Alice", 137, target);
+  const clearRequest = sdk.prepareClearMultichainAddress("Alice", 137);
+
+  assert.equal(setRequest.chainId, 50);
+  assert.equal(setRequest.address, XDCID_CONTRACTS.multichainResolver);
+  assert.equal(setRequest.functionName, "setAddress");
+  assert.deepEqual(setRequest.args, [nodeForName("alice.xdc"), 137n, target]);
+  assert.equal(clearRequest.chainId, 50);
+  assert.equal(clearRequest.functionName, "clearAddress");
+  assert.deepEqual(clearRequest.args, [nodeForName("alice.xdc"), 137n]);
+});
+
+test("rejects invalid multichain request inputs", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  assert.throws(
+    () => sdk.prepareSetMultichainAddress("alice", 1, "not-an-address"),
+    (error) => error instanceof XdcidSdkError && error.code === "INVALID_ADDRESS"
+  );
+  assert.throws(
+    () => sdk.prepareSetMultichainAddress("alice", 1, zeroAddress),
+    (error) => error instanceof XdcidSdkError && error.code === "INVALID_ADDRESS"
+  );
+  assert.throws(
+    () => sdk.prepareClearMultichainAddress("alice", 0),
+    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CHAIN_ID"
+  );
 });
 
 test("does not resolve expired or zero-owner names", async () => {

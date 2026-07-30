@@ -19,6 +19,18 @@ export const XDCID_SUFFIX = ".xdc";
 export const MIN_LABEL_LENGTH = 3;
 export const MAX_LABEL_LENGTH = 63;
 export const PROFILE_KEYS = ["avatar", "website", "twitter", "telegram", "bio"] as const;
+export const MULTICHAIN_RESOLVER_ADDRESS = "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240" as const;
+
+export const SUPPORTED_MULTICHAIN_NETWORKS = [
+  { key: "xdc", name: "XDC Network", chainId: 50 },
+  { key: "ethereum", name: "Ethereum", chainId: 1 },
+  { key: "base", name: "Base", chainId: 8453 },
+  { key: "arbitrum", name: "Arbitrum One", chainId: 42161 },
+  { key: "polygon", name: "Polygon", chainId: 137 }
+] as const;
+
+export type SupportedMultichainNetwork = (typeof SUPPORTED_MULTICHAIN_NETWORKS)[number];
+export type SupportedMultichainChainId = SupportedMultichainNetwork["chainId"];
 
 export const DEFAULT_RPC_URLS = [
   "https://rpc.xdcrpc.com",
@@ -31,13 +43,15 @@ export type XdcidContracts = {
   registrar: Address;
   resolver: Address;
   reverseResolver: Address;
+  multichainResolver: Address;
 };
 
 export const XDCID_CONTRACTS: XdcidContracts = {
   registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
   registrar: "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
   resolver: "0x52bfa70B30190050F77033Fe427De8B3d4A8F453",
-  reverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f"
+  reverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f",
+  multichainResolver: MULTICHAIN_RESOLVER_ADDRESS
 };
 
 export const xdcMainnet = defineChain({
@@ -80,6 +94,15 @@ export type ReverseResolutionResult = {
   verified: true;
 };
 
+export type MultichainAddressRecordResult = {
+  name: string;
+  node: Hash;
+  chainId: number;
+  target: Address | null;
+  recordOwner: Address | null;
+  active: boolean;
+};
+
 export type AvailabilityResult = {
   name: string;
   node: Hash;
@@ -100,6 +123,7 @@ export type ProfileResult = {
 export type XdcidErrorCode =
   | "INVALID_NAME"
   | "INVALID_ADDRESS"
+  | "INVALID_CHAIN_ID"
   | "INVALID_YEARS"
   | "WRONG_CHAIN"
   | "INVALID_CONFIG"
@@ -184,6 +208,70 @@ const reverseResolverAbi = [
     outputs: [{ type: "string" }]
   }
 ] as const;
+
+export const multichainResolverAbi = [
+  {
+    type: "function",
+    name: "addressFor",
+    stateMutability: "view",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" }
+    ],
+    outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
+    name: "addressRecord",
+    stateMutability: "view",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" }
+    ],
+    outputs: [
+      { name: "target", type: "address" },
+      { name: "recordOwner", type: "address" },
+      { name: "active", type: "bool" }
+    ]
+  },
+  {
+    type: "function",
+    name: "setAddress",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" },
+      { name: "target", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "clearAddress",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" }
+    ],
+    outputs: []
+  }
+] as const;
+
+export type SetMultichainAddressRequest = {
+  chainId: typeof XDC_CHAIN_ID;
+  address: Address;
+  abi: typeof multichainResolverAbi;
+  functionName: "setAddress";
+  args: readonly [Hash, bigint, Address];
+};
+
+export type ClearMultichainAddressRequest = {
+  chainId: typeof XDC_CHAIN_ID;
+  address: Address;
+  abi: typeof multichainResolverAbi;
+  functionName: "clearAddress";
+  args: readonly [Hash, bigint];
+};
 
 type ContractRead = {
   address: Address;
@@ -310,6 +398,76 @@ export class XdcidClient {
 
   async resolveAddress(value: string): Promise<Address | null> {
     return (await this.resolveName(value)).address;
+  }
+
+  async resolveMultichainAddress(value: string, chainId: number): Promise<Address | null> {
+    const name = normalizeName(value);
+    const node = nodeForName(name);
+    const targetChainId = assertMultichainChainId(chainId);
+    const target = await this.read<Address>({
+      address: this.contracts.multichainResolver,
+      abi: multichainResolverAbi,
+      functionName: "addressFor",
+      args: [node, BigInt(targetChainId)]
+    });
+    return target === zeroAddress ? null : getAddress(target);
+  }
+
+  async getMultichainAddressRecord(
+    value: string,
+    chainId: number
+  ): Promise<MultichainAddressRecordResult> {
+    const name = normalizeName(value);
+    const node = nodeForName(name);
+    const targetChainId = assertMultichainChainId(chainId);
+    const [target, recordOwner, active] = await this.read<readonly [Address, Address, boolean]>({
+      address: this.contracts.multichainResolver,
+      abi: multichainResolverAbi,
+      functionName: "addressRecord",
+      args: [node, BigInt(targetChainId)]
+    });
+    return {
+      name,
+      node,
+      chainId: targetChainId,
+      target: target === zeroAddress ? null : getAddress(target),
+      recordOwner: recordOwner === zeroAddress ? null : getAddress(recordOwner),
+      active
+    };
+  }
+
+  prepareSetMultichainAddress(
+    value: string,
+    chainId: number,
+    target: string
+  ): SetMultichainAddressRequest {
+    const name = normalizeName(value);
+    const targetChainId = assertMultichainChainId(chainId);
+    if (!isAddress(target) || target === zeroAddress) {
+      throw new XdcidSdkError("INVALID_ADDRESS", "Target must be a non-zero EVM address");
+    }
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.multichainResolver,
+      abi: multichainResolverAbi,
+      functionName: "setAddress",
+      args: [nodeForName(name), BigInt(targetChainId), getAddress(target)]
+    };
+  }
+
+  prepareClearMultichainAddress(
+    value: string,
+    chainId: number
+  ): ClearMultichainAddressRequest {
+    const name = normalizeName(value);
+    const targetChainId = assertMultichainChainId(chainId);
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.multichainResolver,
+      abi: multichainResolverAbi,
+      functionName: "clearAddress",
+      args: [nodeForName(name), BigInt(targetChainId)]
+    };
   }
 
   async reverseResolve(value: string): Promise<ReverseResolutionResult | null> {
@@ -459,6 +617,13 @@ function invalidName(input: string, label: string, name: string, error: string):
   return { input, label, name, valid: false, error };
 }
 
+function assertMultichainChainId(chainId: number): number {
+  if (!Number.isSafeInteger(chainId) || chainId < 1) {
+    throw new XdcidSdkError("INVALID_CHAIN_ID", "Chain ID must be a positive safe integer");
+  }
+  return chainId;
+}
+
 function assertYears(years: number): void {
   if (!Number.isInteger(years) || years < 1 || years > 100) {
     throw new XdcidSdkError("INVALID_YEARS", "Years must be an integer between 1 and 100");
@@ -488,6 +653,7 @@ function normalizeContracts(overrides?: Partial<XdcidContracts>): XdcidContracts
     registry: getAddress(contracts.registry),
     registrar: getAddress(contracts.registrar),
     resolver: getAddress(contracts.resolver),
-    reverseResolver: getAddress(contracts.reverseResolver)
+    reverseResolver: getAddress(contracts.reverseResolver),
+    multichainResolver: getAddress(contracts.multichainResolver)
   };
 }

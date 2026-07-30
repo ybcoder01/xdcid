@@ -1,7 +1,7 @@
 {
   "name": "@xdcid/sdk",
   "version": "0.1.0",
-  "description": "Read-only XDCID name resolution SDK for XDC mainnet",
+  "description": "XDCID name resolution and multichain address SDK for XDC mainnet",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
