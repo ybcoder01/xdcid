@@ -1,4 +1,12 @@
 import { xnsAddresses } from "./addresses";
+import {
+  MULTICHAIN_RESOLVER_ADDRESS,
+  SUPPORTED_MULTICHAIN_NETWORKS,
+  multichainResolverAbi
+} from "../../sdk/src/index";
+
+export { multichainResolverAbi };
+export const supportedMultichainNetworks = SUPPORTED_MULTICHAIN_NETWORKS;
 
 export const xdcMainnet = {
   id: 50,
@@ -16,7 +24,10 @@ export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
   resolver: (process.env.NEXT_PUBLIC_XNS_RESOLVER || xnsAddresses.resolver) as `0x${string}`,
-  reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`
+  reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`,
+  multichainResolver: (
+    process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER || MULTICHAIN_RESOLVER_ADDRESS
+  ) as `0x${string}`
 };
 
 export const zeroAddress = "0x0000000000000000000000000000000000000000";
@@ -25,7 +36,8 @@ export const contractsConfigured =
   addresses.registry !== zeroAddress &&
   addresses.registrar !== zeroAddress &&
   addresses.resolver !== zeroAddress &&
-  addresses.reverseResolver !== zeroAddress;
+  addresses.reverseResolver !== zeroAddress &&
+  addresses.multichainResolver !== zeroAddress;
 
 export const registrarAbi = [
   {
