@@ -13,10 +13,10 @@ import {
 } from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
+import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
-const transport = http(xdcMainnet.rpcUrls.default.http[0]);
 
 const connectors = walletConnectProjectId
   ? connectorsForWallets(
@@ -41,11 +41,13 @@ const connectors = walletConnectProjectId
   : [injected()];
 
 const config = createConfig({
-  chains: [xdcMainnet],
+  chains: [xdcMainnet, arbitrumSepolia, xdcApothem],
   connectors,
   multiInjectedProviderDiscovery: false,
   transports: {
-    [xdcMainnet.id]: transport
+    [xdcMainnet.id]: http(xdcMainnet.rpcUrls.default.http[0]),
+    [arbitrumSepolia.id]: http(arbitrumSepolia.rpcUrls.default.http[0]),
+    [xdcApothem.id]: http(xdcApothem.rpcUrls.default.http[0])
   },
   ssr: true
 });
