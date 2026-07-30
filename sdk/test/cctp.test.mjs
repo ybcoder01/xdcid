@@ -15,7 +15,7 @@ import {
   parseCctpUsdcAmount,
   prepareCctpBurn,
   prepareCctpReceive
-} from "../dist/index.js";
+} from "../dist/cctp.js";
 
 const recipient = getAddress("0x1111111111111111111111111111111111111111");
 const transactionHash = "0x" + "ab".repeat(32);
