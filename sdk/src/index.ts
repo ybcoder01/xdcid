@@ -1,3 +1,5 @@
+export * from "./cctp.js";
+
 import {
   createPublicClient,
   defineChain,
