@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { isAddress, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
 import { addresses, registrarAbi, registryAbi, resolverAbi, reverseResolverAbi } from "../../../config/contracts";
 import { parseXnsName } from "../../../lib/names";
 
@@ -139,6 +140,10 @@ export default function NamePage() {
           </div>
         ))}
       </div>
+
+      {isOwner && node.data && (
+        <MultichainAddressManager name={name} node={node.data} />
+      )}
 
       {isOwner && (
         <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
