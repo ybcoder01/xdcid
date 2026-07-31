@@ -87,6 +87,7 @@ export async function GET(request: Request, context: RouteContext) {
         registered,
         owner,
         resolvedAddress,
+        registry,
         expiry
       } = data;
 
@@ -98,6 +99,7 @@ export async function GET(request: Request, context: RouteContext) {
         registered,
         owner,
         resolvedAddress,
+        registry,
         expiry
       });
     }
@@ -110,6 +112,7 @@ export async function GET(request: Request, context: RouteContext) {
         network,
         available,
         registered,
+        registry,
         expiry,
         pricing
       } = data;
@@ -121,13 +124,23 @@ export async function GET(request: Request, context: RouteContext) {
         network,
         available,
         registered,
+        registry,
         expiry,
         pricing
       });
     }
 
     if (capability === "profile") {
-      const { name, label, node, network, registered, owner, profile } = data;
+      const {
+        name,
+        label,
+        node,
+        network,
+        registered,
+        owner,
+        registry,
+        profile
+      } = data;
 
       return apiSuccess({
         name,
@@ -136,6 +149,7 @@ export async function GET(request: Request, context: RouteContext) {
         network,
         registered,
         owner,
+        registry,
         profile
       });
     }
