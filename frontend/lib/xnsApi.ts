@@ -14,8 +14,13 @@ import {
   reverseResolverAbi,
   xdcMainnet
 } from "../config/contracts";
+import {
+  legacyXdcDomainsAbi,
+  legacyXdcDomainsAddress
+} from "../config/legacyDomains";
 import { ApiInputError } from "./apiResponse";
 import { parseXnsName } from "./names";
+import { classifyRegistryStatus } from "./registryStatus";
 import { withShortCache } from "./shortCache";
 import { xdcClient } from "./xdcClient";
 
@@ -49,7 +54,16 @@ export async function getNameData(input: string, years: number) {
 
   return withShortCache("name:" + parsed.name + ":" + years, async () => {
     const node = keccak256(stringToHex(parsed.name));
-    const [owner, expiry, available, pricePerYear, resolvedAddress, profileValues] = await Promise.all([
+    const legacyTokenId = BigInt(node);
+    const [
+      owner,
+      expiry,
+      available,
+      pricePerYear,
+      resolvedAddress,
+      profileValues,
+      legacyRegistered
+    ] = await Promise.all([
       xdcClient.readContract({
         address: addresses.registry,
         abi: registryAbi,
@@ -89,10 +103,28 @@ export async function getNameData(input: string, years: number) {
             args: [node, key]
           })
         )
-      )
+      ),
+      xdcClient.readContract({
+        address: legacyXdcDomainsAddress,
+        abi: legacyXdcDomainsAbi,
+        functionName: "exists",
+        args: [legacyTokenId]
+      })
     ]);
 
     const registered = owner !== zeroAddress;
+    const legacyOwner = legacyRegistered
+      ? await xdcClient.readContract({
+          address: legacyXdcDomainsAddress,
+          abi: legacyXdcDomainsAbi,
+          functionName: "ownerOf",
+          args: [legacyTokenId]
+        })
+      : null;
+    const registryClassification = classifyRegistryStatus({
+      xdcidRegistered: registered,
+      legacyRegistered
+    });
     const totalPrice = pricePerYear * BigInt(years);
     const profile = Object.fromEntries(
       profileKeys.map((key, index) => [
@@ -111,6 +143,20 @@ export async function getNameData(input: string, years: number) {
       owner: registered ? getAddress(owner) : null,
       resolvedAddress:
         registered && resolvedAddress !== zeroAddress ? getAddress(resolvedAddress) : null,
+      registry: {
+        ...registryClassification,
+        xdcid: {
+          contract: addresses.registry,
+          registered,
+          owner: registered ? getAddress(owner) : null
+        },
+        legacy: {
+          contract: legacyXdcDomainsAddress,
+          tokenId: legacyTokenId.toString(),
+          registered: legacyRegistered,
+          owner: legacyOwner ? getAddress(legacyOwner) : null
+        }
+      },
       expiry: {
         timestamp: expiry > 0n ? expiry.toString() : null,
         iso: expiry > 0n ? new Date(Number(expiry) * 1000).toISOString() : null
