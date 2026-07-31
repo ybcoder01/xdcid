@@ -1,6 +1,6 @@
 # Legacy XDCDomains index
 
-This read-only utility reconstructs the active `.xdc` names held by the legacy
+This read-only utility reconstructs the active names held by the legacy
 XDCDomains contract from XDC mainnet event logs. It does not use a wallet,
 submit transactions, burn names, or change either registry.
 
@@ -12,8 +12,18 @@ submit transactions, burn names, or change either registry.
 - Events: `Transfer` and `NewURI`
 
 The latest event order determines each token's owner and name. Burned tokens
-are excluded. Only canonical names ending in `.xdc` appear in the active
-name list, and duplicate canonical names are reported separately.
+are excluded from the active-token count.
+
+Active metadata is classified into three groups:
+
+- `names`: canonical `.xdc` names that satisfy XDCID's current label rules.
+- `legacyOnlyNames`: `.xdc` names retained as evidence but not compatible
+  with those rules.
+- `nonXdcTokenIds`: active tokens whose metadata does not end in `.xdc`.
+
+Active tokens with no usable name metadata are reported separately. Canonical
+collisions are calculated across both compatible and legacy-only `.xdc`
+records so duplicate evidence is never hidden.
 
 ## Run
 
@@ -21,10 +31,11 @@ name list, and duplicate canonical names are reported separately.
 pnpm index:legacy-domains
 ```
 
-Progress is written to stderr and the versioned JSON snapshot is written to
-stdout. The command does not create a local file. If persistence is required
-for an operational deployment, send stdout to project-controlled storage with
-an explicit retention policy; do not commit generated snapshots.
+Progress and integrity failures are written to stderr. The versioned JSON
+snapshot is written to stdout. The command does not create a local file. If
+persistence is required for an operational deployment, send stdout to
+project-controlled storage with an explicit retention policy; do not commit
+generated snapshots.
 
 The indexer tries these optional server-side variables before public XDC RPC
 fallbacks:
@@ -45,12 +56,23 @@ Optional controls:
 
 ## Output integrity
 
-The output schema is `xdcid/legacy-domain-index/v1`. It includes the block
-range, event count, legacy `totalSupply` when available, active names,
-canonical collisions, and `snapshotSha256`. The hash covers the compact JSON
-payload before the hash field is added, making snapshots at a pinned block
-independently reproducible.
+The output schema is `xdcid/legacy-domain-index/v2`. It includes:
 
-This index is evidence for migration review only. Eligibility and conflict
-policy must remain a separate, explicit decision and should never trigger
-automatic burns or registrations.
+- the indexed block range and the pinned end-block hash;
+- the legacy contract bytecode hash at that block;
+- reconstructed active-token and named-token counts;
+- the legacy `totalSupply` at the same block;
+- compatible, legacy-only, non-`.xdc`, and missing-metadata records;
+- canonical collisions; and
+- `snapshotSha256`, which covers the compact JSON payload before the hash
+  field is added.
+
+The command exits unsuccessfully when `totalSupply` cannot be read, when the
+reconstructed active-token count differs from `totalSupply`, or when an
+active token lacks usable name metadata. A failed snapshot is diagnostic
+evidence only and must not be used for migration, registration blocking,
+resolution, or payments.
+
+This index remains evidence for migration review. Eligibility and conflict
+policy are separate, explicit decisions and must never trigger automatic
+burns or registrations.
