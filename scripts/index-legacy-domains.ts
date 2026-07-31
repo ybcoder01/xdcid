@@ -2,8 +2,9 @@ import { createHash } from "crypto";
 import { ethers } from "hardhat";
 import {
   LegacyDomainLog,
-  buildLegacyDomainSnapshot,
+  assessLegacyIndexIntegrity,
   findLegacyNameCollisions,
+  inspectLegacyDomainSnapshot,
 } from "./lib/legacy-domain-index";
 
 const CHAIN_ID = 50;
@@ -170,6 +171,30 @@ async function readTotalSupply(
   }
 }
 
+async function readSnapshotProof(
+  providers: readonly ethers.JsonRpcProvider[],
+  blockTag: number,
+): Promise<{ toBlockHash: string; legacyContractCodeHash: string }> {
+  const block = await tryProviders(providers, (provider) =>
+    provider.getBlock(blockTag),
+  );
+  if (!block?.hash) {
+    throw new Error("Unable to read the pinned XDC block hash");
+  }
+
+  const code = await tryProviders(providers, (provider) =>
+    provider.getCode(LEGACY_CONTRACT, blockTag),
+  );
+  if (code === "0x") {
+    throw new Error("Legacy contract bytecode is unavailable at the pinned block");
+  }
+
+  return {
+    toBlockHash: block.hash,
+    legacyContractCodeHash: ethers.keccak256(code),
+  };
+}
+
 async function main(): Promise<void> {
   const providers = await usableProviders();
   const confirmations = readUnsignedInteger(
@@ -221,24 +246,40 @@ async function main(): Promise<void> {
   const domainLogs = rawLogs
     .map(parseLegacyLog)
     .filter((log): log is LegacyDomainLog => Boolean(log));
-  const names = buildLegacyDomainSnapshot(domainLogs);
-  const canonicalCollisions = findLegacyNameCollisions(names);
+  const inventory = inspectLegacyDomainSnapshot(domainLogs);
+  const allXdcNames = [
+    ...inventory.compatibleNames,
+    ...inventory.legacyOnlyNames,
+  ];
+  const canonicalCollisions = findLegacyNameCollisions(allXdcNames);
   const totalSupply = await readTotalSupply(providers, toBlock);
+  const integrity = assessLegacyIndexIntegrity(inventory, totalSupply);
+  const proof = await readSnapshotProof(providers, toBlock);
 
   const payload = {
-    schema: "xdcid/legacy-domain-index/v1",
+    schema: "xdcid/legacy-domain-index/v2",
     chainId: CHAIN_ID,
     contract: LEGACY_CONTRACT,
     fromBlock: DEPLOYMENT_BLOCK,
     toBlock,
+    ...proof,
     confirmations: requestedToBlock === undefined ? confirmations : null,
     sourceEvents: ["Transfer(address,address,uint256)", "NewURI(uint256,string)"],
     matchingEventCount: domainLogs.length,
     totalSupply,
-    activeXdcNameCount: names.length,
+    activeTokenCount: inventory.activeTokenCount,
+    namedActiveTokenCount: inventory.namedActiveTokenCount,
+    activeXdcNameCount: inventory.compatibleNames.length,
+    legacyOnlyXdcNameCount: inventory.legacyOnlyNames.length,
+    nonXdcNameCount: inventory.nonXdcTokenIds.length,
+    missingMetadataTokenCount: inventory.missingMetadataTokenIds.length,
     canonicalCollisionCount: canonicalCollisions.length,
+    integrity,
     canonicalCollisions,
-    names,
+    missingMetadataTokenIds: inventory.missingMetadataTokenIds,
+    nonXdcTokenIds: inventory.nonXdcTokenIds,
+    legacyOnlyNames: inventory.legacyOnlyNames,
+    names: inventory.compatibleNames,
   };
   const snapshotSha256 = createHash("sha256")
     .update(JSON.stringify(payload))
@@ -247,6 +288,13 @@ async function main(): Promise<void> {
   process.stdout.write(
     JSON.stringify({ ...payload, snapshotSha256 }, null, 2) + "\n",
   );
+
+  if (!integrity.passed) {
+    process.stderr.write(
+      "Legacy index integrity failed: " + integrity.failures.join(", ") + "\n",
+    );
+    process.exitCode = 1;
+  }
 }
 
 main().catch((error) => {
