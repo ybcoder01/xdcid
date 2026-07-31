@@ -1,6 +1,6 @@
-# Arbitrum Sepolia ↔ XDC Apothem CCTP testnet foundation
+# Arbitrum Sepolia ↔ XDC Apothem CCTP testnet flow
 
-This document describes the testnet-only Circle CCTP V2 foundation included in the XDCID SDK. It prepares unsigned contract-write requests; it does not connect a wallet, sign, submit, relay, or custody a transaction.
+This document describes XDCID's testnet-only Circle CCTP V2 integration. The SDK builds validated contract requests and the `/bridge` page asks the connected wallet to sign each source and destination transaction.
 
 Do not use these settings for real value.
 
@@ -19,29 +19,27 @@ Circle's CCTP V2 testnet contracts used on both networks:
 
 The XDC route supports Standard Transfer finality, so the burn request uses finality threshold `2000`. Fast Transfer is not configured for XDC.
 
-## Transfer lifecycle
+## Browser test flow
 
-1. Resolve the recipient's destination-chain address from their XDCID multichain record.
-2. Ask the source-chain wallet to approve TokenMessengerV2 to spend the exact test USDC amount.
-3. Ask the source-chain wallet to call `depositForBurn` with the destination CCTP domain and recipient encoded as `bytes32`.
-4. After the burn transaction is mined, poll Circle's testnet Iris endpoint no more often than every five seconds:
-   `GET https://iris-api-sandbox.circle.com/v2/messages/{sourceDomain}?transactionHash={transactionHash}`
-5. A `404` while the attestation is pending is expected. Wait until the response contains the message and attestation.
-6. Ask a wallet on the destination chain to call `receiveMessage(message, attestation)` on MessageTransmitterV2.
-7. Confirm the mint transaction and show source and destination explorer links.
+1. Open `/bridge` and connect a wallet that can switch to both testnets.
+2. Choose Arbitrum Sepolia → XDC Apothem or the reverse route.
+3. Enter an amount and destination address. Leaving the address blank uses the connected address.
+4. Confirm the exact USDC approval in the source wallet.
+5. Confirm `depositForBurn` in the source wallet.
+6. The page polls XDCID's stateless attestation route, which validates the public burn hash and queries Circle Iris no more often than every five seconds.
+7. When Circle returns a complete message and attestation, switch to the destination network and confirm `receiveMessage`.
+8. Verify the source burn and destination mint using the explorer links displayed by the page.
 
-Both directions are supported by the builders: Arbitrum Sepolia to XDC Apothem and XDC Apothem to Arbitrum Sepolia.
+If the page is reloaded after the burn, select the original source network and paste the public burn transaction hash into the resume field. No transfer session has to be stored by XDCID.
 
 ## SDK exports
 
-- `CCTP_TESTNETS` — audited network, domain, test USDC, and CCTP contract metadata.
+- `CCTP_TESTNETS` — network, domain, test USDC, and CCTP contract metadata.
 - `parseCctpUsdcAmount` — exact six-decimal USDC parsing with positive and per-transfer-limit checks.
 - `addressToCctpBytes32` — non-zero EVM recipient validation and CCTP encoding.
-- `prepareCctpBurn` — approval and `depositForBurn` request builders.
+- `prepareCctpBurn` — exact approval and `depositForBurn` request builders.
 - `buildCctpAttestationUrl` — validated Circle Iris message lookup URL.
 - `prepareCctpReceive` — destination `receiveMessage` request builder.
-
-The builders deliberately return request data instead of sending transactions. The future wallet UI must display the route, amount, recipient, fee ceiling, and network before each signature.
 
 ## Test prerequisites
 
@@ -52,11 +50,17 @@ A manual end-to-end test requires:
 - a wallet able to switch to both testnets; and
 - a destination address controlled by the tester.
 
-Test tokens have no monetary value. Never enter or commit a private key, seed phrase, API key, WalletConnect project ID, RPC credential, or attestation secret for this flow.
+Test tokens have no monetary value. Never enter or commit a private key, seed phrase, API key, RPC credential, or attestation secret for this flow.
 
-## Production boundary
+## Security and data boundary
 
-This foundation intentionally contains no mainnet route, frontend transfer button, automatic transaction submission, relayer, paymaster, backend signing service, bridge contract, or stored user data. A later PR can add the wallet-driven testnet lifecycle after this configuration and its validation rules pass review.
+- Every transaction is signed by the user's connected wallet.
+- XDCID does not custody USDC or deploy an intermediary bridge contract.
+- The approval is limited to the exact transfer amount.
+- The attestation route accepts only a supported source and a validated public transaction hash.
+- The route has no database and uses no API secret.
+- The page keeps its current transfer state only in browser memory; a reload requires the public burn hash to resume.
+- Mainnet routes, relayers, paymasters, backend signers, and automatic destination execution are not enabled.
 
 ## Primary references
 
