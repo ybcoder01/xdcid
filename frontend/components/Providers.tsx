@@ -12,6 +12,7 @@ import {
   walletConnectWallet
 } from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, createConfig, http } from "wagmi";
+import { arbitrum, base, mainnet, polygon } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
@@ -41,11 +42,23 @@ const connectors = walletConnectProjectId
   : [injected()];
 
 const config = createConfig({
-  chains: [xdcMainnet, arbitrumSepolia, xdcApothem],
+  chains: [
+    xdcMainnet,
+    mainnet,
+    polygon,
+    arbitrum,
+    base,
+    arbitrumSepolia,
+    xdcApothem
+  ],
   connectors,
   multiInjectedProviderDiscovery: false,
   transports: {
     [xdcMainnet.id]: http(xdcMainnet.rpcUrls.default.http[0]),
+    [mainnet.id]: http(),
+    [polygon.id]: http(),
+    [arbitrum.id]: http(),
+    [base.id]: http(),
     [arbitrumSepolia.id]: http(arbitrumSepolia.rpcUrls.default.http[0]),
     [xdcApothem.id]: http(xdcApothem.rpcUrls.default.http[0])
   },
