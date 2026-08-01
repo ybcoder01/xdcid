@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { parseEther, parseUnits, zeroAddress } from "viem";
 import { useAccount, useReadContract, useSendTransaction } from "wagmi";
+import { MultichainUsdcExecutor } from "../../components/MultichainUsdcExecutor";
 import {
   addresses,
   contractsConfigured,
@@ -349,10 +350,20 @@ export default function SendPage() {
                 >
                   {isPending ? "Confirm in wallet..." : "Send XDC"}
                 </button>
-              ) : routeReady ? (
-                <p className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-800">
-                  Route ready for wallet execution. No transaction is sent from this preview.
-                </p>
+              ) : token === "USDC" && destination ? (
+                <MultichainUsdcExecutor
+                  key={[
+                    sourceChainId,
+                    destinationChainId,
+                    amount,
+                    destination.address
+                  ].join(":")}
+                  sourceChainId={sourceChainId}
+                  destinationChainId={destinationChainId}
+                  amount={amount}
+                  recipient={destination.address}
+                  ready={routeReady}
+                />
               ) : null}
 
               {token === "NATIVE" &&
