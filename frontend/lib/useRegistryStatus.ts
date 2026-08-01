@@ -9,12 +9,15 @@ import {
 } from "../config/legacyDomains";
 import { classifyRegistryStatus } from "./registryStatus";
 
+const XDC_CHAIN_ID = 50;
+
 export function useRegistryStatus(
   node: Hex | undefined,
   xdcidRegistered: boolean | undefined,
   enabled = true
 ) {
   const legacy = useReadContract({
+    chainId: XDC_CHAIN_ID,
     address: legacyXdcDomainsAddress,
     abi: legacyXdcDomainsAbi,
     functionName: "exists",
