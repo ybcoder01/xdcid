@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatEther } from "viem";
+import { formatEther, keccak256, stringToHex } from "viem";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { addresses, contractsConfigured, registrarAbi } from "../config/contracts";
 import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
+import { useRegistryStatus } from "../lib/useRegistryStatus";
 
 export default function Home() {
   const [input, setInput] = useState("");
@@ -17,6 +18,10 @@ export default function Home() {
   const { name, isValid, error: validationError } = parsedName;
   const hasInput = input.trim().length > 0;
   const canReadContracts = isValid && contractsConfigured;
+  const node = useMemo(
+    () => (isValid ? keccak256(stringToHex(name)) : undefined),
+    [isValid, name]
+  );
 
   const availability = useReadContract({
     address: addresses.registrar,
@@ -34,8 +39,16 @@ export default function Home() {
     query: { enabled: canReadContracts }
   });
 
+  const registry = useRegistryStatus(
+    node,
+    typeof availability.data === "boolean" ? !availability.data : undefined,
+    canReadContracts
+  );
+  const registrationAllowed =
+    availability.data === true && registry.status?.registrationAllowed === true;
+
   function claim() {
-    if (!isValid || !contractsConfigured || !address || !price.data) return;
+    if (!isValid || !contractsConfigured || !address || !price.data || !registrationAllowed) return;
     writeContract(
       {
         address: addresses.registrar,
@@ -106,19 +119,23 @@ export default function Home() {
                       ? validationError
                       : !contractsConfigured
                         ? "Contracts not configured"
-                        : availability.isLoading
-                          ? "Checking..."
-                          : availability.isError || price.isError
-                            ? "Could not check availability"
-                            : availability.data === true
-                              ? "Available to claim"
-                              : availability.data === false
-                                ? "Already registered"
-                                : "Enter a valid name"}
+                        : availability.isLoading || price.isLoading || registry.isChecking
+                          ? "Checking both registries..."
+                          : availability.isError || price.isError || registry.isError
+                            ? "Could not check registry status"
+                            : registry.status?.state === "legacy"
+                              ? "Reserved in XDCDomains; migration required"
+                              : registry.status?.state === "collision"
+                                ? "Registered in both registries; review required"
+                                : registrationAllowed
+                                  ? "Available to claim"
+                                  : registry.status?.state === "xdcid"
+                                    ? "Already registered with XDCID"
+                                    : "Unavailable"}
                     {price.data ? " - " + formatEther(price.data) + " XDC/year" : ""}
                   </p>
                 </div>
-                {isValid && availability.data === true ? (
+                {isValid && registrationAllowed ? (
                   <button
                     className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
                     disabled={!contractsConfigured || !isConnected || isPending}
@@ -126,13 +143,17 @@ export default function Home() {
                   >
                     Claim
                   </button>
-                ) : isValid && availability.data === false ? (
+                ) : isValid && registry.status?.state === "xdcid" ? (
                   <Link className="rounded-md border border-black/10 px-5 py-3 text-sm font-semibold hover:bg-neutral-50" href={"/name/" + name}>
                     View
                   </Link>
                 ) : (
                   <button className="rounded-md border border-black/10 px-5 py-3 text-sm text-neutral-400" disabled>
-                    Claim
+                    {registry.status?.state === "legacy"
+                      ? "Reserved"
+                      : registry.status?.state === "collision"
+                        ? "Review required"
+                        : "Claim"}
                   </button>
                 )}
               </div>
