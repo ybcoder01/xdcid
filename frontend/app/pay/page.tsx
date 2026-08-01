@@ -5,6 +5,7 @@ import { getAddress, isAddress, toHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useSignTypedData } from "wagmi";
 import { addresses, contractsConfigured, registrarAbi, registryAbi } from "../../config/contracts";
 import { parseXnsName } from "../../lib/names";
+import { useRegistryStatus } from "../../lib/useRegistryStatus";
 import { normalizePayToken, validatePayAmount, type PayToken } from "../../lib/paylinks";
 import {
   buildSignedPaymentLink,
@@ -55,6 +56,10 @@ export default function PayLinksPage() {
     args: node.data ? [node.data] : undefined,
     query: { enabled: !!node.data },
   });
+  const xdcidRegistered =
+    owner.data === undefined ? undefined : owner.data !== zeroAddress;
+  const registry = useRegistryStatus(node.data, xdcidRegistered, !!node.data);
+
   const nameExpiry = useReadContract({
     address: addresses.registry,
     abi: registryAbi,
@@ -83,12 +88,14 @@ export default function PayLinksPage() {
   const ownerMatches = Boolean(
     address && owner.data && getAddress(address) === getAddress(owner.data),
   );
-  const resolving = node.isLoading || owner.isLoading || nameExpiry.isLoading;
+  const resolving =
+    node.isLoading || owner.isLoading || nameExpiry.isLoading || registry.isChecking;
+  const registrySafe = registry.status?.state === "xdcid";
   const wrongNetwork = isConnected && chainId !== PAYMENT_REQUEST_CHAIN_ID;
   const canCreate = Boolean(
     origin && parsedName.isValid && amount && !amountError && reference.trim() && !referenceError &&
     !descriptionError && !payerError && !expiryError && isConnected && !wrongNetwork && ownerMatches &&
-    !domainExpired && !resolving && !signRequest.isPending,
+    registrySafe && !domainExpired && !resolving && !signRequest.isPending,
   );
 
   useEffect(() => {
@@ -192,12 +199,18 @@ export default function PayLinksPage() {
               : wrongNetwork
                 ? "Switch to XDC Network (chain ID 50)."
                 : resolving
-                  ? "Checking the XNS owner on-chain..."
-                  : domainExpired
-                    ? "This XNS ID is unregistered or expired."
-                    : ownerMatches
-                      ? "Connected account matches the current XNS owner."
-                      : "Connected account is not the current XNS owner."}
+                  ? "Checking both name registries on-chain..."
+                  : registry.isError
+                    ? "Registry status could not be verified."
+                    : registry.status?.state === "legacy"
+                      ? "This name requires migration from XDCDomains before it can create XDCID Pay Links."
+                      : registry.status?.state === "collision"
+                        ? "This name exists in both registries and is blocked pending review."
+                        : domainExpired
+                          ? "This XNS ID is unregistered or expired."
+                          : ownerMatches
+                            ? "Connected account matches the current XNS owner."
+                            : "Connected account is not the current XNS owner."}
           </p>
           <button type="button" disabled={!canCreate} onClick={createSignedLink} className="mt-5 rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
             {signRequest.isPending ? "Waiting for wallet signature..." : "Sign payment request"}

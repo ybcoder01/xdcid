@@ -5,6 +5,7 @@ import { isAddress, parseEther, zeroAddress } from "viem";
 import { useAccount, useReadContract, useSendTransaction } from "wagmi";
 import { addresses, contractsConfigured, registrarAbi, registryAbi, resolverAbi } from "../../config/contracts";
 import { parseXnsName } from "../../lib/names";
+import { useRegistryStatus } from "../../lib/useRegistryStatus";
 
 export default function SendPage() {
   const [recipient, setRecipient] = useState("");
@@ -40,6 +41,10 @@ export default function SendPage() {
     query: { enabled: !!node.data }
   });
 
+  const xdcidRegistered =
+    owner.data === undefined ? undefined : owner.data !== zeroAddress;
+  const registry = useRegistryStatus(node.data, xdcidRegistered, !!node.data);
+
   const expiry = useReadContract({
     address: addresses.registry,
     abi: registryAbi,
@@ -58,11 +63,13 @@ export default function SendPage() {
 
   const expired = expiry.data ? expiry.data < BigInt(Math.floor(Date.now() / 1000)) : true;
   const hasOwner = !!owner.data && owner.data !== zeroAddress && !expired;
+  const registrySafe = registry.status?.state === "xdcid";
   const paymentAddress =
     resolvedAddress.data && resolvedAddress.data !== zeroAddress && isAddress(resolvedAddress.data)
       ? resolvedAddress.data
       : undefined;
-  const canSend = isConnected && isValid && hasOwner && !!paymentAddress && value > 0n && !isPending;
+  const canSend =
+    isConnected && isValid && registrySafe && hasOwner && !!paymentAddress && value > 0n && !isPending;
 
   function send() {
     if (!paymentAddress || value <= 0n) return;
@@ -125,15 +132,19 @@ export default function SendPage() {
                   ? validationError
                   : !contractsConfigured
                     ? "Contracts not configured"
-                    : node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading
-                      ? "Resolving..."
-                      : node.isError || owner.isError || expiry.isError || resolvedAddress.isError
-                        ? "Could not resolve name"
-                        : !hasOwner
-                          ? "Name is unregistered or expired"
-                          : paymentAddress
-                            ? paymentAddress
-                            : "No payment address set"}
+                    : node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading || registry.isChecking
+                      ? "Resolving across both registries..."
+                      : node.isError || owner.isError || expiry.isError || resolvedAddress.isError || registry.isError
+                        ? "Could not verify registry status"
+                        : registry.status?.state === "legacy"
+                          ? "Payment blocked: this name requires migration from XDCDomains"
+                          : registry.status?.state === "collision"
+                            ? "Payment blocked: this name exists in both registries and requires review"
+                            : !hasOwner
+                              ? "Name is unregistered or expired"
+                              : paymentAddress
+                                ? paymentAddress
+                                : "No payment address set"}
               </p>
               {hasOwner && expiry.data ? (
                 <p className="mt-2 text-xs text-neutral-500">Expires: {new Date(Number(expiry.data) * 1000).toLocaleDateString()}</p>

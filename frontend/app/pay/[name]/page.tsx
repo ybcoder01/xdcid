@@ -14,6 +14,7 @@ import {
 import { addresses, contractsConfigured, registrarAbi, registryAbi, resolverAbi } from "../../../config/contracts";
 import { erc20TransferAbi, XDC_USDC_ADDRESS } from "../../../config/tokens";
 import { parseXnsName } from "../../../lib/names";
+import { useRegistryStatus } from "../../../lib/useRegistryStatus";
 import {
   inspectAccountDeployment,
   paymentReceiptActors,
@@ -108,6 +109,10 @@ export default function PayRequestPage() {
     args: node.data ? [node.data] : undefined,
     query: { enabled: !!node.data },
   });
+  const xdcidRegistered =
+    owner.data === undefined ? undefined : owner.data !== zeroAddress;
+  const registry = useRegistryStatus(node.data, xdcidRegistered, !!node.data);
+
   const expiry = useReadContract({
     address: addresses.registry,
     abi: registryAbi,
@@ -128,7 +133,13 @@ export default function PayRequestPage() {
     setSignatureVerification(undefined);
     setSignatureError("");
     setSignatureChecking(false);
-    if (!signedRequest || !signedPayload.signature || !owner.data || !publicClient) return;
+    if (
+      !signedRequest ||
+      !signedPayload.signature ||
+      !owner.data ||
+      !publicClient ||
+      registry.status?.state !== "xdcid"
+    ) return;
 
     setSignatureChecking(true);
     verifyPaymentRequestSignature(publicClient, signedRequest, signedPayload.signature, owner.data)
@@ -149,7 +160,7 @@ export default function PayRequestPage() {
     return () => {
       current = false;
     };
-  }, [owner.data, publicClient, signedRequest, signedPayload.signature]);
+  }, [owner.data, publicClient, registry.status?.state, signedRequest, signedPayload.signature]);
 
 
   useEffect(() => {
@@ -166,12 +177,15 @@ export default function PayRequestPage() {
 
   const domainExpired = expiry.data ? expiry.data <= BigInt(Math.floor(Date.now() / 1000)) : true;
   const hasOwner = !!owner.data && owner.data !== zeroAddress && !domainExpired;
+  const registrySafe = registry.status?.state === "xdcid";
   const paymentAddress =
     resolvedAddress.data && resolvedAddress.data !== zeroAddress && isAddress(resolvedAddress.data)
       ? resolvedAddress.data
       : undefined;
-  const resolving = node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading;
-  const resolutionFailed = node.isError || owner.isError || expiry.isError || resolvedAddress.isError;
+  const resolving =
+    node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading || registry.isChecking;
+  const resolutionFailed =
+    node.isError || owner.isError || expiry.isError || resolvedAddress.isError || registry.isError;
   const signaturePending = Boolean(
     signedRequest && signedPayload.signature && !signatureError &&
     (!owner.data || !publicClient || signatureChecking || !signatureVerification),
@@ -183,7 +197,7 @@ export default function PayRequestPage() {
     signedRequest && signatureVerification?.valid && !signatureError && payerAllowed,
   );
   const canPay = Boolean(
-    isConnected && !wrongNetwork && !requestError && hasOwner && paymentAddress && value > 0n &&
+    isConnected && !wrongNetwork && !requestError && registrySafe && hasOwner && paymentAddress && value > 0n &&
     !pending && !signaturePending && signedRequestValid,
   );
   const paymentError = token === "USDC" ? tokenPayment.error : nativePayment.error;
@@ -271,10 +285,14 @@ export default function PayRequestPage() {
               : resolving
                 ? "Resolving the XNS ID on-chain..."
                 : resolutionFailed
-                  ? "The XNS ID could not be resolved."
-                  : !hasOwner
-                    ? "The XNS ID is unregistered or expired."
-                    : paymentAddress || "No payment address is set for this XNS ID."}
+                  ? "The registry status could not be verified."
+                  : registry.status?.state === "legacy"
+                    ? "Payment blocked: this name requires migration from XDCDomains."
+                    : registry.status?.state === "collision"
+                      ? "Payment blocked: this name exists in both registries and requires review."
+                      : !hasOwner
+                        ? "The XNS ID is unregistered or expired."
+                        : paymentAddress || "No payment address is set for this XNS ID."}
           </p>
           {paymentAddress && (
             <a className="mt-3 inline-block text-sm font-semibold text-teal-700 underline print:hidden" href={"https://xdcscan.com/address/" + paymentAddress} target="_blank" rel="noreferrer">
