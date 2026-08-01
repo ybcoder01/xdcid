@@ -132,7 +132,7 @@ export default function SendPage() {
           typeof multichainAddress.data === "string"
             ? multichainAddress.data
             : undefined,
-        xdcDefaultAddress:
+        defaultEvmAddress:
           typeof xdcDefaultAddress.data === "string"
             ? xdcDefaultAddress.data
             : undefined
@@ -336,7 +336,7 @@ export default function SendPage() {
                     <p className="mt-3 break-all text-xs text-neutral-600">
                       Receiving address: {destination.address}
                       <br />
-                      Record: {destination.source === "multichain" ? "destination-chain record" : "XDC default record"}
+                      Record: {destination.source === "multichain" ? "destination-chain record" : "default EVM record"}
                     </p>
                   ) : null}
                 </div>
