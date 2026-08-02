@@ -17,6 +17,7 @@ import { parseXnsName } from "../../lib/names";
 import { selectPaymentDestination } from "../../lib/paymentPreparation";
 import {
   planPaymentRoute,
+  swapPaymentNetworks,
   type PaymentRoute,
   type PaymentToken
 } from "../../lib/paymentRouting";
@@ -182,6 +183,15 @@ export default function SendPage() {
     });
   }
 
+  function swapNetworks() {
+    const swapped = swapPaymentNetworks({
+      sourceChainId,
+      destinationChainId
+    });
+    setSourceChainId(swapped.sourceChainId);
+    setDestinationChainId(swapped.destinationChainId);
+  }
+
   const resolutionMessage = !isValid
     ? validationError
     : !contractsConfigured
@@ -234,7 +244,7 @@ export default function SendPage() {
               ) : null}
             </label>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
               <label className="grid gap-2 text-sm">
                 <span className="font-semibold text-slate-950">From network</span>
                 <select
@@ -249,6 +259,16 @@ export default function SendPage() {
                   ))}
                 </select>
               </label>
+
+              <button
+                type="button"
+                className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-teal-700 bg-white text-xl font-semibold text-teal-800 transition hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                aria-label="Swap source and destination networks"
+                title="Swap networks"
+                onClick={swapNetworks}
+              >
+                <span aria-hidden="true">⇄</span>
+              </button>
 
               <label className="grid gap-2 text-sm">
                 <span className="font-semibold text-slate-950">To network</span>

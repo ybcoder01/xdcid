@@ -7,10 +7,25 @@ import {
 } from "../frontend/config/paymentNetworks";
 import {
   PaymentRouteError,
-  planPaymentRoute
+  planPaymentRoute,
+  swapPaymentNetworks
 } from "../frontend/lib/paymentRouting";
 
 describe("multichain payment routing", () => {
+  it("swaps XDC and Base in both directions", () => {
+    const xdcToBase = {
+      sourceChainId: 50,
+      destinationChainId: 8453
+    };
+    const baseToXdc = swapPaymentNetworks(xdcToBase);
+
+    expect(baseToXdc).to.deep.equal({
+      sourceChainId: 8453,
+      destinationChainId: 50
+    });
+    expect(swapPaymentNetworks(baseToXdc)).to.deep.equal(xdcToBase);
+  });
+
   it("uses verified Circle configuration for all five networks", () => {
     expect(USDC_DECIMALS).to.equal(6);
     expect(CCTP_TOKEN_MESSENGER_V2).to.match(/^0x[0-9a-fA-F]{40}$/);

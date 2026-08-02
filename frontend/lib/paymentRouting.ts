@@ -22,6 +22,19 @@ export type CctpPaymentRoute = {
 };
 
 export type PaymentRoute = DirectPaymentRoute | CctpPaymentRoute;
+export type PaymentNetworkPair = {
+  sourceChainId: number;
+  destinationChainId: number;
+};
+
+export function swapPaymentNetworks(
+  pair: PaymentNetworkPair
+): PaymentNetworkPair {
+  return {
+    sourceChainId: pair.destinationChainId,
+    destinationChainId: pair.sourceChainId
+  };
+}
 export type PaymentRouteErrorCode =
   | "UNSUPPORTED_CHAIN"
   | "NATIVE_CROSS_CHAIN_UNSUPPORTED";
