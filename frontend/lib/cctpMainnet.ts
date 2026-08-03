@@ -15,6 +15,14 @@ import {
 
 export const CCTP_MAINNET_IRIS_API = "https://iris-api.circle.com";
 export const CCTP_STANDARD_FINALITY_THRESHOLD = 2_000;
+export const CCTP_FORWARDING_HOOK_DATA =
+  "0x636374702d666f72776172640000000000000000000000000000000000000000" as const;
+export const XDC_MAINNET_CHAIN_ID = 50;
+export const XDCID_CONVENIENCE_FEE_BPS = 10n;
+export const XDCID_MIN_CONVENIENCE_FEE = 100_000n;
+export const XDCID_MAX_CONVENIENCE_FEE = 5_000_000n;
+export const XDCID_FEE_RECIPIENT =
+  "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A" as const;
 export const CCTP_MAX_TRANSFER_AMOUNT = 10_000_000n * 10n ** 6n;
 export const CCTP_ZERO_BYTES32 =
   "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
@@ -74,6 +82,22 @@ export const mainnetTokenMessengerV2Abi = [
       { name: "minFinalityThreshold", type: "uint32" }
     ],
     outputs: [{ type: "uint64" }]
+  },
+  {
+    type: "function",
+    name: "depositForBurnWithHook",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "amount", type: "uint256" },
+      { name: "destinationDomain", type: "uint32" },
+      { name: "mintRecipient", type: "bytes32" },
+      { name: "burnToken", type: "address" },
+      { name: "destinationCaller", type: "bytes32" },
+      { name: "maxFee", type: "uint256" },
+      { name: "minFinalityThreshold", type: "uint32" },
+      { name: "hookData", type: "bytes" }
+    ],
+    outputs: []
   }
 ] as const;
 
@@ -178,6 +202,180 @@ export function prepareMainnetCctpBurn(input: {
   };
 }
 
+export function calculateXdcidConvenienceFee(amount: bigint): bigint {
+  const checkedAmount = validateAmount(amount);
+  const percentageFee =
+    (checkedAmount * XDCID_CONVENIENCE_FEE_BPS + 9_999n) / 10_000n;
+  if (percentageFee < XDCID_MIN_CONVENIENCE_FEE) {
+    return XDCID_MIN_CONVENIENCE_FEE;
+  }
+  if (percentageFee > XDCID_MAX_CONVENIENCE_FEE) {
+    return XDCID_MAX_CONVENIENCE_FEE;
+  }
+  return percentageFee;
+}
+
+export function calculateCctpProtocolFee(
+  amount: bigint,
+  minimumFeeBps: number
+): bigint {
+  const checkedAmount = validateAmount(amount);
+  if (
+    !Number.isFinite(minimumFeeBps) ||
+    minimumFeeBps < 0 ||
+    minimumFeeBps > 10_000
+  ) {
+    throw new Error("Circle returned an invalid protocol fee");
+  }
+  const hundredthBasisPoints = BigInt(Math.round(minimumFeeBps * 100));
+  return (checkedAmount * hundredthBasisPoints + 999_999n) / 1_000_000n;
+}
+
+export function buildMainnetForwardingFeeUrl(
+  sourceChainId: number,
+  destinationChainId: number
+): string {
+  if (sourceChainId !== XDC_MAINNET_CHAIN_ID) {
+    throw new Error("Automatic forwarding is currently available from XDC only");
+  }
+  const source = requireNetwork(sourceChainId);
+  const destination = requireNetwork(destinationChainId);
+  if (source.chainId === destination.chainId) {
+    throw new Error("Forwarding requires different source and destination networks");
+  }
+  return (
+    CCTP_MAINNET_IRIS_API +
+    "/v2/burn/USDC/fees/" +
+    source.circleDomain +
+    "/" +
+    destination.circleDomain +
+    "?forward=true"
+  );
+}
+
+export function parseMainnetForwardingQuote(payload: unknown): {
+  forwardFee: bigint;
+  minimumFeeBps: number;
+} {
+  if (!Array.isArray(payload)) {
+    throw new Error("Circle returned an invalid forwarding quote");
+  }
+  const entry = payload.find(
+    (value) =>
+      isRecord(value) &&
+      value.finalityThreshold === CCTP_STANDARD_FINALITY_THRESHOLD
+  );
+  if (!isRecord(entry) || !isRecord(entry.forwardFee)) {
+    throw new Error("Circle did not return a Standard forwarding quote");
+  }
+
+  const rawForwardFee = entry.forwardFee.med;
+  const forwardFeeText =
+    typeof rawForwardFee === "number" && Number.isSafeInteger(rawForwardFee)
+      ? String(rawForwardFee)
+      : typeof rawForwardFee === "string"
+        ? rawForwardFee
+        : "";
+  if (!/^\d+$/.test(forwardFeeText)) {
+    throw new Error("Circle returned an invalid forwarding fee");
+  }
+  const forwardFee = BigInt(forwardFeeText);
+  if (forwardFee <= 0n || forwardFee > 100_000_000n) {
+    throw new Error("Circle forwarding fee is outside the supported range");
+  }
+
+  const minimumFeeBps =
+    typeof entry.minimumFee === "number" ? entry.minimumFee : Number.NaN;
+  if (!Number.isFinite(minimumFeeBps) || minimumFeeBps < 0) {
+    throw new Error("Circle returned an invalid protocol fee");
+  }
+  return { forwardFee, minimumFeeBps };
+}
+
+export function prepareXdcidConvenienceFeeTransfer(amount: bigint) {
+  const source = requireNetwork(XDC_MAINNET_CHAIN_ID);
+  return {
+    chainId: source.chainId,
+    address: source.usdcAddress as Address,
+    abi: mainnetUsdcAbi,
+    functionName: "transfer" as const,
+    args: [
+      XDCID_FEE_RECIPIENT as Address,
+      calculateXdcidConvenienceFee(amount)
+    ] as const
+  };
+}
+
+export function prepareMainnetCctpForwardedBurn(input: {
+  sourceChainId: number;
+  destinationChainId: number;
+  amount: string | bigint;
+  recipient: string;
+  forwardFee: bigint;
+  minimumFeeBps: number;
+}) {
+  if (input.sourceChainId !== XDC_MAINNET_CHAIN_ID) {
+    throw new Error("Automatic forwarding is currently available from XDC only");
+  }
+  const source = requireNetwork(input.sourceChainId);
+  const destination = requireNetwork(input.destinationChainId);
+  if (source.chainId === destination.chainId) {
+    throw new Error("Forwarding requires different source and destination networks");
+  }
+
+  const recipientAmount =
+    typeof input.amount === "string"
+      ? parseMainnetUsdcAmount(input.amount)
+      : validateAmount(input.amount);
+  const recipient = requireAddress(input.recipient);
+  if (input.forwardFee <= 0n || input.forwardFee > 100_000_000n) {
+    throw new Error("Circle forwarding fee is outside the supported range");
+  }
+  const protocolFee = calculateCctpProtocolFee(
+    recipientAmount,
+    input.minimumFeeBps
+  );
+  const maxFee = input.forwardFee + protocolFee;
+  const totalBurnAmount = recipientAmount + maxFee;
+  if (totalBurnAmount > CCTP_MAX_TRANSFER_AMOUNT) {
+    throw new Error("USDC amount plus forwarding fees exceeds the CCTP limit");
+  }
+
+  return {
+    source,
+    destination,
+    recipient,
+    recipientAmount,
+    forwardFee: input.forwardFee,
+    protocolFee,
+    maxFee,
+    totalBurnAmount,
+    approvalRequest: {
+      chainId: source.chainId,
+      address: source.usdcAddress as Address,
+      abi: mainnetUsdcAbi,
+      functionName: "approve" as const,
+      args: [CCTP_TOKEN_MESSENGER_V2 as Address, totalBurnAmount] as const
+    },
+    burnRequest: {
+      chainId: source.chainId,
+      address: CCTP_TOKEN_MESSENGER_V2 as Address,
+      abi: mainnetTokenMessengerV2Abi,
+      functionName: "depositForBurnWithHook" as const,
+      args: [
+        totalBurnAmount,
+        destination.circleDomain,
+        addressToBytes32(recipient),
+        source.usdcAddress as Address,
+        CCTP_ZERO_BYTES32,
+        maxFee,
+        CCTP_STANDARD_FINALITY_THRESHOLD,
+        CCTP_FORWARDING_HOOK_DATA
+      ] as const
+    }
+  };
+}
+
 export function prepareMainnetCctpReceive(
   destinationChainId: number,
   message: string,
@@ -236,6 +434,10 @@ function requireAddress(value: string): Address {
   const address = getAddress(value);
   if (address === zeroAddress) throw new Error("Recipient must be a non-zero address");
   return address;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isHexBytes(value: string): boolean {
