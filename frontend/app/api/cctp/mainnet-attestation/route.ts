@@ -8,6 +8,7 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const sourceChainId = Number(requestUrl.searchParams.get("sourceChainId"));
   const transactionHash = requestUrl.searchParams.get("transactionHash") || "";
+  const forwarded = requestUrl.searchParams.get("forwarded") === "true";
 
   let circleUrl: string;
   try {
@@ -48,6 +49,20 @@ export async function GET(request: Request) {
       entry && typeof entry.message === "string" ? entry.message : "";
     const attestation =
       entry && typeof entry.attestation === "string" ? entry.attestation : "";
+    const forwardTxHash =
+      entry && typeof entry.forwardTxHash === "string"
+        ? entry.forwardTxHash
+        : "";
+
+    if (forwarded) {
+      if (status !== "complete" || !/^0x[0-9a-fA-F]{64}$/.test(forwardTxHash)) {
+        return Response.json({ status: "pending" }, { status: 202 });
+      }
+      return Response.json(
+        { status: "complete", forwardTxHash },
+        { headers: { "cache-control": "no-store" } }
+      );
+    }
 
     if (
       status !== "complete" ||

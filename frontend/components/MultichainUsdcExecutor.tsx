@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import type { Address, Hash, Hex } from "viem";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { formatUnits, type Address, type Hash, type Hex } from "viem";
 import {
   useAccount,
   usePublicClient,
@@ -13,18 +13,23 @@ import {
   getPaymentNetwork
 } from "../config/paymentNetworks";
 import {
+  calculateCctpProtocolFee,
+  calculateXdcidConvenienceFee,
   isCctpTransactionHash,
   mainnetUsdcAbi,
   parseMainnetUsdcAmount,
   prepareMainnetCctpBurn,
+  prepareMainnetCctpForwardedBurn,
   prepareMainnetCctpReceive,
-  prepareMainnetUsdcTransfer
+  prepareMainnetUsdcTransfer,
+  prepareXdcidConvenienceFeeTransfer
 } from "../lib/cctpMainnet";
 
 type Phase =
   | "idle"
   | "checking"
   | "approving"
+  | "payingFee"
   | "transferring"
   | "burning"
   | "waiting"
@@ -33,6 +38,11 @@ type Phase =
   | "complete";
 
 type Attestation = { message: Hex; attestation: Hex };
+type ForwardingQuote = {
+  forwardFee: bigint;
+  minimumFeeBps: number;
+  quotedAt: number;
+};
 
 type MultichainUsdcExecutorProps = {
   sourceChainId: number;
@@ -46,6 +56,7 @@ const phaseLabels: Record<Phase, string> = {
   idle: "Ready for wallet review",
   checking: "Checking USDC balance and allowance",
   approving: "Confirm the exact USDC approval in your wallet",
+  payingFee: "Confirm the XDCID convenience fee in your wallet",
   transferring: "Confirm the USDC transfer in your wallet",
   burning: "Confirm the CCTP burn in your wallet",
   waiting: "Waiting for Circle's Standard Transfer attestation",
@@ -74,6 +85,15 @@ export function MultichainUsdcExecutor({
   const [receiveHash, setReceiveHash] = useState<Hash | "">("");
   const [attestation, setAttestation] = useState<Attestation | null>(null);
   const [error, setError] = useState("");
+  const [transferMode, setTransferMode] = useState<"standard" | "forwarded">(
+    "standard"
+  );
+  const [forwardingQuote, setForwardingQuote] =
+    useState<ForwardingQuote | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [feeHash, setFeeHash] = useState<Hash | "">("");
 
   const { address, isConnected } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -83,9 +103,47 @@ export function MultichainUsdcExecutor({
   const source = getPaymentNetwork(sourceChainId);
   const destination = getPaymentNetwork(destinationChainId);
   const crossChain = sourceChainId !== destinationChainId;
+  const forwardingAvailable = crossChain && sourceChainId === 50;
+  const automaticForwarding =
+    forwardingAvailable && transferMode === "forwarded";
+
+  useEffect(() => {
+    let cancelled = false;
+    setForwardingQuote(null);
+    setQuoteStatus("idle");
+    if (!automaticForwarding) return () => { cancelled = true; };
+
+    try {
+      parseMainnetUsdcAmount(amount);
+    } catch {
+      return () => { cancelled = true; };
+    }
+
+    setQuoteStatus("loading");
+    void fetchForwardingQuote(sourceChainId, destinationChainId)
+      .then((quote) => {
+        if (cancelled) return;
+        setForwardingQuote(quote);
+        setQuoteStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setQuoteStatus("error");
+      });
+    return () => { cancelled = true; };
+  }, [automaticForwarding, amount, sourceChainId, destinationChainId]);
+
   const working = useMemo(
     () =>
-      ["checking", "approving", "transferring", "burning", "waiting", "minting"].includes(
+      [
+        "checking",
+        "approving",
+        "payingFee",
+        "transferring",
+        "burning",
+        "waiting",
+        "minting"
+      ].includes(
         phase
       ),
     [phase]
@@ -94,6 +152,7 @@ export function MultichainUsdcExecutor({
   async function startTransfer() {
     setError("");
     setReceiveHash("");
+    setFeeHash("");
     setAttestation(null);
 
     if (!ready || !source || !destination) {
@@ -111,6 +170,33 @@ export function MultichainUsdcExecutor({
 
     try {
       const units = parseMainnetUsdcAmount(amount);
+      if (automaticForwarding && !forwardingQuote) {
+        throw new Error("Wait for the live Circle forwarding quote");
+      }
+      if (
+        automaticForwarding &&
+        forwardingQuote &&
+        Date.now() - forwardingQuote.quotedAt > 300_000
+      ) {
+        throw new Error("The forwarding quote expired. Re-select automatic forwarding to refresh it.");
+      }
+      const forwardedPlan =
+        automaticForwarding && forwardingQuote
+          ? prepareMainnetCctpForwardedBurn({
+              sourceChainId,
+              destinationChainId,
+              amount: units,
+              recipient,
+              forwardFee: forwardingQuote.forwardFee,
+              minimumFeeBps: forwardingQuote.minimumFeeBps
+            })
+          : null;
+      const convenienceFee = forwardedPlan
+        ? calculateXdcidConvenienceFee(units)
+        : 0n;
+      const requiredBalance = forwardedPlan
+        ? forwardedPlan.totalBurnAmount + convenienceFee
+        : units;
       setPhase("checking");
 
       const balance = await sourceClient.readContract({
@@ -119,7 +205,7 @@ export function MultichainUsdcExecutor({
         functionName: "balanceOf",
         args: [address]
       });
-      if (balance < units) {
+      if (balance < requiredBalance) {
         throw new Error("The connected wallet does not have enough USDC on " + source.name);
       }
 
@@ -139,12 +225,17 @@ export function MultichainUsdcExecutor({
         return;
       }
 
-      const plan = prepareMainnetCctpBurn({
-        sourceChainId,
-        destinationChainId,
-        amount: units,
-        recipient
-      });
+      const plan =
+        forwardedPlan ||
+        prepareMainnetCctpBurn({
+          sourceChainId,
+          destinationChainId,
+          amount: units,
+          recipient
+        });
+      const approvalAmount = forwardedPlan
+        ? forwardedPlan.totalBurnAmount
+        : units;
       const allowance = await sourceClient.readContract({
         address: source.usdcAddress,
         abi: mainnetUsdcAbi,
@@ -152,10 +243,33 @@ export function MultichainUsdcExecutor({
         args: [address, CCTP_TOKEN_MESSENGER_V2]
       });
 
-      if (allowance < units) {
+      if (allowance < approvalAmount) {
         setPhase("approving");
         const approvalHash = await writeContractAsync(plan.approvalRequest as never);
         await sourceClient.waitForTransactionReceipt({ hash: approvalHash });
+      }
+
+      if (forwardedPlan) {
+        setPhase("payingFee");
+        const feeRequest = prepareXdcidConvenienceFeeTransfer(units);
+        const nextFeeHash = await writeContractAsync(feeRequest as never);
+        setFeeHash(nextFeeHash);
+        await sourceClient.waitForTransactionReceipt({ hash: nextFeeHash });
+
+        setPhase("burning");
+        const nextBurnHash = await writeContractAsync(
+          forwardedPlan.burnRequest as never
+        );
+        setBurnHash(nextBurnHash);
+        await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
+        setPhase("waiting");
+        const forwardedMintHash = await waitForForwardedMint(
+          sourceChainId,
+          nextBurnHash
+        );
+        setReceiveHash(forwardedMintHash);
+        setPhase("complete");
+        return;
       }
 
       setPhase("burning");
@@ -186,6 +300,15 @@ export function MultichainUsdcExecutor({
 
     try {
       setPhase("waiting");
+      if (automaticForwarding) {
+        const forwardedMintHash = await waitForForwardedMint(
+          sourceChainId,
+          burnHash
+        );
+        setReceiveHash(forwardedMintHash);
+        setPhase("complete");
+        return;
+      }
       const nextAttestation = await waitForMainnetAttestation(
         sourceChainId,
         burnHash
@@ -241,23 +364,78 @@ export function MultichainUsdcExecutor({
           : "USDC will be transferred directly to the XNS-resolved address."}
       </p>
 
+      {forwardingAvailable ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            className={
+              "rounded-md border p-3 text-left text-sm " +
+              (transferMode === "standard"
+                ? "border-teal-700 bg-white text-slate-950"
+                : "border-black/10 bg-white/60 text-neutral-600")
+            }
+            onClick={() => setTransferMode("standard")}
+            disabled={working}
+          >
+            <span className="block font-semibold">Standard transfer</span>
+            <span className="mt-1 block text-xs">
+              No XDCID fee. You switch networks and submit the destination mint.
+            </span>
+          </button>
+          <button
+            type="button"
+            className={
+              "rounded-md border p-3 text-left text-sm " +
+              (transferMode === "forwarded"
+                ? "border-teal-700 bg-white text-slate-950"
+                : "border-black/10 bg-white/60 text-neutral-600")
+            }
+            onClick={() => setTransferMode("forwarded")}
+            disabled={working}
+          >
+            <span className="block font-semibold">Automatic forwarding</span>
+            <span className="mt-1 block text-xs">
+              Circle submits the destination mint; no destination gas is needed.
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {automaticForwarding ? (
+        <ForwardingCostBreakdown
+          amount={amount}
+          quote={forwardingQuote}
+          status={quoteStatus}
+        />
+      ) : null}
+
       {phase === "idle" ? (
         <button
           className="mt-4 w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-          disabled={!ready || !isConnected}
+          disabled={
+            !ready ||
+            !isConnected ||
+            (automaticForwarding && quoteStatus !== "ready")
+          }
           onClick={startTransfer}
         >
-          {isConnected ? "Review and send USDC" : "Connect wallet to continue"}
+          {isConnected
+            ? automaticForwarding
+              ? "Pay fee and forward USDC"
+              : "Review and send USDC"
+            : "Connect wallet to continue"}
         </button>
       ) : null}
 
       {working ? (
         <div className="mt-4 rounded-md border border-teal-200 bg-white p-3 text-xs text-neutral-600">
-          Keep this tab open. Each on-chain action requires confirmation in your wallet.
+          {automaticForwarding
+            ? "Keep this tab open. The XDCID fee and Circle burn use separate wallet confirmations."
+            : "Keep this tab open. Each on-chain action requires confirmation in your wallet."}
         </div>
       ) : null}
 
-      {phase === "ready" ? (
+      {phase === "ready" && !automaticForwarding ? (
         <button
           className="mt-4 w-full rounded-md bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800"
           onClick={mintOnDestination}
@@ -266,6 +444,13 @@ export function MultichainUsdcExecutor({
         </button>
       ) : null}
 
+      {feeHash ? (
+        <TransactionLink
+          label="XDCID fee"
+          hash={feeHash}
+          explorerUrl={explorerUrls[sourceChainId]}
+        />
+      ) : null}
       {burnHash ? (
         <TransactionLink
           label="Burn"
@@ -340,6 +525,123 @@ function TransactionLink({
       {label}: {content}
     </p>
   );
+}
+
+async function fetchForwardingQuote(
+  sourceChainId: number,
+  destinationChainId: number
+): Promise<ForwardingQuote> {
+  const query = new URLSearchParams({
+    sourceChainId: String(sourceChainId),
+    destinationChainId: String(destinationChainId)
+  });
+  const response = await fetch(
+    "/api/cctp/mainnet-forwarding-fee?" + query.toString(),
+    { cache: "no-store" }
+  );
+  const body = (await response.json()) as {
+    forwardFee?: string;
+    minimumFeeBps?: number;
+    error?: string;
+  };
+  if (
+    !response.ok ||
+    typeof body.forwardFee !== "string" ||
+    !/^\d+$/.test(body.forwardFee) ||
+    typeof body.minimumFeeBps !== "number"
+  ) {
+    throw new Error(body.error || "Circle forwarding quote is unavailable");
+  }
+  return {
+    forwardFee: BigInt(body.forwardFee),
+    minimumFeeBps: body.minimumFeeBps,
+    quotedAt: Date.now()
+  };
+}
+
+async function waitForForwardedMint(
+  sourceChainId: number,
+  transactionHash: Hash
+): Promise<Hash> {
+  const query = new URLSearchParams({
+    sourceChainId: String(sourceChainId),
+    transactionHash,
+    forwarded: "true"
+  });
+
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const response = await fetch(
+      "/api/cctp/mainnet-attestation?" + query.toString(),
+      { cache: "no-store" }
+    );
+    const body = (await response.json()) as {
+      status?: string;
+      forwardTxHash?: string;
+      error?: string;
+    };
+    if (
+      response.ok &&
+      body.status === "complete" &&
+      typeof body.forwardTxHash === "string" &&
+      isCctpTransactionHash(body.forwardTxHash)
+    ) {
+      return body.forwardTxHash;
+    }
+    if (response.status !== 202 && response.status < 500) {
+      throw new Error(body.error || "Circle rejected the forwarding lookup");
+    }
+    await delay(5_000);
+  }
+  throw new Error(
+    "Circle has not completed the forwarded mint yet. Resume with the burn hash later."
+  );
+}
+
+function ForwardingCostBreakdown({
+  amount,
+  quote,
+  status
+}: {
+  amount: string;
+  quote: ForwardingQuote | null;
+  status: "idle" | "loading" | "ready" | "error";
+}) {
+  if (status === "loading") {
+    return <p className="mt-3 text-xs text-neutral-600">Loading Circle's live forwarding quote...</p>;
+  }
+  if (status === "error") {
+    return <p className="mt-3 text-xs text-red-700">Circle's forwarding quote is unavailable. Select Standard transfer or try again.</p>;
+  }
+  if (!quote) return null;
+
+  try {
+    const recipientAmount = parseMainnetUsdcAmount(amount);
+    const protocolFee = calculateCctpProtocolFee(
+      recipientAmount,
+      quote.minimumFeeBps
+    );
+    const circleFee = quote.forwardFee + protocolFee;
+    const xdcidFee = calculateXdcidConvenienceFee(recipientAmount);
+    const total = recipientAmount + circleFee + xdcidFee;
+    return (
+      <div className="mt-3 rounded-md border border-teal-200 bg-white p-3 text-xs">
+        <div className="flex justify-between gap-3"><span>Recipient receives</span><strong>{formatUsdc(recipientAmount)} USDC</strong></div>
+        <div className="mt-1 flex justify-between gap-3"><span>Circle forwarding</span><span>{formatUsdc(circleFee)} USDC</span></div>
+        <div className="mt-1 flex justify-between gap-3"><span>XDCID convenience fee</span><span>{formatUsdc(xdcidFee)} USDC</span></div>
+        <div className="mt-2 flex justify-between gap-3 border-t border-black/10 pt-2"><strong>Total USDC deducted</strong><strong>{formatUsdc(total)} USDC</strong></div>
+        <p className="mt-2 text-neutral-500">The Circle quote is live and can change before confirmation. The XDCID fee is 0.10%, with a 0.10 USDC minimum and 5 USDC maximum.</p>
+      </div>
+    );
+  } catch {
+    return null;
+  }
+}
+
+function formatUsdc(value: bigint): string {
+  const formatted = formatUnits(value, 6);
+  return formatted.includes(".")
+    ? formatted.replace(/0+$/, "").replace(/\.$/, "")
+    : formatted;
 }
 
 async function waitForMainnetAttestation(

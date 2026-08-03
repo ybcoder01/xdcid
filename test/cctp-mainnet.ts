@@ -1,13 +1,20 @@
 import { expect } from "chai";
 import {
+  CCTP_FORWARDING_HOOK_DATA,
   CCTP_STANDARD_FINALITY_THRESHOLD,
   CCTP_ZERO_BYTES32,
+  XDCID_FEE_RECIPIENT,
   addressToBytes32,
   buildMainnetAttestationUrl,
+  buildMainnetForwardingFeeUrl,
+  calculateXdcidConvenienceFee,
+  parseMainnetForwardingQuote,
   parseMainnetUsdcAmount,
   prepareMainnetCctpBurn,
+  prepareMainnetCctpForwardedBurn,
   prepareMainnetCctpReceive,
-  prepareMainnetUsdcTransfer
+  prepareMainnetUsdcTransfer,
+  prepareXdcidConvenienceFeeTransfer
 } from "../frontend/lib/cctpMainnet";
 import {
   CCTP_MESSAGE_TRANSMITTER_V2,
@@ -92,5 +99,87 @@ describe("mainnet CCTP transaction preparation", function () {
     expect(buildMainnetAttestationUrl(42161, transactionHash)).to.equal(
       `https://iris-api.circle.com/v2/messages/3?transactionHash=${transactionHash}`
     );
+  });
+
+  it("applies the published XDCID convenience-fee floor, rate, and cap", function () {
+    expect(calculateXdcidConvenienceFee(5_000_000n)).to.equal(100_000n);
+    expect(calculateXdcidConvenienceFee(100_000_000n)).to.equal(100_000n);
+    expect(calculateXdcidConvenienceFee(1_000_000_000n)).to.equal(1_000_000n);
+    expect(calculateXdcidConvenienceFee(10_000_000_000n)).to.equal(5_000_000n);
+  });
+
+  it("prepares the separate XDCID convenience-fee transfer", function () {
+    const prepared = prepareXdcidConvenienceFeeTransfer(1_000_000_000n);
+    expect(prepared.chainId).to.equal(50);
+    expect(prepared.functionName).to.equal("transfer");
+    expect(prepared.args).to.deep.equal([XDCID_FEE_RECIPIENT, 1_000_000n]);
+  });
+
+  it("builds the XDC to Arbitrum live forwarding quote URL", function () {
+    expect(buildMainnetForwardingFeeUrl(50, 42161)).to.equal(
+      "https://iris-api.circle.com/v2/burn/USDC/fees/18/3?forward=true"
+    );
+  });
+
+  it("selects Circle's Standard forwarding quote", function () {
+    expect(
+      parseMainnetForwardingQuote([
+        {
+          finalityThreshold: 1000,
+          minimumFee: 1,
+          forwardFee: { med: "1000" }
+        },
+        {
+          finalityThreshold: 2000,
+          minimumFee: 0,
+          forwardFee: { med: "57543" }
+        }
+      ])
+    ).to.deep.equal({ forwardFee: 57_543n, minimumFeeBps: 0 });
+  });
+
+  it("grosses up an XDC forwarded burn so the recipient receives the requested amount", function () {
+    const prepared = prepareMainnetCctpForwardedBurn({
+      sourceChainId: 50,
+      destinationChainId: 42161,
+      amount: "10",
+      recipient,
+      forwardFee: 57_543n,
+      minimumFeeBps: 0
+    });
+
+    expect(prepared.recipientAmount).to.equal(10_000_000n);
+    expect(prepared.maxFee).to.equal(57_543n);
+    expect(prepared.totalBurnAmount).to.equal(10_057_543n);
+    expect(prepared.approvalRequest.args).to.deep.equal([
+      CCTP_TOKEN_MESSENGER_V2,
+      10_057_543n
+    ]);
+    expect(prepared.burnRequest.functionName).to.equal(
+      "depositForBurnWithHook"
+    );
+    expect(prepared.burnRequest.args).to.deep.equal([
+      10_057_543n,
+      3,
+      addressToBytes32(recipient),
+      PAYMENT_NETWORKS.find((network) => network.chainId === 50)?.usdcAddress,
+      CCTP_ZERO_BYTES32,
+      57_543n,
+      CCTP_STANDARD_FINALITY_THRESHOLD,
+      CCTP_FORWARDING_HOOK_DATA
+    ]);
+  });
+
+  it("rejects automatic forwarding from a non-XDC source", function () {
+    expect(() =>
+      prepareMainnetCctpForwardedBurn({
+        sourceChainId: 42161,
+        destinationChainId: 50,
+        amount: "10",
+        recipient,
+        forwardFee: 57_543n,
+        minimumFeeBps: 0
+      })
+    ).to.throw("available from XDC only");
   });
 });
