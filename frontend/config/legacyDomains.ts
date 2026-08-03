@@ -6,6 +6,13 @@ export const legacyXdcDomainsAddress = (
 export const legacyXdcDomainsAbi = [
   {
     type: "function",
+    name: "_tokenIdMaps",
+    stateMutability: "view",
+    inputs: [{ name: "name", type: "string" }],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
     name: "exists",
     stateMutability: "view",
     inputs: [{ name: "tokenId", type: "uint256" }],
