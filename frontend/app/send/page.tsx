@@ -90,7 +90,7 @@ export default function SendPage() {
 
   const xdcidRegistered =
     owner.data === undefined ? undefined : owner.data !== zeroAddress;
-  const registry = useRegistryStatus(node.data, xdcidRegistered, !!node.data);
+  const registry = useRegistryStatus(name, xdcidRegistered, !!node.data);
 
   const expiry = useReadContract({
     chainId: XDC_CHAIN_ID,

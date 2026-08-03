@@ -54,7 +54,12 @@ export async function getNameData(input: string, years: number) {
 
   return withShortCache("name:" + parsed.name + ":" + years, async () => {
     const node = keccak256(stringToHex(parsed.name));
-    const legacyTokenId = BigInt(node);
+    const legacyTokenId = await xdcClient.readContract({
+      address: legacyXdcDomainsAddress,
+      abi: legacyXdcDomainsAbi,
+      functionName: "_tokenIdMaps",
+      args: [parsed.name]
+    });
     const [
       owner,
       expiry,

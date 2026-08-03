@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatEther, keccak256, stringToHex } from "viem";
+import { formatEther } from "viem";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import { addresses, contractsConfigured, registrarAbi } from "../config/contracts";
 import { saveName } from "../config/localNames";
@@ -18,11 +18,6 @@ export default function Home() {
   const { name, isValid, error: validationError } = parsedName;
   const hasInput = input.trim().length > 0;
   const canReadContracts = isValid && contractsConfigured;
-  const node = useMemo(
-    () => (isValid ? keccak256(stringToHex(name)) : undefined),
-    [isValid, name]
-  );
-
   const availability = useReadContract({
     address: addresses.registrar,
     abi: registrarAbi,
@@ -40,7 +35,7 @@ export default function Home() {
   });
 
   const registry = useRegistryStatus(
-    node,
+    name,
     typeof availability.data === "boolean" ? !availability.data : undefined,
     canReadContracts
   );
