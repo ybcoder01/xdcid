@@ -75,17 +75,6 @@ export function parseForwardingRecoveryInput(
   };
 }
 
-export function forwardingRecoveryKey(hash: string): string {
-  if (!isCctpTransactionHash(hash)) {
-    throw new Error("Recovery transaction hash must be 32-byte hex");
-  }
-  return "xdcid:cctp-recovery:v1:" + hash.toLowerCase();
-}
-
-export function forwardingRecoveryUseKey(hash: string): string {
-  return forwardingRecoveryKey(hash) + ":used";
-}
-
 export function recoveryRecordMatches(
   record: ForwardingRecoveryRecord,
   input: ForwardingRecoveryInput
