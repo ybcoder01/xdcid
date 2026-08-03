@@ -1,7 +1,24 @@
 import { expect } from "chai";
+import { legacyXdcDomainsAbi } from "../frontend/config/legacyDomains";
 import { classifyRegistryStatus } from "../frontend/lib/registryStatus";
 
 describe("registry-aware name status", () => {
+  it("uses the legacy registry name-to-token ID mapping", () => {
+    const lookup = legacyXdcDomainsAbi.find(
+      (entry) => entry.name === "_tokenIdMaps"
+    );
+
+    expect(lookup).to.deep.include({
+      type: "function",
+      name: "_tokenIdMaps",
+      stateMutability: "view"
+    });
+    expect(lookup?.inputs).to.deep.equal([
+      { name: "name", type: "string" }
+    ]);
+    expect(lookup?.outputs).to.deep.equal([{ type: "uint256" }]);
+  });
+
   it("allows registration only when neither registry contains the name", () => {
     expect(
       classifyRegistryStatus({
