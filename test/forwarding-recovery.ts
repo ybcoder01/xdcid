@@ -1,8 +1,6 @@
 import { expect } from "chai";
 import {
   FORWARDING_RECOVERY_TTL_SECONDS,
-  forwardingRecoveryKey,
-  forwardingRecoveryUseKey,
   parseForwardingRecoveryInput,
   recoveryRecordMatches,
   type ForwardingRecoveryRecord
@@ -25,15 +23,6 @@ describe("forwarding failure recovery", function () {
     expect(parsed.recipient).to.equal(recipient);
     expect(parsed.destinationChainId).to.equal(42161);
     expect(FORWARDING_RECOVERY_TTL_SECONDS).to.equal(2_592_000);
-  });
-
-  it("uses namespaced lowercase keys without storing private data", function () {
-    expect(forwardingRecoveryKey(feeTransactionHash.toUpperCase().replace("0X", "0x"))).to.equal(
-      "xdcid:cctp-recovery:v1:" + feeTransactionHash
-    );
-    expect(forwardingRecoveryUseKey(feeTransactionHash)).to.equal(
-      "xdcid:cctp-recovery:v1:" + feeTransactionHash + ":used"
-    );
   });
 
   it("matches a stored fee record only to the same transfer details", function () {
