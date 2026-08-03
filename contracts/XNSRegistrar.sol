@@ -20,7 +20,7 @@ contract XNSRegistrar is Ownable, ReentrancyGuard {
         registry = registry_;
     }
 
-    function register(string calldata name, address nameOwner, uint256 years_) external payable nonReentrant {
+    function register(string calldata name, address nameOwner, uint256 years_) external payable virtual nonReentrant {
         string memory canonicalName = canonicalize(name);
         bytes32 node = keccak256(bytes(canonicalName));
         if (registry.expiryOf(node) >= block.timestamp) revert Unavailable();
@@ -49,7 +49,7 @@ contract XNSRegistrar is Ownable, ReentrancyGuard {
         to.transfer(address(this).balance);
     }
 
-    function available(string calldata name) public view returns (bool) {
+    function available(string calldata name) public view virtual returns (bool) {
         return registry.expiryOf(nodeFor(name)) < block.timestamp;
     }
 

@@ -12,8 +12,12 @@
     "deploy:xdc": "hardhat run scripts/deploy.ts --network xdc",
     "deploy:registrar-v2:apothem": "hardhat run scripts/deploy-registrar-v2.ts --network apothem",
     "deploy:registrar-v2:xdc": "hardhat run scripts/deploy-registrar-v2.ts --network xdc",
+    "deploy:registrar-v3:apothem": "hardhat run scripts/deploy-registrar-v3.ts --network apothem",
+    "deploy:registrar-v3:xdc": "hardhat run scripts/deploy-registrar-v3.ts --network xdc",
     "activate:registrar-v2:apothem": "hardhat run scripts/activate-registrar-v2.ts --network apothem",
     "activate:registrar-v2:xdc": "hardhat run scripts/activate-registrar-v2.ts --network xdc",
+    "activate:registrar-v3:apothem": "hardhat run scripts/activate-registrar-v3.ts --network apothem",
+    "activate:registrar-v3:xdc": "hardhat run scripts/activate-registrar-v3.ts --network xdc",
     "transfer-ownership:xdc": "hardhat run scripts/transfer-ownership.ts --network xdc",
     "dev": "cd frontend && next dev",
     "build": "pnpm build:sdk && cd frontend && next build"
