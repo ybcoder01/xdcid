@@ -27,6 +27,7 @@ import {
   type ForwardingRecoveryRecord
 } from "../../../../lib/forwardingRecovery";
 import {
+  checkForwardingRecoveryStore,
   createForwardingRecoveryRecord,
   getForwardingRecoveryRecord,
   getForwardingRecoveryUse,
@@ -53,10 +54,15 @@ export async function GET(request: Request) {
   const feeTransactionHash =
     requestUrl.searchParams.get("feeTransactionHash")?.trim() || "";
   if (!feeTransactionHash) {
-    return Response.json(
-      { configured: true },
-      { headers: noStoreHeaders() }
-    );
+    try {
+      await checkForwardingRecoveryStore();
+      return Response.json(
+        { configured: true },
+        { headers: noStoreHeaders() }
+      );
+    } catch {
+      return storageUnavailable();
+    }
   }
   if (!isCctpTransactionHash(feeTransactionHash)) {
     return Response.json(
