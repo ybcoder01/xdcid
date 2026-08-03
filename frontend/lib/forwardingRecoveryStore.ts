@@ -17,6 +17,13 @@ export function isForwardingRecoveryStoreConfigured(): boolean {
   );
 }
 
+export async function checkForwardingRecoveryStore(): Promise<void> {
+  const result = await redisCommand(["PING"]);
+  if (result !== "PONG") {
+    throw new Error("Forwarding recovery storage is unavailable");
+  }
+}
+
 export async function getForwardingRecoveryRecord(
   feeTransactionHash: string
 ): Promise<ForwardingRecoveryRecord | null> {
