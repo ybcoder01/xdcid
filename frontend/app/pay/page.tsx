@@ -58,7 +58,7 @@ export default function PayLinksPage() {
   });
   const xdcidRegistered =
     owner.data === undefined ? undefined : owner.data !== zeroAddress;
-  const registry = useRegistryStatus(node.data, xdcidRegistered, !!node.data);
+  const registry = useRegistryStatus(parsedName.name, xdcidRegistered, !!node.data);
 
   const nameExpiry = useReadContract({
     address: addresses.registry,
