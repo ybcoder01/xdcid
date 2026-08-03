@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import type { Hex } from "viem";
 import { useReadContract } from "wagmi";
 import {
   legacyXdcDomainsAbi,
@@ -12,17 +11,27 @@ import { classifyRegistryStatus } from "./registryStatus";
 const XDC_CHAIN_ID = 50;
 
 export function useRegistryStatus(
-  node: Hex | undefined,
+  name: string | undefined,
   xdcidRegistered: boolean | undefined,
   enabled = true
 ) {
+  const legacyTokenId = useReadContract({
+    chainId: XDC_CHAIN_ID,
+    address: legacyXdcDomainsAddress,
+    abi: legacyXdcDomainsAbi,
+    functionName: "_tokenIdMaps",
+    args: name ? [name] : undefined,
+    query: { enabled: enabled && !!name }
+  });
+
   const legacy = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: legacyXdcDomainsAddress,
     abi: legacyXdcDomainsAbi,
     functionName: "exists",
-    args: node ? [BigInt(node)] : undefined,
-    query: { enabled: enabled && !!node }
+    args:
+      legacyTokenId.data !== undefined ? [legacyTokenId.data] : undefined,
+    query: { enabled: enabled && legacyTokenId.data !== undefined }
   });
 
   const status = useMemo(() => {
@@ -38,7 +47,10 @@ export function useRegistryStatus(
 
   return {
     status,
-    isChecking: enabled && (legacy.isLoading || status === undefined),
-    isError: legacy.isError
+    legacyTokenId: legacyTokenId.data,
+    isChecking:
+      enabled &&
+      (legacyTokenId.isLoading || legacy.isLoading || status === undefined),
+    isError: legacyTokenId.isError || legacy.isError
   };
 }
