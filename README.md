@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/XDCID.png" alt="XDCID" width="720" />
+</p>
+
 # XDCID MVP
 
 Minimal `.xdc` names for XDC mainnet.
