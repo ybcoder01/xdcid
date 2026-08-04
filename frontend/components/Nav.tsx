@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 import { useAccount, useReadContract } from "wagmi";
@@ -21,9 +22,17 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-black/10 bg-white/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link className="flex items-center gap-2 font-semibold" href="/">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">ID</span>
-          <span>XDCID</span>
+        <Link aria-label="XDCID home" className="flex shrink-0 items-center" href="/">
+          <span aria-hidden="true" className="relative block h-8 w-28 overflow-hidden">
+            <Image
+              alt=""
+              className="absolute left-[-23px] top-[-26px] h-[84px] w-[158px] max-w-none"
+              height={914}
+              priority
+              src="/XDCID.png"
+              width={1714}
+            />
+          </span>
         </Link>
         <nav className="flex min-w-0 items-center gap-2 text-sm">
           <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/send">
