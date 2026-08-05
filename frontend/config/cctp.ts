@@ -1,7 +1,12 @@
 import { defineChain } from "viem";
-import { arbitrumSepolia } from "viem/chains";
+import {
+  arbitrumSepolia,
+  baseSepolia,
+  polygonAmoy,
+  sepolia
+} from "viem/chains";
 
-export { arbitrumSepolia };
+export { arbitrumSepolia, baseSepolia, polygonAmoy, sepolia };
 
 export const xdcApothem = defineChain({
   id: 51,
