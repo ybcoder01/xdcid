@@ -1,9 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { parseEther, parseUnits, zeroAddress } from "viem";
-import { useAccount, useReadContract, useSendTransaction } from "wagmi";
+import {
+  useAccount,
+  useReadContract,
+  useSendTransaction,
+  useWaitForTransactionReceipt
+} from "wagmi";
 import { MultichainUsdcExecutor } from "../../components/MultichainUsdcExecutor";
+import { RecipientContacts } from "../../components/RecipientContacts";
 import {
   addresses,
   contractsConfigured,
@@ -14,6 +20,10 @@ import {
 } from "../../config/contracts";
 import { PAYMENT_NETWORKS, USDC_DECIMALS } from "../../config/paymentNetworks";
 import { parseXnsName } from "../../lib/names";
+import {
+  recordRecipientContact,
+  type RecipientContact
+} from "../../lib/recipientContacts";
 import { selectPaymentDestination } from "../../lib/paymentPreparation";
 import {
   planPaymentRoute,
@@ -45,7 +55,11 @@ export default function SendPage() {
   const [sourceChainId, setSourceChainId] = useState(8453);
   const [destinationChainId, setDestinationChainId] = useState(XDC_CHAIN_ID);
   const [token, setToken] = useState<PaymentToken>("USDC");
-  const { chainId: connectedChainId, isConnected } = useAccount();
+  const {
+    address,
+    chainId: connectedChainId,
+    isConnected
+  } = useAccount();
   const { sendTransaction, isPending, data: hash, error } = useSendTransaction();
 
   const parsedName = useMemo(() => parseXnsName(recipient), [recipient]);
@@ -166,6 +180,11 @@ export default function SendPage() {
     !readsLoading &&
     !readsFailed;
 
+  const nativeReceipt = useWaitForTransactionReceipt({
+    chainId: XDC_CHAIN_ID,
+    hash
+  });
+
   const canSendNativeXdc =
     routeReady &&
     isConnected &&
@@ -182,6 +201,32 @@ export default function SendPage() {
       value: parseEther(amount)
     });
   }
+
+  function saveCompletedRecipient(transactionHash: string) {
+    if (!address || !destination || !isValid) return;
+    recordRecipientContact(address, {
+      name,
+      resolvedAddress: destination.address,
+      sourceChainId,
+      destinationChainId,
+      asset: token,
+      transactionHash
+    });
+  }
+
+  function selectContact(contact: RecipientContact) {
+    setRecipient(contact.name);
+    setSourceChainId(contact.lastSourceChainId);
+    setDestinationChainId(contact.lastDestinationChainId);
+    setToken(contact.lastAsset);
+    setAmount("");
+  }
+
+  useEffect(() => {
+    if (nativeReceipt.isSuccess && hash) {
+      saveCompletedRecipient(hash);
+    }
+  }, [nativeReceipt.isSuccess, hash]);
 
   function swapNetworks() {
     const swapped = swapPaymentNetworks({
@@ -383,6 +428,7 @@ export default function SendPage() {
                   amount={amount}
                   recipient={destination.address}
                   ready={routeReady}
+                  onTransferComplete={saveCompletedRecipient}
                 />
               ) : null}
 
@@ -410,6 +456,13 @@ export default function SendPage() {
           )}
         </aside>
       </section>
+
+      <div className="mt-6">
+        <RecipientContacts
+          walletAddress={address}
+          onSelect={selectContact}
+        />
+      </div>
     </main>
   );
 }

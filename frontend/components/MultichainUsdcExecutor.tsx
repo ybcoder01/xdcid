@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatUnits, type Address, type Hash, type Hex } from "viem";
 import {
   useAccount,
@@ -51,6 +51,7 @@ type MultichainUsdcExecutorProps = {
   amount: string;
   recipient: Address;
   ready: boolean;
+  onTransferComplete?: (hash: Hash) => void;
 };
 
 const phaseLabels: Record<Phase, string> = {
@@ -80,7 +81,8 @@ export function MultichainUsdcExecutor({
   destinationChainId,
   amount,
   recipient,
-  ready
+  ready,
+  onTransferComplete
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [burnHash, setBurnHash] = useState("");
@@ -101,6 +103,7 @@ export function MultichainUsdcExecutor({
   const [recoveryStatus, setRecoveryStatus] = useState<
     "idle" | "checking" | "ready" | "error"
   >("idle");
+  const completedHash = useRef<Hash | "">("");
 
   const { address, isConnected } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -119,6 +122,18 @@ export function MultichainUsdcExecutor({
     setRecoveryStatus("idle");
     setFeeHash("");
   }, [amount, destinationChainId, recipient]);
+
+  useEffect(() => {
+    if (
+      phase !== "complete" ||
+      !receiveHash ||
+      completedHash.current === receiveHash
+    ) {
+      return;
+    }
+    completedHash.current = receiveHash;
+    onTransferComplete?.(receiveHash);
+  }, [phase, receiveHash, onTransferComplete]);
 
   useEffect(() => {
     let cancelled = false;
