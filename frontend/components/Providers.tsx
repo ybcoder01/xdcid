@@ -14,7 +14,13 @@ import {
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { arbitrum, base, mainnet, polygon } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
-import { arbitrumSepolia, xdcApothem } from "../config/cctp";
+import {
+  arbitrumSepolia,
+  baseSepolia,
+  polygonAmoy,
+  sepolia,
+  xdcApothem
+} from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
@@ -34,10 +40,7 @@ const connectors = walletConnectProjectId
           ]
         }
       ],
-      {
-        appName: "XDCID",
-        projectId: walletConnectProjectId
-      }
+      { appName: "XDCID", projectId: walletConnectProjectId }
     )
   : [injected()];
 
@@ -48,8 +51,11 @@ const config = createConfig({
     polygon,
     arbitrum,
     base,
-    arbitrumSepolia,
-    xdcApothem
+    sepolia,
+    xdcApothem,
+    polygonAmoy,
+    baseSepolia,
+    arbitrumSepolia
   ],
   connectors,
   multiInjectedProviderDiscovery: false,
@@ -59,8 +65,11 @@ const config = createConfig({
     [polygon.id]: http(),
     [arbitrum.id]: http(),
     [base.id]: http(),
-    [arbitrumSepolia.id]: http(arbitrumSepolia.rpcUrls.default.http[0]),
-    [xdcApothem.id]: http(xdcApothem.rpcUrls.default.http[0])
+    [sepolia.id]: http(),
+    [xdcApothem.id]: http(xdcApothem.rpcUrls.default.http[0]),
+    [polygonAmoy.id]: http(),
+    [baseSepolia.id]: http(),
+    [arbitrumSepolia.id]: http()
   },
   ssr: true
 });
