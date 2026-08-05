@@ -14,7 +14,7 @@ import {
   prepareCctpForwardedBurn,
   prepareCctpReceive,
   type CctpTestnetKey
-} from "../../../sdk/src/cctp";
+} from "";
 
 type Phase = "idle" | "approving" | "burning" | "waiting" | "ready" | "minting" | "complete";
 type Attestation = { message: Hex; attestation: Hex };
