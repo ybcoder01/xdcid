@@ -1,17 +1,19 @@
 import {
+  CCTP_TESTNETS,
   buildCctpAttestationUrl,
   type CctpTestnetKey
 } from "../../../../../sdk/src/cctp";
 
 export const dynamic = "force-dynamic";
 
-const supportedSources = new Set<CctpTestnetKey>(["arbitrumSepolia", "xdcApothem"]);
+const supportedSources = new Set(Object.keys(CCTP_TESTNETS));
 const hexBytesPattern = /^0x(?:[0-9a-fA-F]{2})+$/;
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const source = requestUrl.searchParams.get("source") as CctpTestnetKey | null;
   const transactionHash = requestUrl.searchParams.get("transactionHash") || "";
+  const forwarded = requestUrl.searchParams.get("forwarded") === "true";
 
   if (!source || !supportedSources.has(source)) {
     return Response.json({ error: "Unsupported CCTP source network" }, { status: 400 });
@@ -29,7 +31,6 @@ export async function GET(request: Request) {
       cache: "no-store",
       headers: { accept: "application/json" }
     });
-
     if (response.status === 404) {
       return Response.json({ status: "pending" }, { status: 202 });
     }
@@ -40,13 +41,25 @@ export async function GET(request: Request) {
     const payload = (await response.json()) as unknown;
     const messages = isRecord(payload) && Array.isArray(payload.messages) ? payload.messages : [];
     const entry = messages.length > 0 && isRecord(messages[0]) ? messages[0] : null;
-    const message = entry && typeof entry.message === "string" ? entry.message : "";
-    const attestation = entry && typeof entry.attestation === "string" ? entry.attestation : "";
+    const status = entry && typeof entry.status === "string" ? entry.status : "pending";
 
-    if (!hexBytesPattern.test(message) || !hexBytesPattern.test(attestation)) {
-      return Response.json({ status: "pending" }, { status: 202 });
+    if (forwarded) {
+      const forwardTxHash =
+        entry && typeof entry.forwardTxHash === "string" ? entry.forwardTxHash : "";
+      if (status !== "complete" || !/^0x[0-9a-fA-F]{64}$/.test(forwardTxHash)) {
+        return Response.json({ status: "pending" }, { status: 202 });
+      }
+      return Response.json(
+        { status: "complete", forwardTxHash },
+        { headers: { "cache-control": "no-store" } }
+      );
     }
 
+    const message = entry && typeof entry.message === "string" ? entry.message : "";
+    const attestation = entry && typeof entry.attestation === "string" ? entry.attestation : "";
+    if (status !== "complete" || !hexBytesPattern.test(message) || !hexBytesPattern.test(attestation)) {
+      return Response.json({ status: "pending" }, { status: 202 });
+    }
     return Response.json(
       { status: "complete", message, attestation },
       { headers: { "cache-control": "no-store" } }
