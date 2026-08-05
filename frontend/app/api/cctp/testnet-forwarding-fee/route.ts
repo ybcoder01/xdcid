@@ -2,7 +2,7 @@ import {
   buildCctpForwardingFeeUrl,
   parseCctpForwardingQuote,
   type CctpTestnetKey
-} from "../../../../../../sdk/src/cctp";
+} from "../../../../../sdk/src/cctp";
 
 export const dynamic = "force-dynamic";
 
