@@ -1,4 +1,4 @@
-from "../../../../sdk/src/cctp";"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import type { Hash, Hex } from "viem";
