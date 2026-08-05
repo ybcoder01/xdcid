@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddress, zeroAddress } from "viem";
 import {
+  CCTP_FORWARDING_HOOK_DATA,
   CCTP_MAX_TRANSFER_AMOUNT,
   CCTP_MESSAGE_TRANSMITTER_V2_TESTNET,
   CCTP_STANDARD_FINALITY_THRESHOLD,
@@ -12,8 +13,11 @@ import {
   CctpTestnetError,
   addressToCctpBytes32,
   buildCctpAttestationUrl,
+  buildCctpForwardingFeeUrl,
+  parseCctpForwardingQuote,
   parseCctpUsdcAmount,
   prepareCctpBurn,
+  prepareCctpForwardedBurn,
   prepareCctpReceive
 } from "../dist/cctp.js";
 
@@ -161,5 +165,52 @@ test("prepares the destination receiveMessage request", () => {
   assert.throws(
     () => prepareCctpReceive("xdcApothem", "0x1", "0xabcd"),
     (error) => error instanceof CctpTestnetError && error.code === "INVALID_MESSAGE"
+  );
+});
+
+
+test("configures all five target testnets with official Circle domains", () => {
+  assert.deepEqual(
+    Object.values(CCTP_TESTNETS).map(({ chainId, domain }) => [chainId, domain]),
+    [[11155111, 0], [51, 18], [80002, 7], [84532, 6], [421614, 3]]
+  );
+});
+
+test("prepares Standard and automatic forwarding for every directed pair", () => {
+  const keys = Object.keys(CCTP_TESTNETS);
+  for (const source of keys) {
+    for (const destination of keys) {
+      if (source === destination) continue;
+      const standard = prepareCctpBurn({ source, destination, amount: "5", recipient });
+      assert.equal(standard.burnRequest.args[1], CCTP_TESTNETS[destination].domain);
+
+      const automatic = prepareCctpForwardedBurn({
+        source,
+        destination,
+        amount: "5",
+        recipient,
+        forwardFee: 200_000n,
+        minimumFeeBps: 0
+      });
+      assert.equal(automatic.burnRequest.functionName, "depositForBurnWithHook");
+      assert.equal(automatic.burnRequest.args[7], CCTP_FORWARDING_HOOK_DATA);
+      assert.equal(automatic.totalBurnAmount, 5_200_000n);
+      assert.equal(
+        buildCctpForwardingFeeUrl(source, destination),
+        CCTP_TESTNET_IRIS_API + "/v2/burn/USDC/fees/" +
+          CCTP_TESTNETS[source].domain + "/" +
+          CCTP_TESTNETS[destination].domain + "?forward=true"
+      );
+    }
+  }
+});
+
+test("validates Circle Standard forwarding quotes", () => {
+  assert.deepEqual(
+    parseCctpForwardingQuote([
+      { finalityThreshold: 1000, minimumFee: 1, forwardFee: { med: "1" } },
+      { finalityThreshold: 2000, minimumFee: 0, forwardFee: { med: "200000" } }
+    ]),
+    { forwardFee: 200_000n, minimumFeeBps: 0 }
   );
 });
