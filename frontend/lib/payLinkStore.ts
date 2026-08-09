@@ -133,8 +133,10 @@ export async function revokeStoredPayLink(
   if (!record) return "not-found";
 
   const suppliedHash = hashToken(revocationToken);
-  const stored = Buffer.from(record.revocationTokenHash, "hex");
-  const supplied = Buffer.from(suppliedHash, "hex");
+  const stored = Uint8Array.from(
+    Buffer.from(record.revocationTokenHash, "hex")
+  );
+  const supplied = Uint8Array.from(Buffer.from(suppliedHash, "hex"));
   if (
     stored.length !== supplied.length ||
     !timingSafeEqual(stored, supplied)
