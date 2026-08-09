@@ -104,14 +104,15 @@ export default function PayRequestPage() {
 
   const signedRequest = signedPayload.request;
   const legacyRequest = !encodedRequest && !encodedSignature;
+  const awaitingShortLink = Boolean(shortId && !shortPayload && !shortLinkError);
   const amount = signedRequest?.amount ?? searchParams.get("amount") ?? "";
   const token = signedRequest?.token ?? normalizePayToken(searchParams.get("token"));
   const memo = signedRequest?.description ?? searchParams.get("memo") ?? "";
   const reference = signedRequest?.reference ?? "";
   const expires = signedRequest ? (signedRequest.expires ? String(signedRequest.expires) : undefined) : searchParams.get("expires");
-  const amountError = validatePayAmount(amount, token);
-  const memoError = validatePayMemo(memo);
-  const expiryError = validatePayExpiry(expires);
+  const amountError = awaitingShortLink ? undefined : validatePayAmount(amount, token);
+  const memoError = awaitingShortLink ? undefined : validatePayMemo(memo);
+  const expiryError = awaitingShortLink ? undefined : validatePayExpiry(expires);
   const pathError = signedRequest && parsedName.isValid && signedRequest.name !== parsedName.name
     ? "The signed XNS ID does not match this checkout URL."
     : undefined;
