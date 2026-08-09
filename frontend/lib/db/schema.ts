@@ -4,6 +4,7 @@ import {
   index,
   integer,
   pgTable,
+  text,
   timestamp,
   uniqueIndex,
   varchar
@@ -67,4 +68,25 @@ export const forwardingRecoveryBurnsRelations = relations(
       references: [forwardingRecoveries.feeTransactionHash]
     })
   })
+);
+
+
+export const payLinks = pgTable(
+  "pay_links",
+  {
+    id: varchar("id", { length: 32 }).primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    encodedRequest: text("encoded_request").notNull(),
+    signature: text("signature").notNull(),
+    revocationTokenHash: varchar("revocation_token_hash", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" })
+  },
+  (table) => [
+    index("pay_links_name_idx").on(table.name),
+    index("pay_links_expires_at_idx").on(table.expiresAt)
+  ]
 );
