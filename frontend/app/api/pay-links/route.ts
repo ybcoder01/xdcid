@@ -1,4 +1,19 @@
-import { isHex } from "viem";
+import {
+  createPublicClient,
+  fallback,
+  getAddress,
+  http,
+  isHex,
+  zeroAddress,
+  type Address,
+  type Hex
+} from "viem";
+import {
+  addresses,
+  registrarAbi,
+  registryAbi
+} from "../../../config/contracts";
+import { verifyPaymentRequestSignature } from "../../../lib/accountSignatures";
 import {
   createStoredPayLink,
   isPayLinkStoreConfigured
@@ -55,6 +70,35 @@ export async function POST(request: Request) {
 
   try {
     const paymentRequest = decodePaymentRequest(encodedRequest);
+    const client = getXdcClient();
+    const node = await client.readContract({
+      address: addresses.registrar,
+      abi: registrarAbi,
+      functionName: "nodeFor",
+      args: [paymentRequest.name]
+    });
+    const owner = await client.readContract({
+      address: addresses.registry,
+      abi: registryAbi,
+      functionName: "ownerOf",
+      args: [node]
+    }) as Address;
+    if (owner === zeroAddress) {
+      return json({ error: "XNS ID is not currently registered" }, 403);
+    }
+    const verification = await verifyPaymentRequestSignature(
+      client,
+      paymentRequest,
+      signature as Hex,
+      getAddress(owner)
+    );
+    if (!verification.valid) {
+      return json(
+        { error: verification.error || "Payment request signature is not authorized" },
+        403
+      );
+    }
+
     const { record, revocationToken } = await createStoredPayLink({
       name: paymentRequest.name,
       encodedRequest,
@@ -80,6 +124,23 @@ export async function POST(request: Request) {
     const status = message.includes("storage") ? 503 : 400;
     return json({ error: message }, status);
   }
+}
+
+function getXdcClient() {
+  const urls = (
+    process.env.XDC_RPC_URLS ||
+    process.env.XDC_MAINNET_RPC_URL ||
+    "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
+  )
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const timeout = Number(process.env.XDC_RPC_TIMEOUT_MS || 3_500);
+  return createPublicClient({
+    transport: fallback(
+      urls.map((url) => http(url, { timeout, retryCount: 0 }))
+    )
+  });
 }
 
 function storageUnavailable() {
