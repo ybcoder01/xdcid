@@ -24,6 +24,10 @@ import {
   prepareMainnetUsdcTransfer,
   prepareXdcidConvenienceFeeTransfer
 } from "../lib/cctpMainnet";
+import {
+  automaticForwardingMessage,
+  getPaymentRouteCapability
+} from "../lib/paymentRouteCapabilities";
 
 type Phase =
   | "idle"
@@ -110,7 +114,12 @@ export function MultichainUsdcExecutor({
   const source = getPaymentNetwork(sourceChainId);
   const destination = getPaymentNetwork(destinationChainId);
   const crossChain = sourceChainId !== destinationChainId;
-  const forwardingAvailable = crossChain && sourceChainId === 50;
+  const routeCapability = getPaymentRouteCapability(
+    sourceChainId,
+    destinationChainId
+  );
+  const forwardingAvailable =
+    routeCapability.automaticForwarding === "mainnet-enabled";
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
 
@@ -457,6 +466,12 @@ export function MultichainUsdcExecutor({
             "."
           : "USDC will be transferred directly to the XNS-resolved address."}
       </p>
+
+      {crossChain ? (
+        <p className="mt-3 rounded-md border border-black/10 bg-white p-3 text-xs text-neutral-600">
+          {automaticForwardingMessage(routeCapability.automaticForwarding)}
+        </p>
+      ) : null}
 
       {forwardingAvailable ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
