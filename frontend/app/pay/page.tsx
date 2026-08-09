@@ -27,6 +27,13 @@ export default function PayLinksPage() {
   const [expiresAt, setExpiresAt] = useState("");
   const [origin, setOrigin] = useState("");
   const [payLink, setPayLink] = useState("");
+  const [portablePayLink, setPortablePayLink] = useState("");
+  const [shortId, setShortId] = useState("");
+  const [revocationToken, setRevocationToken] = useState("");
+  const [shortLinkExpiresAt, setShortLinkExpiresAt] = useState("");
+  const [shortLinkNotice, setShortLinkNotice] = useState("");
+  const [revoking, setRevoking] = useState(false);
+  const [revoked, setRevoked] = useState(false);
   const [createError, setCreateError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -100,6 +107,12 @@ export default function PayLinksPage() {
 
   useEffect(() => {
     setPayLink("");
+    setPortablePayLink("");
+    setShortId("");
+    setRevocationToken("");
+    setShortLinkExpiresAt("");
+    setShortLinkNotice("");
+    setRevoked(false);
     setCopied(false);
     setCreateError("");
   }, [recipient, amount, token, reference, description, payer, expiresAt]);
@@ -123,7 +136,49 @@ export default function PayLinksPage() {
         nonce: toHex(nonceBytes),
       };
       const signature = await signRequest.signTypedDataAsync(paymentRequestTypedData(request));
-      setPayLink(buildSignedPaymentLink(origin, request, signature));
+      const portableLink = buildSignedPaymentLink(origin, request, signature);
+      setPortablePayLink(portableLink);
+
+      try {
+        const response = await fetch("/api/pay-links", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            request: portableLink
+              ? new URL(portableLink).searchParams.get("request")
+              : "",
+            signature
+          })
+        });
+        const body = await response.json() as {
+          id?: string;
+          path?: string;
+          expiresAt?: string;
+          revocationToken?: string;
+          error?: string;
+        };
+        if (
+          !response.ok ||
+          !body.id ||
+          !body.path ||
+          !body.expiresAt ||
+          !body.revocationToken
+        ) {
+          throw new Error(body.error || "Short Pay Link could not be created.");
+        }
+        setPayLink(new URL(body.path, origin).toString());
+        setShortId(body.id);
+        setRevocationToken(body.revocationToken);
+        setShortLinkExpiresAt(body.expiresAt);
+      } catch (shortLinkError) {
+        setPayLink(portableLink);
+        setShortLinkNotice(
+          (shortLinkError instanceof Error
+            ? shortLinkError.message
+            : "Short Pay Link could not be created.") +
+            " The portable signed link is available instead.",
+        );
+      }
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "The payment request could not be signed.");
     }
@@ -133,6 +188,33 @@ export default function PayLinksPage() {
     if (!payLink) return;
     await navigator.clipboard.writeText(payLink);
     setCopied(true);
+  }
+
+  async function revokeShortLink() {
+    if (!shortId || !revocationToken || revoking || revoked) return;
+    setRevoking(true);
+    setShortLinkNotice("");
+    try {
+      const response = await fetch(
+        "/api/pay-links/" + encodeURIComponent(shortId),
+        {
+          method: "DELETE",
+          headers: { authorization: "Bearer " + revocationToken }
+        },
+      );
+      const body = await response.json() as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || "Short Pay Link could not be revoked.");
+      }
+      setRevoked(true);
+      setShortLinkNotice("Short Pay Link revoked. The portable link cannot be revoked.");
+    } catch (error) {
+      setShortLinkNotice(
+        error instanceof Error ? error.message : "Short Pay Link could not be revoked.",
+      );
+    } finally {
+      setRevoking(false);
+    }
   }
 
   return (
@@ -220,12 +302,38 @@ export default function PayLinksPage() {
 
         {payLink && (
           <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
-            <p className="text-sm font-semibold text-teal-900">Signed payment request</p>
+            <p className="text-sm font-semibold text-teal-900">
+              {shortId ? "Short signed payment request" : "Portable signed payment request"}
+            </p>
             <p className="mt-2 break-all text-sm text-teal-800">{payLink}</p>
+            {shortLinkExpiresAt && (
+              <p className="mt-2 text-xs text-teal-800">
+                Short link retained until {new Date(shortLinkExpiresAt).toLocaleString()}.
+              </p>
+            )}
+            {shortLinkNotice && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                {shortLinkNotice}
+              </p>
+            )}
             <div className="mt-5 flex flex-wrap gap-3">
-              <button type="button" onClick={copyLink} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white">{copied ? "Copied" : "Copy signed link"}</button>
+              <button type="button" onClick={copyLink} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white">{copied ? "Copied" : "Copy payment link"}</button>
               <a className="rounded-xl border border-teal-300 px-5 py-3 font-semibold text-teal-900" href={payLink}>Preview request</a>
+              {shortId && !revoked && (
+                <button type="button" disabled={revoking} onClick={revokeShortLink} className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-700 disabled:opacity-50">
+                  {revoking ? "Revoking..." : "Revoke short link"}
+                </button>
+              )}
             </div>
+            {shortId && portablePayLink && (
+              <details className="mt-5 text-sm text-teal-900">
+                <summary className="cursor-pointer font-semibold">Portable no-storage fallback</summary>
+                <p className="mt-2 break-all text-xs text-teal-800">{portablePayLink}</p>
+                <p className="mt-2 text-xs text-teal-800">
+                  This longer link remains usable independently and cannot be revoked. Treat its contents as public.
+                </p>
+              </details>
+            )}
           </div>
         )}
       </section>
