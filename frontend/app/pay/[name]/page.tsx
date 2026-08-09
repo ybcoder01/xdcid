@@ -41,8 +41,51 @@ export default function PayRequestPage() {
   const params = useParams<{ name: string }>();
   const searchParams = useSearchParams();
   const parsedName = useMemo(() => parseXnsName(params.name ?? ""), [params.name]);
-  const encodedRequest = searchParams.get("request");
-  const encodedSignature = searchParams.get("signature");
+  const shortId = searchParams.get("id");
+  const directEncodedRequest = searchParams.get("request");
+  const directEncodedSignature = searchParams.get("signature");
+  const [shortPayload, setShortPayload] = useState<{ request: string; signature: string }>();
+  const [shortLinkLoading, setShortLinkLoading] = useState(false);
+  const [shortLinkError, setShortLinkError] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    setShortPayload(undefined);
+    setShortLinkError("");
+    setShortLinkLoading(false);
+    if (!shortId) return;
+
+    setShortLinkLoading(true);
+    fetch("/api/pay-links/" + encodeURIComponent(shortId), { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json() as {
+          request?: string;
+          signature?: string;
+          error?: string;
+        };
+        if (!response.ok || !body.request || !body.signature) {
+          throw new Error(body.error || "Short Pay Link could not be loaded.");
+        }
+        if (current) setShortPayload({ request: body.request, signature: body.signature });
+      })
+      .catch((error) => {
+        if (current) {
+          setShortLinkError(
+            error instanceof Error ? error.message : "Short Pay Link could not be loaded.",
+          );
+        }
+      })
+      .finally(() => {
+        if (current) setShortLinkLoading(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [shortId]);
+
+  const encodedRequest = shortId ? shortPayload?.request ?? null : directEncodedRequest;
+  const encodedSignature = shortId ? shortPayload?.signature ?? null : directEncodedSignature;
 
   const signedPayload = useMemo((): {
     request?: PaymentRequest;
@@ -74,7 +117,7 @@ export default function PayRequestPage() {
     : undefined;
   const requestError = !parsedName.isValid
     ? parsedName.error
-    : signedPayload.error || pathError || amountError || memoError || expiryError;
+    : shortLinkError || signedPayload.error || pathError || amountError || memoError || expiryError;
   const value = useMemo(() => {
     try {
       return parsePayAmount(amount, token);
@@ -198,7 +241,7 @@ export default function PayRequestPage() {
   );
   const canPay = Boolean(
     isConnected && !wrongNetwork && !requestError && registrySafe && hasOwner && paymentAddress && value > 0n &&
-    !pending && !signaturePending && signedRequestValid,
+    !pending && !shortLinkLoading && !signaturePending && signedRequestValid,
   );
   const paymentError = token === "USDC" ? tokenPayment.error : nativePayment.error;
   const receiptActors = paymentReceiptActors(address, receipt.data?.from);
@@ -230,7 +273,12 @@ export default function PayRequestPage() {
           {memo && <p className="mt-2 text-slate-200 print:text-slate-700">{memo}</p>}
         </div>
 
-        {legacyRequest && (
+        {shortLinkLoading && (
+          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            Loading and verifying the short Pay Link...
+          </p>
+        )}
+        {legacyRequest && !shortId && (
           <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 print:hidden">
             Unsigned legacy request: verify the amount and recipient independently before paying.
           </p>
