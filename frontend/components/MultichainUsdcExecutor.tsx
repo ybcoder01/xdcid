@@ -116,10 +116,12 @@ export function MultichainUsdcExecutor({
   const crossChain = sourceChainId !== destinationChainId;
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
-    destinationChainId
+    destinationChainId,
+    process.env.NEXT_PUBLIC_XDCID_PREVIEW_FORWARDING_ROUTES
   );
   const forwardingAvailable =
-    routeCapability.automaticForwarding === "mainnet-enabled";
+    routeCapability.automaticForwarding === "mainnet-enabled" ||
+    routeCapability.automaticForwarding === "mainnet-preview";
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
 
