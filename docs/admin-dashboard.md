@@ -34,7 +34,8 @@ The operations view provides:
 - Standard/direct and Automatic forwarding availability;
 - configured USDC, Circle CCTP, convenience-fee, and fee-recipient values;
 - the existing registrar balance and owner-only withdrawal transaction;
-- authenticated, read-only Pay Link and forwarding recovery search by Pay Link ID, payer wallet, fee transaction hash, or burn transaction hash.
+- authenticated, read-only Pay Link and forwarding recovery search by Pay Link ID, payer wallet, fee transaction hash, or burn transaction hash;
+- verified forwarding revenue, recipient volume, fee count, burn-recorded ratio, route breakdown, and 7/30/90-day trends.
 
 ## Data and security boundaries
 
@@ -44,4 +45,6 @@ Network checks use the same public RPC configuration as the application. A green
 
 The recovery search reports only states persisted by XDCID. A recorded burn does not prove that Circle attestation or destination mint has completed; the dashboard directs the payer to the wallet recovery flow for those checks. The admin interface does not sign, broadcast, retry, or move funds.
 
-Private revenue aggregates, feature flags, pricing, discounts, whitelists, migration controls, privileged mutations, and audit trails remain separate phases.
+Revenue reporting uses a separate minimal ledger populated only after the source-chain convenience-fee transaction is verified. It retains the fee transaction hash, route, recipient amount, XDCID fee amount, timestamp, and burn-recorded timestamp. It does not retain payer or recipient wallet addresses beyond the existing short-lived recovery records. Circle fees are excluded because they are not XDCID revenue.
+
+Feature flags, pricing, discounts, whitelists, migration controls, privileged mutations, and audit trails remain separate phases.
