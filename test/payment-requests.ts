@@ -10,6 +10,7 @@ import {
   decodePaymentRequest,
   encodePaymentRequest,
   isDesignatedPayer,
+  paymentRequestRoute,
   paymentRequestTypedData,
   recoverPaymentRequestSigner,
   validatePaymentRequest,
@@ -57,6 +58,27 @@ describe("Signed payment requests", function () {
     };
   }
 
+  function routedRequest(overrides: Partial<PaymentRequest> = {}): PaymentRequest {
+    const now = Math.floor(Date.now() / 1000);
+    return {
+      version: 2,
+      chainId: 50,
+      sourceChainId: 8453,
+      destinationChainId: 50,
+      transferMode: "payer-choice",
+      name: "alice.xdc",
+      amount: "25.00",
+      token: "USDC",
+      reference: "ORDER-205",
+      description: "Cross-chain consulting services",
+      payer: zeroAddress,
+      issuedAt: now,
+      expires: now + 3600,
+      nonce: ("0x" + "33".repeat(32)) as Hex,
+      ...overrides,
+    } as PaymentRequest;
+  }
+
   it("encodes and decodes a versioned request", function () {
     const request = validRequest();
     expect(decodePaymentRequest(encodePaymentRequest(request))).to.deep.equal(request);
@@ -92,11 +114,41 @@ describe("Signed payment requests", function () {
   it("validates network, expiry, payer, reference, and nonce", function () {
     const now = Math.floor(Date.now() / 1000);
     expect(validatePaymentRequest(validRequest(), now)).to.equal(undefined);
-    expect(validatePaymentRequest({ ...validRequest(), chainId: 51 } as PaymentRequest, now)).to.equal("Payment request is for the wrong network.");
+    expect(validatePaymentRequest({ ...validRequest(), chainId: 51 } as PaymentRequest, now)).to.equal("Payment request authorization is for the wrong network.");
     expect(validatePaymentRequest(validRequest({ expires: now }), now)).to.equal("This payment request has expired.");
     expect(validatePaymentRequest(validRequest({ payer: "0x1234" as Hex }), now)).to.equal("Designated payer address is invalid.");
     expect(validatePaymentRequest(validRequest({ reference: "" }), now)).to.equal("Payment reference is required.");
     expect(validatePaymentRequest(validRequest({ nonce: "0x12" }), now)).to.equal("Payment request nonce is invalid.");
+  });
+
+  it("encodes, decodes, signs, and recovers a routed request", async function () {
+    const [owner] = await ethers.getSigners();
+    const request = routedRequest();
+    const decoded = decodePaymentRequest(encodePaymentRequest(request));
+    expect(decoded).to.deep.equal(request);
+    expect(paymentRequestRoute(decoded)).to.deep.equal({
+      sourceChainId: 8453,
+      destinationChainId: 50,
+      transferMode: "payer-choice",
+    });
+    expect(await recoverPaymentRequestSigner(request, await signRequest(request, owner))).to.equal(await owner.getAddress());
+  });
+
+  it("keeps legacy requests on direct XDC routing", function () {
+    expect(paymentRequestRoute(validRequest())).to.deep.equal({
+      sourceChainId: 50,
+      destinationChainId: 50,
+      transferMode: "direct",
+    });
+  });
+
+  it("validates routed token and transfer-mode constraints", function () {
+    const now = Math.floor(Date.now() / 1000);
+    expect(validatePaymentRequest(routedRequest(), now)).to.equal(undefined);
+    expect(validatePaymentRequest(routedRequest({ token: "XDC" }), now)).to.equal("Cross-chain payment requests support USDC only.");
+    expect(validatePaymentRequest(routedRequest({ transferMode: "direct" }), now)).to.equal("Payment request contains an invalid transfer mode.");
+    expect(validatePaymentRequest(routedRequest({ sourceChainId: 999999 }), now)).to.equal("Payment request contains an unsupported payment network.");
+    expect(validatePaymentRequest(routedRequest({ sourceChainId: 50, destinationChainId: 50, transferMode: "direct", token: "XDC" }), now)).to.equal(undefined);
   });
 
   it("enforces an optional designated payer", function () {
