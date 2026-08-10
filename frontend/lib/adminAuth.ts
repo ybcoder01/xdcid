@@ -39,8 +39,8 @@ function sessionSecret(): string {
   return value;
 }
 
-function encode(value: string | Buffer): string {
-  return Buffer.from(value).toString("base64url");
+function encode(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64url");
 }
 
 function signSegment(segment: string): string {
