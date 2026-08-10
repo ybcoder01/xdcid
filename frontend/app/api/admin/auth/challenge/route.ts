@@ -10,6 +10,7 @@ import {
 } from "../../../../../lib/adminAuth";
 import { getDatabase, isDatabaseConfigured } from "../../../../../lib/db/client";
 import { adminAuthChallenges } from "../../../../../lib/db/schema";
+import { ensureAdminAuthSchema } from "../../../../../lib/adminAuthStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
     const nonce = randomBytes(24).toString("hex");
     const origin = new URL(request.url).origin;
     const message = buildAdminChallenge(origin, address, nonce, issuedAt, expiresAt);
+    await ensureAdminAuthSchema();
     const database = getDatabase();
 
     await database.delete(adminAuthChallenges).where(
