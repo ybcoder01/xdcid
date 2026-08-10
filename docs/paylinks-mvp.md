@@ -40,6 +40,17 @@ Long links keep request fields in the URL. Short links store only the encoded re
 - Token amounts reject signs, scientific notation, zero, and excess decimal precision.
 - The wallet remains the final approval surface for every transaction.
 
+## Creator cancellation
+
+- The creator can paste either a short or portable signed Pay Link and sign a gasless EIP-712 cancellation on XDC Network.
+- Cancellation is keyed to the exact signed request, including its nonce and route, so it disables both URL formats.
+- The API verifies the original request and cancellation against the current XNS owner, including ERC-1271 smart accounts.
+- Checkout verifies cancellation status before enabling payment and fails closed when that status is unavailable.
+- The cancellation registry stores the request identifier, XNS ID, nonce, timestamp, and cancellation signature. It does not store private keys or API keys.
+- Existing token-based short-link revocation remains available for backward compatibility.
+
+Cancellation prevents the XDCID checkout from initiating a future payment. It cannot recall funds, reverse a completed blockchain transaction, or stop a transaction that the payer already approved before the cancellation became visible.
+
 ## Deliberately out of scope
 
-Creator cancellation is intentionally reserved for Phase 3. Cancellation can stop an unpaid request from being presented as payable, but it cannot reverse a transaction that has already executed. Recurring billing, invoice document storage, escrow, refunds, fiat conversion, and custody are also out of scope.
+Recurring billing, invoice document storage, escrow, refunds, fiat conversion, and custody remain out of scope.
