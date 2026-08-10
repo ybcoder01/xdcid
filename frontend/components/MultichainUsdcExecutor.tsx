@@ -129,7 +129,7 @@ export function MultichainUsdcExecutor({
     setRecoveryReady(false);
     setRecoveryStatus("idle");
     setFeeHash("");
-  }, [amount, destinationChainId, recipient]);
+  }, [amount, sourceChainId, destinationChainId, recipient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -408,6 +408,7 @@ export function MultichainUsdcExecutor({
       const recipientAmount = parseMainnetUsdcAmount(amount);
       const response = await registerForwardingRecovery({
         feeTransactionHash: recoveryFeeHash,
+        sourceChainId,
         recipientAmount,
         recipient,
         destinationChainId
