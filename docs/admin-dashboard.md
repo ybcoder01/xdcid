@@ -35,6 +35,7 @@ The operations view provides:
 - configured USDC, Circle CCTP, convenience-fee, and fee-recipient values;
 - the existing registrar balance and owner-only withdrawal transaction;
 - authenticated, read-only Pay Link and forwarding recovery search by Pay Link ID, payer wallet, fee transaction hash, or burn transaction hash;
+- a read-only forwarding monitor that classifies fee-paid flows without a recorded burn as in progress (under 15 minutes), delayed (15–59 minutes), needs attention (60 minutes or more), or recovery expired;
 - verified forwarding revenue, recipient volume, fee count, burn-recorded ratio, route breakdown, and 7/30/90-day trends.
 
 ## Data and security boundaries
@@ -42,6 +43,8 @@ The operations view provides:
 The protected health endpoint returns only whether the database is configured and reachable, its check latency, and the check timestamp. It does not return database records, connection strings, environment variables, API keys, wallet secrets, or user information.
 
 Network checks use the same public RPC configuration as the application. A green RPC result confirms that a recent block number was readable; it does not guarantee that Circle, a wallet, or every transaction route will succeed.
+
+The forwarding monitor derives alerts from existing short-lived recovery records and does not create another user-data store. It shows up to 50 highest-priority retained records, route-level warning counts, and direct links into recovery search. Alerts do not prove that funds are lost and do not trigger retries or transactions.
 
 The recovery search reports only states persisted by XDCID. A recorded burn does not prove that Circle attestation or destination mint has completed; the dashboard directs the payer to the wallet recovery flow for those checks. The admin interface does not sign, broadcast, retry, or move funds.
 
