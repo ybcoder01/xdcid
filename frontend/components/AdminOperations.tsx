@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useBlockNumber } from "wagmi";
 import {
   CCTP_MESSAGE_TRANSMITTER_V2,
@@ -30,7 +30,7 @@ function StatusBadge({
   children,
 }: {
   healthy: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <span
