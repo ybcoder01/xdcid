@@ -187,6 +187,7 @@ async function registerRecovery(input: ForwardingRecoveryInput) {
     sourceChainId: input.sourceChainId,
     payer,
     recipientAmount: input.recipientAmount.toString(),
+    convenienceFeeAmount: calculateXdcidConvenienceFee(input.recipientAmount).toString(),
     recipient: input.recipient,
     destinationChainId: input.destinationChainId,
     createdAt: createdAt.toISOString(),
