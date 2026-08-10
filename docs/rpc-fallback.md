@@ -2,7 +2,9 @@
 
 XDCID uses viem fallback transports for application reads on Ethereum, XDC, Polygon, Base, and Arbitrum.
 
-Each network has at least two public HTTPS defaults. The client ranks endpoints using recent stability and latency, retries a failed request once, and moves to another provider when necessary.
+Each network has at least two public HTTPS defaults. Ethereum uses `https://rpc.mevblocker.io` and `https://rpc.mevblocker.io/fullprivacy`. The client ranks endpoints using recent stability and latency, retries a failed request once, and moves to another provider when necessary.
+
+Both Ethereum defaults are operated by MEV Blocker. They provide endpoint-level fallback but do not protect against a complete provider outage. These application transports are used for XDCID RPC operations; wallet-submitted transactions may still use the RPC selected inside the connected wallet.
 
 ## Optional Vercel configuration
 
