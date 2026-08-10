@@ -9,7 +9,13 @@ import { parseXnsName } from "../../lib/names";
 import { useRegistryStatus } from "../../lib/useRegistryStatus";
 import { normalizePayToken, validatePayAmount, type PayToken } from "../../lib/paylinks";
 import {
+  createPaymentRequestCancellation,
+  paymentCancellationTypedData,
+  paymentRequestId,
+} from "../../lib/paymentCancellation";
+import {
   buildSignedPaymentLink,
+  decodePaymentRequest,
   MAX_PAYMENT_DESCRIPTION_LENGTH,
   MAX_PAYMENT_REFERENCE_LENGTH,
   PAYMENT_REQUEST_CHAIN_ID,
@@ -38,6 +44,7 @@ export default function PayLinksPage() {
   const [revocationToken, setRevocationToken] = useState("");
   const [shortLinkExpiresAt, setShortLinkExpiresAt] = useState("");
   const [shortLinkNotice, setShortLinkNotice] = useState("");
+  const [cancellationLink, setCancellationLink] = useState("");
   const [revoking, setRevoking] = useState(false);
   const [revoked, setRevoked] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -198,12 +205,15 @@ export default function PayLinksPage() {
         ) {
           throw new Error(body.error || "Short Pay Link could not be created.");
         }
-        setPayLink(new URL(body.path, origin).toString());
+        const shortLink = new URL(body.path, origin).toString();
+        setPayLink(shortLink);
+        setCancellationLink(shortLink);
         setShortId(body.id);
         setRevocationToken(body.revocationToken);
         setShortLinkExpiresAt(body.expiresAt);
       } catch (shortLinkError) {
         setPayLink(portableLink);
+        setCancellationLink(portableLink);
         setShortLinkNotice(
           (shortLinkError instanceof Error
             ? shortLinkError.message
@@ -222,27 +232,68 @@ export default function PayLinksPage() {
     setCopied(true);
   }
 
-  async function revokeShortLink() {
-    if (!shortId || !revocationToken || revoking || revoked) return;
+  async function loadCancellationPayload(link: string): Promise<{
+    request: string;
+    signature: string;
+  }> {
+    const url = new URL(link, origin);
+    const request = url.searchParams.get("request");
+    const signature = url.searchParams.get("signature");
+    if (request && signature) return { request, signature };
+
+    const id = url.searchParams.get("id");
+    if (!id) throw new Error("Enter a valid signed XDCID Pay Link.");
+    const response = await fetch("/api/pay-links/" + encodeURIComponent(id), {
+      cache: "no-store",
+    });
+    const body = await response.json() as {
+      request?: string;
+      signature?: string;
+      error?: string;
+    };
+    if (!response.ok || !body.request || !body.signature) {
+      throw new Error(body.error || "Pay Link could not be loaded.");
+    }
+    return { request: body.request, signature: body.signature };
+  }
+
+  async function cancelPaymentRequest() {
+    if (!cancellationLink.trim() || revoking || revoked || !isConnected || wrongNetwork) return;
     setRevoking(true);
     setShortLinkNotice("");
+    setCreateError("");
     try {
+      const payload = await loadCancellationPayload(cancellationLink.trim());
+      const request = decodePaymentRequest(payload.request);
+      const cancellation = createPaymentRequestCancellation(request);
+      const cancellationSignature = await signRequest.signTypedDataAsync(
+        paymentCancellationTypedData(cancellation),
+      );
+      const requestId = paymentRequestId(request);
       const response = await fetch(
-        "/api/pay-links/" + encodeURIComponent(shortId),
+        "/api/pay-links/cancellations/" + encodeURIComponent(requestId),
         {
-          method: "DELETE",
-          headers: { authorization: "Bearer " + revocationToken }
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            request: payload.request,
+            requestSignature: payload.signature,
+            cancellation,
+            cancellationSignature,
+          }),
         },
       );
-      const body = await response.json() as { error?: string };
+      const body = await response.json() as { error?: string; status?: string };
       if (!response.ok) {
-        throw new Error(body.error || "Short Pay Link could not be revoked.");
+        throw new Error(body.error || "Payment request could not be cancelled.");
       }
       setRevoked(true);
-      setShortLinkNotice("Short Pay Link revoked. The portable link cannot be revoked.");
+      setShortLinkNotice(
+        "Payment request cancelled. Its short and portable links can no longer initiate payment.",
+      );
     } catch (error) {
       setShortLinkNotice(
-        error instanceof Error ? error.message : "Short Pay Link could not be revoked.",
+        error instanceof Error ? error.message : "Payment request could not be cancelled.",
       );
     } finally {
       setRevoking(false);
@@ -407,9 +458,9 @@ export default function PayLinksPage() {
             <div className="mt-5 flex flex-wrap gap-3">
               <button type="button" onClick={copyLink} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white">{copied ? "Copied" : "Copy payment link"}</button>
               <a className="rounded-xl border border-teal-300 px-5 py-3 font-semibold text-teal-900" href={payLink}>Preview request</a>
-              {shortId && !revoked && (
-                <button type="button" disabled={revoking} onClick={revokeShortLink} className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-700 disabled:opacity-50">
-                  {revoking ? "Revoking..." : "Revoke short link"}
+              {!revoked && (
+                <button type="button" disabled={revoking || wrongNetwork} onClick={cancelPaymentRequest} className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-700 disabled:opacity-50">
+                  {revoking ? "Waiting for cancellation..." : "Cancel entire request"}
                 </button>
               )}
             </div>
@@ -418,12 +469,36 @@ export default function PayLinksPage() {
                 <summary className="cursor-pointer font-semibold">Portable no-storage fallback</summary>
                 <p className="mt-2 break-all text-xs text-teal-800">{portablePayLink}</p>
                 <p className="mt-2 text-xs text-teal-800">
-                  This longer link remains usable independently and cannot be revoked. Treat its contents as public.
+                  This longer link is public, but the same creator-signed cancellation disables both formats.
                 </p>
               </details>
             )}
           </div>
         )}
+        <section className="mt-8 border-t border-slate-200 pt-8">
+          <h2 className="text-2xl font-bold text-slate-950">Cancel an existing request</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Paste either the short or portable Pay Link. The current XNS owner must sign the cancellation on XDC Network. No gas is required.
+          </p>
+          <input
+            className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3"
+            placeholder="https://xdcid.xyz/pay/alice.xdc?..."
+            value={cancellationLink}
+            onChange={(event) => {
+              setCancellationLink(event.target.value);
+              setRevoked(false);
+              setShortLinkNotice("");
+            }}
+          />
+          <button
+            type="button"
+            disabled={!cancellationLink.trim() || revoking || revoked || !isConnected || wrongNetwork}
+            onClick={cancelPaymentRequest}
+            className="mt-4 rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {revoking ? "Waiting for wallet signature..." : revoked ? "Request cancelled" : "Sign cancellation"}
+          </button>
+        </section>
       </section>
 
       <p className="mt-6 text-sm text-slate-500">
