@@ -55,6 +55,7 @@ type MultichainUsdcExecutorProps = {
   amount: string;
   recipient: Address;
   ready: boolean;
+  requestedTransferMode?: "standard" | "automatic" | "payer-choice";
 };
 
 const phaseLabels: Record<Phase, string> = {
@@ -84,7 +85,8 @@ export function MultichainUsdcExecutor({
   destinationChainId,
   amount,
   recipient,
-  ready
+  ready,
+  requestedTransferMode = "payer-choice"
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [burnHash, setBurnHash] = useState("");
@@ -92,7 +94,7 @@ export function MultichainUsdcExecutor({
   const [attestation, setAttestation] = useState<Attestation | null>(null);
   const [error, setError] = useState("");
   const [transferMode, setTransferMode] = useState<"standard" | "forwarded">(
-    "standard"
+    requestedTransferMode === "automatic" ? "forwarded" : "standard"
   );
   const [forwardingQuote, setForwardingQuote] =
     useState<ForwardingQuote | null>(null);
@@ -124,6 +126,13 @@ export function MultichainUsdcExecutor({
     routeCapability.automaticForwarding === "mainnet-preview";
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
+  const transferModeLocked = requestedTransferMode !== "payer-choice";
+
+  useEffect(() => {
+    setTransferMode(
+      requestedTransferMode === "automatic" ? "forwarded" : "standard"
+    );
+  }, [requestedTransferMode, sourceChainId, destinationChainId]);
 
   useEffect(() => {
     setRecoveryReady(false);
@@ -481,7 +490,7 @@ export function MultichainUsdcExecutor({
         </p>
       ) : null}
 
-      {forwardingAvailable ? (
+      {forwardingAvailable && !transferModeLocked ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button
             type="button"
@@ -516,6 +525,10 @@ export function MultichainUsdcExecutor({
             </span>
           </button>
         </div>
+      ) : transferModeLocked && crossChain ? (
+        <p className="mt-3 text-xs font-semibold text-slate-700">
+          Request mode: {automaticForwarding ? "Automatic forwarding" : "Standard transfer"}
+        </p>
       ) : null}
 
       {automaticForwarding ? (
