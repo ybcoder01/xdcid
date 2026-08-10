@@ -27,9 +27,13 @@ const TESTNET_VALIDATED_FORWARDING_DESTINATIONS = new Set([
   ARBITRUM_CHAIN_ID
 ]);
 
-const MAINNET_ENABLED_FORWARDING_ROUTES = new Set([
-  `${XDC_CHAIN_ID}:${ARBITRUM_CHAIN_ID}`
-]);
+const MAINNET_ENABLED_FORWARDING_ROUTES = new Set(
+  [...SUPPORTED_PAYMENT_CHAIN_IDS].flatMap((sourceChainId) =>
+    [...SUPPORTED_PAYMENT_CHAIN_IDS]
+      .filter((destinationChainId) => destinationChainId !== sourceChainId)
+      .map((destinationChainId) => `${sourceChainId}:${destinationChainId}`)
+  )
+);
 
 export function getPaymentRouteCapability(
   sourceChainId: number,
