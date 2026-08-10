@@ -17,6 +17,7 @@ import {
 } from "../lib/cctpMainnet";
 import { getPaymentRouteCapability } from "../lib/paymentRouteCapabilities";
 import { AdminPaymentRecovery } from "./AdminPaymentRecovery";
+import { AdminRevenueReport } from "./AdminRevenueReport";
 
 type HealthResponse = {
   checkedAt: string;
@@ -119,6 +120,8 @@ export function AdminOperations() {
 
   return (
     <div className="mt-8 grid gap-8">
+      <AdminRevenueReport />
+
       <AdminPaymentRecovery />
 
       <section>

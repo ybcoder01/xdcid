@@ -17,6 +17,7 @@ export const forwardingRecoveries = pgTable(
     sourceChainId: integer("source_chain_id").notNull().default(50),
     payer: varchar("payer", { length: 42 }).notNull(),
     recipientAmount: bigint("recipient_amount", { mode: "bigint" }).notNull(),
+    convenienceFeeAmount: bigint("convenience_fee_amount", { mode: "bigint" }).notNull(),
     recipient: varchar("recipient", { length: 42 }).notNull(),
     destinationChainId: integer("destination_chain_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
@@ -29,6 +30,28 @@ export const forwardingRecoveries = pgTable(
     index("forwarding_recoveries_source_idx").on(table.sourceChainId),
     index("forwarding_recoveries_expires_at_idx").on(table.expiresAt),
     index("forwarding_recoveries_destination_idx").on(table.destinationChainId)
+  ]
+);
+
+export const forwardingFeeEvents = pgTable(
+  "forwarding_fee_events",
+  {
+    feeTransactionHash: varchar("fee_transaction_hash", { length: 66 }).primaryKey(),
+    sourceChainId: integer("source_chain_id").notNull(),
+    destinationChainId: integer("destination_chain_id").notNull(),
+    recipientAmount: bigint("recipient_amount", { mode: "bigint" }).notNull(),
+    convenienceFeeAmount: bigint("convenience_fee_amount", { mode: "bigint" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    burnRecordedAt: timestamp("burn_recorded_at", { withTimezone: true, mode: "date" })
+  },
+  (table) => [
+    index("forwarding_fee_events_created_at_idx").on(table.createdAt),
+    index("forwarding_fee_events_route_idx").on(
+      table.sourceChainId,
+      table.destinationChainId
+    )
   ]
 );
 
