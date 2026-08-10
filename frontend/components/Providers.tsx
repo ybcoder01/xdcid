@@ -16,6 +16,7 @@ import { arbitrum, base, mainnet, polygon } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
+import { getRpcTransport } from "../config/rpcTransports";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 
@@ -54,11 +55,11 @@ const config = createConfig({
   connectors,
   multiInjectedProviderDiscovery: false,
   transports: {
-    [xdcMainnet.id]: http(xdcMainnet.rpcUrls.default.http[0]),
-    [mainnet.id]: http(),
-    [polygon.id]: http(),
-    [arbitrum.id]: http(),
-    [base.id]: http(),
+    [xdcMainnet.id]: getRpcTransport(50),
+    [mainnet.id]: getRpcTransport(1),
+    [polygon.id]: getRpcTransport(137),
+    [arbitrum.id]: getRpcTransport(42161),
+    [base.id]: getRpcTransport(8453),
     [arbitrumSepolia.id]: http(arbitrumSepolia.rpcUrls.default.http[0]),
     [xdcApothem.id]: http(xdcApothem.rpcUrls.default.http[0])
   },
