@@ -1,6 +1,7 @@
-import { and, desc, eq, gt, ilike, lt, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, ilike, lt, or, sql, sum } from "drizzle-orm";
 import { neon } from "@neondatabase/serverless";
 import {
+  forwardingFeeEvents,
   forwardingRecoveries,
   forwardingRecoveryBurns
 } from "./db/schema";
@@ -43,6 +44,7 @@ export async function getForwardingRecoveryRecord(
     sourceChainId: record.sourceChainId,
     payer: record.payer as ForwardingRecoveryRecord["payer"],
     recipientAmount: record.recipientAmount.toString(),
+    convenienceFeeAmount: record.convenienceFeeAmount.toString(),
     recipient: record.recipient as ForwardingRecoveryRecord["recipient"],
     destinationChainId: record.destinationChainId,
     createdAt: record.createdAt.toISOString(),
@@ -58,6 +60,7 @@ export type AdminForwardingRecoveryResult = {
   payer: string;
   recipient: string;
   recipientAmount: string;
+  convenienceFeeAmount: string;
   createdAt: string;
   expiresAt: string;
   stage: "awaiting-burn" | "burn-recorded" | "recovery-expired";
@@ -89,6 +92,7 @@ export async function searchForwardingRecoveries(
       payer: forwardingRecoveries.payer,
       recipient: forwardingRecoveries.recipient,
       recipientAmount: forwardingRecoveries.recipientAmount,
+      convenienceFeeAmount: forwardingRecoveries.convenienceFeeAmount,
       createdAt: forwardingRecoveries.createdAt,
       expiresAt: forwardingRecoveries.expiresAt
     })
@@ -126,12 +130,117 @@ export async function searchForwardingRecoveries(
       payer: row.payer,
       recipient: row.recipient,
       recipientAmount: row.recipientAmount.toString(),
+      convenienceFeeAmount: row.convenienceFeeAmount.toString(),
       createdAt: row.createdAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
       stage,
       recommendation
     };
   });
+}
+
+export type ForwardingRevenueReport = {
+  generatedAt: string;
+  trendDays: number;
+  totals: {
+    verifiedFeeCount: number;
+    convenienceFeeAmount: string;
+    recipientVolume: string;
+    burnRecordedCount: number;
+  };
+  routes: Array<{
+    sourceChainId: number;
+    destinationChainId: number;
+    verifiedFeeCount: number;
+    convenienceFeeAmount: string;
+    recipientVolume: string;
+    burnRecordedCount: number;
+  }>;
+  daily: Array<{
+    date: string;
+    verifiedFeeCount: number;
+    convenienceFeeAmount: string;
+    recipientVolume: string;
+    burnRecordedCount: number;
+  }>;
+};
+
+export async function getForwardingRevenueReport(
+  requestedDays = 30
+): Promise<ForwardingRevenueReport> {
+  await ensureForwardingRecoverySchema();
+  const trendDays = Math.min(90, Math.max(7, Math.trunc(requestedDays)));
+  const database = getDatabase();
+
+  const [totalRows, routeRows, dailyRows] = await Promise.all([
+    database
+      .select({
+        verifiedFeeCount: count(),
+        convenienceFeeAmount: sum(forwardingFeeEvents.convenienceFeeAmount),
+        recipientVolume: sum(forwardingFeeEvents.recipientAmount),
+        burnRecordedCount: count(forwardingFeeEvents.burnRecordedAt)
+      })
+      .from(forwardingFeeEvents),
+    database
+      .select({
+        sourceChainId: forwardingFeeEvents.sourceChainId,
+        destinationChainId: forwardingFeeEvents.destinationChainId,
+        verifiedFeeCount: count(),
+        convenienceFeeAmount: sum(forwardingFeeEvents.convenienceFeeAmount),
+        recipientVolume: sum(forwardingFeeEvents.recipientAmount),
+        burnRecordedCount: count(forwardingFeeEvents.burnRecordedAt)
+      })
+      .from(forwardingFeeEvents)
+      .groupBy(
+        forwardingFeeEvents.sourceChainId,
+        forwardingFeeEvents.destinationChainId
+      )
+      .orderBy(desc(sum(forwardingFeeEvents.convenienceFeeAmount))),
+    database
+      .select({
+        date: sql<string>`to_char(date_trunc('day', ${forwardingFeeEvents.createdAt}), 'YYYY-MM-DD')`,
+        verifiedFeeCount: count(),
+        convenienceFeeAmount: sum(forwardingFeeEvents.convenienceFeeAmount),
+        recipientVolume: sum(forwardingFeeEvents.recipientAmount),
+        burnRecordedCount: count(forwardingFeeEvents.burnRecordedAt)
+      })
+      .from(forwardingFeeEvents)
+      .where(
+        gte(
+          forwardingFeeEvents.createdAt,
+          new Date(Date.now() - trendDays * 24 * 60 * 60 * 1_000)
+        )
+      )
+      .groupBy(sql`date_trunc('day', ${forwardingFeeEvents.createdAt})`)
+      .orderBy(sql`date_trunc('day', ${forwardingFeeEvents.createdAt})`)
+  ]);
+
+  const totals = totalRows[0];
+  return {
+    generatedAt: new Date().toISOString(),
+    trendDays,
+    totals: {
+      verifiedFeeCount: totals?.verifiedFeeCount ?? 0,
+      convenienceFeeAmount: totals?.convenienceFeeAmount ?? "0",
+      recipientVolume: totals?.recipientVolume ?? "0",
+      burnRecordedCount: totals?.burnRecordedCount ?? 0
+    },
+    routes: routeRows.map((row) => ({
+      sourceChainId: row.sourceChainId,
+      destinationChainId: row.destinationChainId,
+      verifiedFeeCount: row.verifiedFeeCount,
+      convenienceFeeAmount: row.convenienceFeeAmount ?? "0",
+      recipientVolume: row.recipientVolume ?? "0",
+      burnRecordedCount: row.burnRecordedCount
+    })),
+    daily: dailyRows.map((row) => ({
+      date: row.date,
+      verifiedFeeCount: row.verifiedFeeCount,
+      convenienceFeeAmount: row.convenienceFeeAmount ?? "0",
+      recipientVolume: row.recipientVolume ?? "0",
+      burnRecordedCount: row.burnRecordedCount
+    }))
+  };
 }
 
 export async function createForwardingRecoveryRecord(
@@ -146,6 +255,7 @@ export async function createForwardingRecoveryRecord(
       sourceChainId: record.sourceChainId,
       payer: record.payer,
       recipientAmount: BigInt(record.recipientAmount),
+      convenienceFeeAmount: BigInt(record.convenienceFeeAmount),
       recipient: record.recipient,
       destinationChainId: record.destinationChainId,
       createdAt: new Date(record.createdAt),
@@ -153,6 +263,17 @@ export async function createForwardingRecoveryRecord(
     })
     .onConflictDoNothing()
     .returning({ feeTransactionHash: forwardingRecoveries.feeTransactionHash });
+  await getDatabase()
+    .insert(forwardingFeeEvents)
+    .values({
+      feeTransactionHash: normalizeHash(record.feeTransactionHash),
+      sourceChainId: record.sourceChainId,
+      destinationChainId: record.destinationChainId,
+      recipientAmount: BigInt(record.recipientAmount),
+      convenienceFeeAmount: BigInt(record.convenienceFeeAmount),
+      createdAt: new Date(record.createdAt)
+    })
+    .onConflictDoNothing();
   return created.length === 1;
 }
 
@@ -188,10 +309,23 @@ export async function markForwardingRecoveryUsed(
     })
     .onConflictDoNothing()
     .returning({ burnTransactionHash: forwardingRecoveryBurns.burnTransactionHash });
-  if (created.length === 1) return "created";
+  if (created.length === 1) {
+    await getDatabase()
+      .update(forwardingFeeEvents)
+      .set({ burnRecordedAt: new Date() })
+      .where(eq(forwardingFeeEvents.feeTransactionHash, normalizedFeeHash));
+    return "created";
+  }
 
   const existing = await getForwardingRecoveryUse(normalizedFeeHash);
-  return existing === normalizedBurnHash ? "same" : "conflict";
+  if (existing === normalizedBurnHash) {
+    await getDatabase()
+      .update(forwardingFeeEvents)
+      .set({ burnRecordedAt: new Date() })
+      .where(eq(forwardingFeeEvents.feeTransactionHash, normalizedFeeHash));
+    return "same";
+  }
+  return "conflict";
 }
 
 async function ensureForwardingRecoverySchema(): Promise<void> {
@@ -216,6 +350,7 @@ async function createSchema(): Promise<void> {
       source_chain_id integer NOT NULL DEFAULT 50,
       payer varchar(42) NOT NULL,
       recipient_amount bigint NOT NULL CHECK (recipient_amount > 0),
+      convenience_fee_amount bigint NOT NULL CHECK (convenience_fee_amount > 0),
       recipient varchar(42) NOT NULL,
       destination_chain_id integer NOT NULL,
       created_at timestamptz DEFAULT now() NOT NULL,
@@ -225,6 +360,22 @@ async function createSchema(): Promise<void> {
   await client`
     ALTER TABLE forwarding_recoveries
     ADD COLUMN IF NOT EXISTS source_chain_id integer NOT NULL DEFAULT 50
+  `;
+  await client`
+    ALTER TABLE forwarding_recoveries
+    ADD COLUMN IF NOT EXISTS convenience_fee_amount bigint
+  `;
+  await client`
+    UPDATE forwarding_recoveries
+    SET convenience_fee_amount = LEAST(
+      5000000,
+      GREATEST(100000, ((recipient_amount * 10) + 9999) / 10000)
+    )
+    WHERE convenience_fee_amount IS NULL
+  `;
+  await client`
+    ALTER TABLE forwarding_recoveries
+    ALTER COLUMN convenience_fee_amount SET NOT NULL
   `;
   await client`
     CREATE INDEX IF NOT EXISTS forwarding_recoveries_source_idx
@@ -253,6 +404,48 @@ async function createSchema(): Promise<void> {
   await client`
     CREATE UNIQUE INDEX IF NOT EXISTS forwarding_recovery_burn_hash_uidx
     ON forwarding_recovery_burns (burn_transaction_hash)
+  `;
+  await client`
+    CREATE TABLE IF NOT EXISTS forwarding_fee_events (
+      fee_transaction_hash varchar(66) PRIMARY KEY NOT NULL,
+      source_chain_id integer NOT NULL,
+      destination_chain_id integer NOT NULL,
+      recipient_amount bigint NOT NULL,
+      convenience_fee_amount bigint NOT NULL,
+      created_at timestamptz DEFAULT now() NOT NULL,
+      burn_recorded_at timestamptz
+    )
+  `;
+  await client`
+    INSERT INTO forwarding_fee_events (
+      fee_transaction_hash,
+      source_chain_id,
+      destination_chain_id,
+      recipient_amount,
+      convenience_fee_amount,
+      created_at,
+      burn_recorded_at
+    )
+    SELECT
+      recovery.fee_transaction_hash,
+      recovery.source_chain_id,
+      recovery.destination_chain_id,
+      recovery.recipient_amount,
+      recovery.convenience_fee_amount,
+      recovery.created_at,
+      burn.created_at
+    FROM forwarding_recoveries recovery
+    LEFT JOIN forwarding_recovery_burns burn
+      ON burn.fee_transaction_hash = recovery.fee_transaction_hash
+    ON CONFLICT (fee_transaction_hash) DO NOTHING
+  `;
+  await client`
+    CREATE INDEX IF NOT EXISTS forwarding_fee_events_created_at_idx
+    ON forwarding_fee_events (created_at)
+  `;
+  await client`
+    CREATE INDEX IF NOT EXISTS forwarding_fee_events_route_idx
+    ON forwarding_fee_events (source_chain_id, destination_chain_id)
   `;
 }
 
