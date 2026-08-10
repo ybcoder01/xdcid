@@ -9,11 +9,19 @@ import {
   useReadContract,
   useSendTransaction,
   useWaitForTransactionReceipt,
-  useWriteContract,
 } from "wagmi";
-import { addresses, contractsConfigured, registrarAbi, registryAbi, resolverAbi } from "../../../config/contracts";
-import { erc20TransferAbi, XDC_USDC_ADDRESS } from "../../../config/tokens";
+import {
+  addresses,
+  contractsConfigured,
+  multichainResolverAbi,
+  registrarAbi,
+  registryAbi,
+  resolverAbi
+} from "../../../config/contracts";
+import { getPaymentNetwork } from "../../../config/paymentNetworks";
+import { MultichainUsdcExecutor } from "../../../components/MultichainUsdcExecutor";
 import { parseXnsName } from "../../../lib/names";
+import { selectPaymentDestination } from "../../../lib/paymentPreparation";
 import { useRegistryStatus } from "../../../lib/useRegistryStatus";
 import {
   inspectAccountDeployment,
@@ -34,6 +42,7 @@ import {
 import {
   decodePaymentRequest,
   isDesignatedPayer,
+  paymentRequestRoute,
   type PaymentRequest,
 } from "../../../lib/paymentRequests";
 
@@ -127,15 +136,26 @@ export default function PayRequestPage() {
     }
   }, [amount, token]);
 
+  const route = signedRequest
+    ? paymentRequestRoute(signedRequest)
+    : {
+        sourceChainId: 50,
+        destinationChainId: 50,
+        transferMode: "direct" as const
+      };
+  const sourceNetwork = getPaymentNetwork(route.sourceChainId);
+  const destinationNetwork = getPaymentNetwork(route.destinationChainId);
+  const crossChain = route.sourceChainId !== route.destinationChainId;
+
   const { address, isConnected, chainId } = useAccount();
-  const publicClient = usePublicClient();
+  const verificationClient = usePublicClient({ chainId: 50 });
+  const accountClient = usePublicClient({ chainId: route.sourceChainId });
   const [signatureVerification, setSignatureVerification] = useState<PaymentRequestSignatureVerification>();
   const [signatureChecking, setSignatureChecking] = useState(false);
   const [signatureError, setSignatureError] = useState("");
   const [accountDeployment, setAccountDeployment] = useState<AccountDeploymentState>("unknown");
   const nativePayment = useSendTransaction();
-  const tokenPayment = useWriteContract();
-  const transactionHash = token === "USDC" ? tokenPayment.data : nativePayment.data;
+  const transactionHash = nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
 
   const enabled = contractsConfigured && parsedName.isValid;
@@ -181,12 +201,12 @@ export default function PayRequestPage() {
       !signedRequest ||
       !signedPayload.signature ||
       !owner.data ||
-      !publicClient ||
+      !verificationClient ||
       registry.status?.state !== "xdcid"
     ) return;
 
     setSignatureChecking(true);
-    verifyPaymentRequestSignature(publicClient, signedRequest, signedPayload.signature, owner.data)
+    verifyPaymentRequestSignature(verificationClient, signedRequest, signedPayload.signature, owner.data)
       .then((verification) => {
         if (!current) return;
         setSignatureVerification(verification);
@@ -204,20 +224,20 @@ export default function PayRequestPage() {
     return () => {
       current = false;
     };
-  }, [owner.data, publicClient, registry.status?.state, signedRequest, signedPayload.signature]);
+  }, [owner.data, verificationClient, registry.status?.state, signedRequest, signedPayload.signature]);
 
 
   useEffect(() => {
     let current = true;
     setAccountDeployment("unknown");
-    if (!address || !publicClient) return;
+    if (!address || !verificationClient) return;
     inspectAccountDeployment(publicClient, address).then((deployment) => {
       if (current) setAccountDeployment(deployment);
     });
     return () => {
       current = false;
     };
-  }, [address, publicClient]);
+  }, [address, accountClient]);
 
   const domainExpired = expiry.data ? expiry.data <= BigInt(Math.floor(Date.now() / 1000)) : true;
   const hasOwner = !!owner.data && owner.data !== zeroAddress && !domainExpired;
@@ -232,7 +252,7 @@ export default function PayRequestPage() {
     node.isError || owner.isError || expiry.isError || resolvedAddress.isError || registry.isError;
   const signaturePending = Boolean(
     signedRequest && signedPayload.signature && !signatureError &&
-    (!owner.data || !publicClient || signatureChecking || !signatureVerification),
+    (!owner.data || !verificationClient || signatureChecking || !signatureVerification),
   );
   const payerAllowed = signedRequest ? isDesignatedPayer(signedRequest, address) : true;
   const pending = nativePayment.isPending || tokenPayment.isPending || receipt.isLoading;
