@@ -45,7 +45,7 @@ export async function verifyPaymentRequestSignature(
       const recoveredSigner = await recoverTypedDataAddress({
         ...paymentRequestTypedData(request),
         signature,
-      });
+      } as never);
       const valid = recoveredSigner.toLowerCase() === expectedSigner.toLowerCase();
       return {
         valid,
@@ -55,7 +55,7 @@ export async function verifyPaymentRequestSignature(
       };
     }
 
-    const digest = hashTypedData(paymentRequestTypedData(request));
+    const digest = hashTypedData(paymentRequestTypedData(request) as never);
     const result = await client.readContract({
       address: expectedSigner,
       abi: erc1271Abi,

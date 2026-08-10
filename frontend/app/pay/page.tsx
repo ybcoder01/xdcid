@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAddress, isAddress, toHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useSignTypedData } from "wagmi";
 import { addresses, contractsConfigured, registrarAbi, registryAbi } from "../../config/contracts";
+import { PAYMENT_NETWORKS } from "../../config/paymentNetworks";
 import { parseXnsName } from "../../lib/names";
 import { useRegistryStatus } from "../../lib/useRegistryStatus";
 import { normalizePayToken, validatePayAmount, type PayToken } from "../../lib/paylinks";
@@ -15,12 +16,17 @@ import {
   PAYMENT_REQUEST_VERSION,
   paymentRequestTypedData,
   type PaymentRequest,
+  type PaymentTransferMode,
 } from "../../lib/paymentRequests";
 
 export default function PayLinksPage() {
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
-  const [token, setToken] = useState<PayToken>("XDC");
+  const [token, setToken] = useState<PayToken>("USDC");
+  const [sourceChainId, setSourceChainId] = useState(50);
+  const [destinationChainId, setDestinationChainId] = useState(50);
+  const [transferMode, setTransferMode] =
+    useState<PaymentTransferMode>("direct");
   const [reference, setReference] = useState("");
   const [description, setDescription] = useState("");
   const [payer, setPayer] = useState("");
@@ -40,6 +46,16 @@ export default function PayLinksPage() {
   const { address, isConnected, chainId } = useAccount();
   const signRequest = useSignTypedData();
   useEffect(() => setOrigin(window.location.origin), []);
+
+  const crossChain = sourceChainId !== destinationChainId;
+  useEffect(() => {
+    if (sourceChainId === destinationChainId) {
+      setTransferMode("direct");
+      return;
+    }
+    setToken("USDC");
+    if (transferMode === "direct") setTransferMode("payer-choice");
+  }, [sourceChainId, destinationChainId, transferMode]);
 
   const parsedName = useMemo(() => parseXnsName(recipient), [recipient]);
   const expiry = useMemo(() => {
@@ -115,7 +131,18 @@ export default function PayLinksPage() {
     setRevoked(false);
     setCopied(false);
     setCreateError("");
-  }, [recipient, amount, token, reference, description, payer, expiresAt]);
+  }, [
+    recipient,
+    amount,
+    token,
+    sourceChainId,
+    destinationChainId,
+    transferMode,
+    reference,
+    description,
+    payer,
+    expiresAt
+  ]);
 
   async function createSignedLink() {
     if (!canCreate || !address) return;
@@ -125,6 +152,9 @@ export default function PayLinksPage() {
       const request: PaymentRequest = {
         version: PAYMENT_REQUEST_VERSION,
         chainId: PAYMENT_REQUEST_CHAIN_ID,
+        sourceChainId,
+        destinationChainId,
+        transferMode,
         name: parsedName.name,
         amount: amount.trim(),
         token: normalizePayToken(token),
@@ -135,7 +165,9 @@ export default function PayLinksPage() {
         expires: expiry,
         nonce: toHex(nonceBytes),
       };
-      const signature = await signRequest.signTypedDataAsync(paymentRequestTypedData(request));
+      const signature = await signRequest.signTypedDataAsync(
+        paymentRequestTypedData(request) as never
+      );
       const portableLink = buildSignedPaymentLink(origin, request, signature);
       setPortablePayLink(portableLink);
 
@@ -222,7 +254,7 @@ export default function PayLinksPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">XDCID Payment Requests</p>
       <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950">Create a verifiable payment request</h1>
       <p className="mt-4 max-w-2xl text-lg text-slate-600">
-        Sign a versioned XDC or USDC request with the current XNS owner account. Signing is gasless and XDCID never holds funds.
+        Sign a route-aware USDC request with the current XNS owner account. Same-chain XDC remains available on XDC Network. Signing is gasless and XDCID never holds funds.
       </p>
 
       <section className="mt-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
@@ -241,11 +273,67 @@ export default function PayLinksPage() {
 
           <label className="block">
             <span className="text-sm font-semibold text-slate-800">Token</span>
-            <select className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" value={token} onChange={(event) => setToken(normalizePayToken(event.target.value))}>
-              <option value="XDC">XDC</option>
-              <option value="USDC">USDC on XDC</option>
+            <select
+              className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
+              value={token}
+              onChange={(event) => setToken(normalizePayToken(event.target.value))}
+            >
+              {!crossChain && sourceChainId === 50 ? (
+                <option value="XDC">XDC</option>
+              ) : null}
+              <option value="USDC">USDC</option>
             </select>
           </label>
+
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-800">Payer sends from</span>
+            <select
+              className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
+              value={sourceChainId}
+              onChange={(event) => setSourceChainId(Number(event.target.value))}
+            >
+              {PAYMENT_NETWORKS.map((network) => (
+                <option key={network.chainId} value={network.chainId}>
+                  {network.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-semibold text-slate-800">Recipient receives on</span>
+            <select
+              className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
+              value={destinationChainId}
+              onChange={(event) => setDestinationChainId(Number(event.target.value))}
+            >
+              {PAYMENT_NETWORKS.map((network) => (
+                <option key={network.chainId} value={network.chainId}>
+                  {network.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {crossChain ? (
+            <label className="block md:col-span-2">
+              <span className="text-sm font-semibold text-slate-800">Transfer method</span>
+              <select
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
+                value={transferMode}
+                onChange={(event) =>
+                  setTransferMode(event.target.value as PaymentTransferMode)
+                }
+              >
+                <option value="payer-choice">Let payer choose</option>
+                <option value="automatic">Automatic forwarding</option>
+                <option value="standard">Standard transfer</option>
+              </select>
+              <span className="mt-2 block text-xs text-slate-500">
+                Automatic forwarding avoids destination gas. Standard transfer requires the payer to submit the destination mint.
+              </span>
+            </label>
+          ) : null}
 
           <label className="block md:col-span-2">
             <span className="text-sm font-semibold text-slate-800">Payment reference</span>
