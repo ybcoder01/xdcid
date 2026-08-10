@@ -18,6 +18,7 @@ import {
   verifyPaymentRequestSignature,
 } from "../../../../../lib/accountSignatures";
 import {
+  paymentRequestId,
   validatePaymentRequestCancellation,
   type PaymentRequestCancellation,
 } from "../../../../../lib/paymentCancellation";
@@ -26,10 +27,7 @@ import {
   isPayLinkStoreConfigured,
   isPaymentRequestCancelled,
 } from "../../../../../lib/payLinkStore";
-import {
-  decodePaymentRequest,
-  paymentRequestId,
-} from "../../../../../lib/paymentRequests";
+import { decodePaymentRequest } from "../../../../../lib/paymentRequests";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
