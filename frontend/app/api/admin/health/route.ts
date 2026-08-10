@@ -1,9 +1,25 @@
 import { neon } from "@neondatabase/serverless";
+import { requireAdminSession } from "../../../../lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const session = await requireAdminSession(request);
+  if (!session) {
+    return Response.json(
+      { error: "Admin authentication required" },
+      {
+        status: 401,
+        headers: {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-robots-tag": "noindex, nofollow, noarchive",
+        },
+      },
+    );
+  }
+
   const databaseConfigured = Boolean(process.env.DATABASE_URL);
   const startedAt = Date.now();
   let databaseHealthy = false;
