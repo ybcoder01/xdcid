@@ -18,6 +18,12 @@ describe("multi-network RPC fallback", function () {
     ]);
   });
 
+  it("uses the requested MEV Blocker endpoints for Ethereum", function () {
+    const urls = getRpcUrls(1);
+    expect(urls).to.include("https://rpc.mevblocker.io");
+    expect(urls).to.include("https://rpc.mevblocker.io/fullprivacy");
+  });
+
   it("provides at least two HTTPS fallbacks for every supported mainnet", function () {
     for (const chainId of SUPPORTED_RPC_CHAIN_IDS) {
       const urls = getRpcUrls(chainId);
