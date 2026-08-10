@@ -35,7 +35,6 @@ describe("forwarding failure recovery", function () {
     });
     expect(reverse.sourceChainId).to.equal(42161);
     expect(reverse.destinationChainId).to.equal(50);
-
   });
 
   it("matches a stored fee record only to the same transfer details", function () {
@@ -71,6 +70,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash: "0x1234",
+        sourceChainId: 50,
         recipientAmount: "10000000",
         recipient,
         destinationChainId: 42161
@@ -80,6 +80,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash,
+        sourceChainId: 50,
         recipientAmount: "0",
         recipient,
         destinationChainId: 42161
@@ -89,6 +90,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash,
+        sourceChainId: 50,
         recipientAmount: "10000000",
         recipient,
         destinationChainId: 50
@@ -98,6 +100,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash,
+        sourceChainId: 50,
         recipientAmount: "10000000",
         recipient,
         destinationChainId: 10
