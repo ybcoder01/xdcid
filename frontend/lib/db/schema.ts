@@ -72,7 +72,6 @@ export const forwardingRecoveryBurnsRelations = relations(
   })
 );
 
-
 export const payLinks = pgTable(
   "pay_links",
   {
@@ -93,7 +92,6 @@ export const payLinks = pgTable(
   ]
 );
 
-
 export const payLinkCancellations = pgTable(
   "pay_link_cancellations",
   {
@@ -109,5 +107,23 @@ export const payLinkCancellations = pgTable(
   (table) => [
     index("pay_link_cancellations_name_idx").on(table.name),
     index("pay_link_cancellations_nonce_idx").on(table.nonce)
+  ]
+);
+
+export const adminAuthChallenges = pgTable(
+  "admin_auth_challenges",
+  {
+    id: varchar("id", { length: 32 }).primaryKey(),
+    address: varchar("address", { length: 42 }).notNull(),
+    messageHash: varchar("message_hash", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" })
+  },
+  (table) => [
+    index("admin_auth_challenges_address_idx").on(table.address),
+    index("admin_auth_challenges_expires_at_idx").on(table.expiresAt)
   ]
 );
