@@ -16,6 +16,7 @@ import {
   XDCID_MIN_CONVENIENCE_FEE,
 } from "../lib/cctpMainnet";
 import { getPaymentRouteCapability } from "../lib/paymentRouteCapabilities";
+import { AdminPaymentRecovery } from "./AdminPaymentRecovery";
 
 type HealthResponse = {
   checkedAt: string;
@@ -118,6 +119,8 @@ export function AdminOperations() {
 
   return (
     <div className="mt-8 grid gap-8">
+      <AdminPaymentRecovery />
+
       <section>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

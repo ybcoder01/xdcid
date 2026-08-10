@@ -1,4 +1,4 @@
-import { and, eq, gt, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, lt, or, sql } from "drizzle-orm";
 import { neon } from "@neondatabase/serverless";
 import {
   forwardingRecoveries,
@@ -48,6 +48,90 @@ export async function getForwardingRecoveryRecord(
     createdAt: record.createdAt.toISOString(),
     expiresAt: record.expiresAt.toISOString()
   };
+}
+
+export type AdminForwardingRecoveryResult = {
+  feeTransactionHash: string;
+  burnTransactionHash: string | null;
+  sourceChainId: number;
+  destinationChainId: number;
+  payer: string;
+  recipient: string;
+  recipientAmount: string;
+  createdAt: string;
+  expiresAt: string;
+  stage: "awaiting-burn" | "burn-recorded" | "recovery-expired";
+  recommendation: string;
+};
+
+export async function searchForwardingRecoveries(
+  query: string
+): Promise<AdminForwardingRecoveryResult[]> {
+  await ensureForwardingRecoverySchema();
+  const normalized = query.trim().toLowerCase();
+  const hashQuery = /^0x[0-9a-f]{64}$/.test(normalized);
+  const addressQuery = /^0x[0-9a-f]{40}$/.test(normalized);
+  if (!hashQuery && !addressQuery) return [];
+
+  const condition = hashQuery
+    ? or(
+        eq(forwardingRecoveries.feeTransactionHash, normalized),
+        eq(forwardingRecoveryBurns.burnTransactionHash, normalized)
+      )
+    : ilike(forwardingRecoveries.payer, normalized);
+
+  const rows = await getDatabase()
+    .select({
+      feeTransactionHash: forwardingRecoveries.feeTransactionHash,
+      burnTransactionHash: forwardingRecoveryBurns.burnTransactionHash,
+      sourceChainId: forwardingRecoveries.sourceChainId,
+      destinationChainId: forwardingRecoveries.destinationChainId,
+      payer: forwardingRecoveries.payer,
+      recipient: forwardingRecoveries.recipient,
+      recipientAmount: forwardingRecoveries.recipientAmount,
+      createdAt: forwardingRecoveries.createdAt,
+      expiresAt: forwardingRecoveries.expiresAt
+    })
+    .from(forwardingRecoveries)
+    .leftJoin(
+      forwardingRecoveryBurns,
+      eq(
+        forwardingRecoveries.feeTransactionHash,
+        forwardingRecoveryBurns.feeTransactionHash
+      )
+    )
+    .where(condition)
+    .orderBy(desc(forwardingRecoveries.createdAt))
+    .limit(25);
+
+  const now = Date.now();
+  return rows.map((row) => {
+    const stage = row.burnTransactionHash
+      ? "burn-recorded"
+      : row.expiresAt.getTime() <= now
+        ? "recovery-expired"
+        : "awaiting-burn";
+    const recommendation =
+      stage === "burn-recorded"
+        ? "The burn was recorded. Check Circle attestation and destination mint in the payer recovery flow."
+        : stage === "awaiting-burn"
+          ? "The payer can resume automatic forwarding from the source wallet using the fee transaction hash."
+          : "The recovery window has expired. Review the source-chain transactions before attempting another payment.";
+
+    return {
+      feeTransactionHash: row.feeTransactionHash,
+      burnTransactionHash: row.burnTransactionHash,
+      sourceChainId: row.sourceChainId,
+      destinationChainId: row.destinationChainId,
+      payer: row.payer,
+      recipient: row.recipient,
+      recipientAmount: row.recipientAmount.toString(),
+      createdAt: row.createdAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
+      stage,
+      recommendation
+    };
+  });
 }
 
 export async function createForwardingRecoveryRecord(
