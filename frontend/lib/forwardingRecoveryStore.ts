@@ -40,6 +40,7 @@ export async function getForwardingRecoveryRecord(
   return {
     version: 1,
     feeTransactionHash: record.feeTransactionHash as ForwardingRecoveryRecord["feeTransactionHash"],
+    sourceChainId: record.sourceChainId,
     payer: record.payer as ForwardingRecoveryRecord["payer"],
     recipientAmount: record.recipientAmount.toString(),
     recipient: record.recipient as ForwardingRecoveryRecord["recipient"],
@@ -58,6 +59,7 @@ export async function createForwardingRecoveryRecord(
     .insert(forwardingRecoveries)
     .values({
       feeTransactionHash: normalizeHash(record.feeTransactionHash),
+      sourceChainId: record.sourceChainId,
       payer: record.payer,
       recipientAmount: BigInt(record.recipientAmount),
       recipient: record.recipient,
@@ -127,6 +129,7 @@ async function createSchema(): Promise<void> {
   await client`
     CREATE TABLE IF NOT EXISTS forwarding_recoveries (
       fee_transaction_hash varchar(66) PRIMARY KEY NOT NULL,
+      source_chain_id integer NOT NULL DEFAULT 50,
       payer varchar(42) NOT NULL,
       recipient_amount bigint NOT NULL CHECK (recipient_amount > 0),
       recipient varchar(42) NOT NULL,
@@ -134,6 +137,14 @@ async function createSchema(): Promise<void> {
       created_at timestamptz DEFAULT now() NOT NULL,
       expires_at timestamptz NOT NULL
     )
+  `;
+  await client`
+    ALTER TABLE forwarding_recoveries
+    ADD COLUMN IF NOT EXISTS source_chain_id integer NOT NULL DEFAULT 50
+  `;
+  await client`
+    CREATE INDEX IF NOT EXISTS forwarding_recoveries_source_idx
+    ON forwarding_recoveries (source_chain_id)
   `;
   await client`
     CREATE INDEX IF NOT EXISTS forwarding_recoveries_payer_idx
