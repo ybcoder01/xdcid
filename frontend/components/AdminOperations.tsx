@@ -8,6 +8,7 @@ import {
   PAYMENT_NETWORKS,
   type PaymentNetwork,
 } from "../config/paymentNetworks";
+import { getRpcUrls } from "../config/rpcTransports";
 import {
   XDCID_CONVENIENCE_FEE_BPS,
   XDCID_FEE_RECIPIENT,
@@ -52,6 +53,7 @@ function NetworkHealthCard({ network }: { network: PaymentNetwork }) {
     query: { refetchInterval: 30_000 },
   });
   const healthy = block.data !== undefined && !block.isError;
+  const rpcCount = getRpcUrls(network.chainId).length;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -66,6 +68,9 @@ function NetworkHealthCard({ network }: { network: PaymentNetwork }) {
       </div>
       <p className="mt-4 text-xs text-slate-600">
         Latest block: {block.data?.toString() || "Unavailable"}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        Fallback providers: {rpcCount}
       </p>
       <p className="mt-1 break-all text-xs text-slate-500">
         USDC: {network.usdcAddress}
