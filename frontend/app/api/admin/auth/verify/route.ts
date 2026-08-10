@@ -10,6 +10,7 @@ import {
 } from "../../../../../lib/adminAuth";
 import { getDatabase, isDatabaseConfigured } from "../../../../../lib/db/client";
 import { adminAuthChallenges } from "../../../../../lib/db/schema";
+import { ensureAdminAuthSchema } from "../../../../../lib/adminAuthStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
   try {
     const now = new Date();
     const address = getAddress(body.address);
+    await ensureAdminAuthSchema();
     const database = getDatabase();
     const [challenge] = await database
       .select()
