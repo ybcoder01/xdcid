@@ -184,6 +184,7 @@ async function registerRecovery(input: ForwardingRecoveryInput) {
   const record: ForwardingRecoveryRecord = {
     version: 1,
     feeTransactionHash: input.feeTransactionHash,
+    sourceChainId: input.sourceChainId,
     payer,
     recipientAmount: input.recipientAmount.toString(),
     recipient: input.recipient,
@@ -261,9 +262,9 @@ async function consumeRecovery(
 async function verifyFeeTransaction(
   input: ForwardingRecoveryInput
 ): Promise<Address> {
-  const network = getPaymentNetwork(50);
-  if (!network) throw new Error("XDC payment network is unavailable");
-  const client = getXdcClient();
+  const network = getPaymentNetwork(input.sourceChainId);
+  if (!network) throw new Error("Payment source network is unavailable");
+  const client = getPaymentClient(input.sourceChainId);
   const [transaction, receipt] = await Promise.all([
     client.getTransaction({ hash: input.feeTransactionHash }),
     client.getTransactionReceipt({ hash: input.feeTransactionHash })
@@ -273,7 +274,7 @@ async function verifyFeeTransaction(
     !transaction.to ||
     getAddress(transaction.to) !== getAddress(network.usdcAddress)
   ) {
-    throw new Error("Fee transaction is not a successful XDC USDC transfer");
+    throw new Error("Fee transaction is not a successful source-network USDC transfer");
   }
 
   const decoded = decodeFunctionData({
@@ -297,13 +298,13 @@ async function verifyForwardedBurn(
   record: ForwardingRecoveryRecord,
   burnTransactionHash: Hash
 ): Promise<void> {
-  const source = getPaymentNetwork(50);
+  const source = getPaymentNetwork(record.sourceChainId);
   const destination = getPaymentNetwork(record.destinationChainId);
   if (!source || !destination) {
     throw new Error("Recovery route is no longer supported");
   }
 
-  const client = getXdcClient();
+  const client = getPaymentClient(record.sourceChainId);
   const [transaction, receipt] = await Promise.all([
     client.getTransaction({ hash: burnTransactionHash }),
     client.getTransactionReceipt({ hash: burnTransactionHash })
@@ -353,16 +354,40 @@ async function verifyForwardedBurn(
   }
 }
 
-function getXdcClient() {
-  const urls = (
-    process.env.XDC_RPC_URLS ||
-    process.env.XDC_MAINNET_RPC_URL ||
-    "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
-  )
+const PAYMENT_RPC_CONFIG: Record<
+  number,
+  { environment: string; fallbackUrls: string }
+> = {
+  1: {
+    environment: "ETHEREUM_RPC_URLS",
+    fallbackUrls: "https://ethereum-rpc.publicnode.com"
+  },
+  50: {
+    environment: "XDC_RPC_URLS",
+    fallbackUrls: "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
+  },
+  137: {
+    environment: "POLYGON_RPC_URLS",
+    fallbackUrls: "https://polygon-bor-rpc.publicnode.com"
+  },
+  8453: {
+    environment: "BASE_RPC_URLS",
+    fallbackUrls: "https://base-rpc.publicnode.com"
+  },
+  42161: {
+    environment: "ARBITRUM_RPC_URLS",
+    fallbackUrls: "https://arbitrum-one-rpc.publicnode.com"
+  }
+};
+
+function getPaymentClient(chainId: number) {
+  const config = PAYMENT_RPC_CONFIG[chainId];
+  if (!config) throw new Error("Payment source RPC is unavailable");
+  const urls = (process.env[config.environment] || config.fallbackUrls)
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  const timeout = Number(process.env.XDC_RPC_TIMEOUT_MS || 3_500);
+  const timeout = Number(process.env.PAYMENT_RPC_TIMEOUT_MS || 3_500);
   return createPublicClient({
     transport: fallback(
       urls.map((url) =>
