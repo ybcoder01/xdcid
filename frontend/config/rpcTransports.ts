@@ -5,8 +5,8 @@ export type SupportedRpcChainId = (typeof SUPPORTED_RPC_CHAIN_IDS)[number];
 
 const DEFAULT_RPC_URLS: Record<SupportedRpcChainId, readonly string[]> = {
   1: [
-    "https://cloudflare-eth.com",
-    "https://eth.llamarpc.com",
+    "https://rpc.mevblocker.io",
+    "https://rpc.mevblocker.io/fullprivacy",
   ],
   50: [
     "https://rpc.xdcrpc.com",
