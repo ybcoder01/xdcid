@@ -14,6 +14,7 @@ export const forwardingRecoveries = pgTable(
   "forwarding_recoveries",
   {
     feeTransactionHash: varchar("fee_transaction_hash", { length: 66 }).primaryKey(),
+    sourceChainId: integer("source_chain_id").notNull().default(50),
     payer: varchar("payer", { length: 42 }).notNull(),
     recipientAmount: bigint("recipient_amount", { mode: "bigint" }).notNull(),
     recipient: varchar("recipient", { length: 42 }).notNull(),
@@ -25,6 +26,7 @@ export const forwardingRecoveries = pgTable(
   },
   (table) => [
     index("forwarding_recoveries_payer_idx").on(table.payer),
+    index("forwarding_recoveries_source_idx").on(table.sourceChainId),
     index("forwarding_recoveries_expires_at_idx").on(table.expiresAt),
     index("forwarding_recoveries_destination_idx").on(table.destinationChainId)
   ]

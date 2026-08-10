@@ -116,10 +116,12 @@ export function MultichainUsdcExecutor({
   const crossChain = sourceChainId !== destinationChainId;
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
-    destinationChainId
+    destinationChainId,
+    process.env.NEXT_PUBLIC_XDCID_PREVIEW_FORWARDING_ROUTES
   );
   const forwardingAvailable =
-    routeCapability.automaticForwarding === "mainnet-enabled";
+    routeCapability.automaticForwarding === "mainnet-enabled" ||
+    routeCapability.automaticForwarding === "mainnet-preview";
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
 
@@ -127,7 +129,7 @@ export function MultichainUsdcExecutor({
     setRecoveryReady(false);
     setRecoveryStatus("idle");
     setFeeHash("");
-  }, [amount, destinationChainId, recipient]);
+  }, [amount, sourceChainId, destinationChainId, recipient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -280,7 +282,10 @@ export function MultichainUsdcExecutor({
         let activeFeeHash = feeHash;
         if (!recoveryReady) {
           setPhase("payingFee");
-          const feeRequest = prepareXdcidConvenienceFeeTransfer(units);
+          const feeRequest = prepareXdcidConvenienceFeeTransfer(
+            sourceChainId,
+            units
+          );
           const nextFeeHash = await writeContractAsync(feeRequest as never);
           setFeeHash(nextFeeHash);
           setRecoveryFeeHash(nextFeeHash);
@@ -289,6 +294,7 @@ export function MultichainUsdcExecutor({
           setPhase("registeringRecovery");
           await registerForwardingRecovery({
             feeTransactionHash: nextFeeHash,
+            sourceChainId,
             recipientAmount: units,
             recipient,
             destinationChainId
@@ -313,6 +319,7 @@ export function MultichainUsdcExecutor({
           await consumeForwardingRecovery({
             feeTransactionHash: activeFeeHash,
             burnTransactionHash: nextBurnHash,
+            sourceChainId,
             recipientAmount: units,
             recipient,
             destinationChainId
@@ -401,6 +408,7 @@ export function MultichainUsdcExecutor({
       const recipientAmount = parseMainnetUsdcAmount(amount);
       const response = await registerForwardingRecovery({
         feeTransactionHash: recoveryFeeHash,
+        sourceChainId,
         recipientAmount,
         recipient,
         destinationChainId
@@ -695,6 +703,7 @@ async function ensureForwardingRecoveryAvailable(): Promise<void> {
 
 async function registerForwardingRecovery(input: {
   feeTransactionHash: string;
+  sourceChainId: number;
   recipientAmount: bigint;
   recipient: Address;
   destinationChainId: number;
@@ -705,6 +714,7 @@ async function registerForwardingRecovery(input: {
     body: JSON.stringify({
       action: "register",
       feeTransactionHash: input.feeTransactionHash,
+      sourceChainId: input.sourceChainId,
       recipientAmount: input.recipientAmount.toString(),
       recipient: input.recipient,
       destinationChainId: input.destinationChainId
@@ -720,6 +730,7 @@ async function registerForwardingRecovery(input: {
 async function consumeForwardingRecovery(input: {
   feeTransactionHash: string;
   burnTransactionHash: string;
+  sourceChainId: number;
   recipientAmount: bigint;
   recipient: Address;
   destinationChainId: number;
@@ -731,6 +742,7 @@ async function consumeForwardingRecovery(input: {
       action: "consume",
       feeTransactionHash: input.feeTransactionHash,
       burnTransactionHash: input.burnTransactionHash,
+      sourceChainId: input.sourceChainId,
       recipientAmount: input.recipientAmount.toString(),
       recipient: input.recipient,
       destinationChainId: input.destinationChainId

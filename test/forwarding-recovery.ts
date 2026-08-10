@@ -13,21 +13,34 @@ describe("forwarding failure recovery", function () {
   it("normalizes the public recovery details", function () {
     const parsed = parseForwardingRecoveryInput({
       feeTransactionHash,
+      sourceChainId: 50,
       recipientAmount: "10000000",
       recipient,
       destinationChainId: 42161
     });
 
     expect(parsed.feeTransactionHash).to.equal(feeTransactionHash);
+    expect(parsed.sourceChainId).to.equal(50);
     expect(parsed.recipientAmount).to.equal(10_000_000n);
     expect(parsed.recipient).to.equal(recipient);
     expect(parsed.destinationChainId).to.equal(42161);
     expect(FORWARDING_RECOVERY_TTL_SECONDS).to.equal(2_592_000);
+
+    const reverse = parseForwardingRecoveryInput({
+      feeTransactionHash,
+      sourceChainId: 42161,
+      recipientAmount: "10000000",
+      recipient,
+      destinationChainId: 50
+    });
+    expect(reverse.sourceChainId).to.equal(42161);
+    expect(reverse.destinationChainId).to.equal(50);
   });
 
   it("matches a stored fee record only to the same transfer details", function () {
     const input = parseForwardingRecoveryInput({
       feeTransactionHash,
+      sourceChainId: 50,
       recipientAmount: "10000000",
       recipient,
       destinationChainId: 42161
@@ -35,6 +48,7 @@ describe("forwarding failure recovery", function () {
     const record: ForwardingRecoveryRecord = {
       version: 1,
       feeTransactionHash: input.feeTransactionHash,
+      sourceChainId: input.sourceChainId,
       payer: recipient,
       recipientAmount: input.recipientAmount.toString(),
       recipient: input.recipient,
@@ -52,10 +66,11 @@ describe("forwarding failure recovery", function () {
     ).to.equal(false);
   });
 
-  it("rejects malformed, zero, XDC-destination, and unsupported recovery details", function () {
+  it("rejects malformed, zero, same-chain, and unsupported recovery details", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash: "0x1234",
+        sourceChainId: 50,
         recipientAmount: "10000000",
         recipient,
         destinationChainId: 42161
@@ -65,6 +80,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash,
+        sourceChainId: 50,
         recipientAmount: "0",
         recipient,
         destinationChainId: 42161
@@ -74,6 +90,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash,
+        sourceChainId: 50,
         recipientAmount: "10000000",
         recipient,
         destinationChainId: 50
@@ -83,6 +100,7 @@ describe("forwarding failure recovery", function () {
     expect(() =>
       parseForwardingRecoveryInput({
         feeTransactionHash,
+        sourceChainId: 50,
         recipientAmount: "10000000",
         recipient,
         destinationChainId: 10

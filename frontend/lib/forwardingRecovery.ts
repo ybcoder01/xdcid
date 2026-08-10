@@ -9,6 +9,7 @@ export const FORWARDING_RECOVERY_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export type ForwardingRecoveryInput = {
   feeTransactionHash: Hash;
+  sourceChainId: number;
   recipientAmount: bigint;
   recipient: Address;
   destinationChainId: number;
@@ -17,6 +18,7 @@ export type ForwardingRecoveryInput = {
 export type ForwardingRecoveryRecord = {
   version: 1;
   feeTransactionHash: Hash;
+  sourceChainId: number;
   payer: Address;
   recipientAmount: string;
   recipient: Address;
@@ -61,14 +63,17 @@ export function parseForwardingRecoveryInput(
     throw new Error("Recipient must be a non-zero address");
   }
 
+  const sourceChainId = Number(value.sourceChainId);
   const destinationChainId = Number(value.destinationChainId);
+  const source = getPaymentNetwork(sourceChainId);
   const destination = getPaymentNetwork(destinationChainId);
-  if (!destination || destinationChainId === 50) {
-    throw new Error("Recovery destination is not supported");
+  if (!source || !destination || sourceChainId === destinationChainId) {
+    throw new Error("Recovery route is not supported");
   }
 
   return {
     feeTransactionHash,
+    sourceChainId,
     recipientAmount,
     recipient,
     destinationChainId
@@ -82,6 +87,7 @@ export function recoveryRecordMatches(
   return (
     record.feeTransactionHash.toLowerCase() ===
       input.feeTransactionHash.toLowerCase() &&
+    record.sourceChainId === input.sourceChainId &&
     record.recipientAmount === input.recipientAmount.toString() &&
     record.recipient.toLowerCase() === input.recipient.toLowerCase() &&
     record.destinationChainId === input.destinationChainId

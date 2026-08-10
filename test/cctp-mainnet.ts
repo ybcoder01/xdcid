@@ -109,7 +109,10 @@ describe("mainnet CCTP transaction preparation", function () {
   });
 
   it("prepares the separate XDCID convenience-fee transfer", function () {
-    const prepared = prepareXdcidConvenienceFeeTransfer(1_000_000_000n);
+    const prepared = prepareXdcidConvenienceFeeTransfer(
+      50,
+      1_000_000_000n
+    );
     expect(prepared.chainId).to.equal(50);
     expect(prepared.functionName).to.equal("transfer");
     expect(prepared.args).to.deep.equal([XDCID_FEE_RECIPIENT, 1_000_000n]);
@@ -170,16 +173,18 @@ describe("mainnet CCTP transaction preparation", function () {
     ]);
   });
 
-  it("rejects automatic forwarding from a non-XDC source", function () {
-    expect(() =>
-      prepareMainnetCctpForwardedBurn({
-        sourceChainId: 42161,
-        destinationChainId: 50,
-        amount: "10",
-        recipient,
-        forwardFee: 57_543n,
-        minimumFeeBps: 0
-      })
-    ).to.throw("available from XDC only");
+  it("prepares automatic forwarding from Arbitrum to XDC", function () {
+    const prepared = prepareMainnetCctpForwardedBurn({
+      sourceChainId: 42161,
+      destinationChainId: 50,
+      amount: "10",
+      recipient,
+      forwardFee: 57_543n,
+      minimumFeeBps: 0
+    });
+
+    expect(prepared.source.chainId).to.equal(42161);
+    expect(prepared.destination.chainId).to.equal(50);
+    expect(prepared.burnRequest.args[1]).to.equal(18);
   });
 });

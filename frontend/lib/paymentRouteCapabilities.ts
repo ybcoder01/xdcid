@@ -1,5 +1,6 @@
 export type AutomaticForwardingStatus =
   | "mainnet-enabled"
+  | "mainnet-preview"
   | "testnet-validated"
   | "unavailable";
 
@@ -26,13 +27,18 @@ const TESTNET_VALIDATED_FORWARDING_DESTINATIONS = new Set([
   ARBITRUM_CHAIN_ID
 ]);
 
-const MAINNET_ENABLED_FORWARDING_ROUTES = new Set([
-  `${XDC_CHAIN_ID}:${ARBITRUM_CHAIN_ID}`
-]);
+const MAINNET_ENABLED_FORWARDING_ROUTES = new Set(
+  [...SUPPORTED_PAYMENT_CHAIN_IDS].flatMap((sourceChainId) =>
+    [...SUPPORTED_PAYMENT_CHAIN_IDS]
+      .filter((destinationChainId) => destinationChainId !== sourceChainId)
+      .map((destinationChainId) => `${sourceChainId}:${destinationChainId}`)
+  )
+);
 
 export function getPaymentRouteCapability(
   sourceChainId: number,
-  destinationChainId: number
+  destinationChainId: number,
+  previewRoutes = ""
 ): PaymentRouteCapability {
   const supported =
     SUPPORTED_PAYMENT_CHAIN_IDS.has(sourceChainId) &&
@@ -64,9 +70,17 @@ export function getPaymentRouteCapability(
     sourceChainId === XDC_CHAIN_ID &&
     TESTNET_VALIDATED_FORWARDING_DESTINATIONS.has(destinationChainId)
   ) {
+    const previewRouteSet = new Set(
+      previewRoutes
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    );
     return {
       standardTransfer: true,
-      automaticForwarding: "testnet-validated"
+      automaticForwarding: previewRouteSet.has(routeKey)
+        ? "mainnet-preview"
+        : "testnet-validated"
     };
   }
 
@@ -81,6 +95,9 @@ export function automaticForwardingMessage(
 ): string {
   if (status === "mainnet-enabled") {
     return "Automatic forwarding is enabled for this mainnet route.";
+  }
+  if (status === "mainnet-preview") {
+    return "Automatic forwarding is enabled for controlled mainnet validation on this preview deployment.";
   }
   if (status === "testnet-validated") {
     return "Automatic forwarding passed testnet validation and is pending mainnet validation for this route.";
