@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { formatUnits } from "viem";
 import { getPaymentNetwork } from "../config/paymentNetworks";
 
@@ -64,10 +64,7 @@ export function AdminPaymentRecovery() {
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
 
-  async function search(event: FormEvent) {
-    event.preventDefault();
-    const value = query.trim();
-    if (!value || searching) return;
+  const runSearch = useCallback(async (value: string) => {
     setSearching(true);
     setError("");
     setResponse(undefined);
@@ -89,12 +86,28 @@ export function AdminPaymentRecovery() {
     } finally {
       setSearching(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search)
+      .get("paymentSearch")
+      ?.trim();
+    if (!value) return;
+    setQuery(value);
+    void runSearch(value);
+  }, [runSearch]);
+
+  function search(event: FormEvent) {
+    event.preventDefault();
+    const value = query.trim();
+    if (!value || searching) return;
+    void runSearch(value);
   }
 
   const empty = response && response.results.length === 0;
 
   return (
-    <section>
+    <section id="payment-recovery">
       <h2 className="text-2xl font-semibold text-slate-950">
         Payment and forwarding recovery
       </h2>
