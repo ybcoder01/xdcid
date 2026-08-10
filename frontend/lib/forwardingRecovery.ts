@@ -21,6 +21,7 @@ export type ForwardingRecoveryRecord = {
   sourceChainId: number;
   payer: Address;
   recipientAmount: string;
+  convenienceFeeAmount: string;
   recipient: Address;
   destinationChainId: number;
   createdAt: string;
