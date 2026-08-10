@@ -11,6 +11,7 @@ import {
   useWriteContract
 } from "wagmi";
 import { addresses, registrarAbi } from "../../config/contracts";
+import { AdminOperations } from "../../components/AdminOperations";
 
 export default function AdminPage() {
   const { address: account, isConnected } = useAccount();
@@ -105,7 +106,7 @@ export default function AdminPage() {
         <div className="rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Owner controls</p>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">Admin dashboard</h1>
-          <p className="mt-2 text-sm text-neutral-600">Withdraw XDC registration and renewal revenue held by the registrar contract.</p>
+          <p className="mt-2 text-sm text-neutral-600">Monitor system health and payment routes, and manage registrar revenue with the owner wallet.</p>
 
           <div className="mt-8 grid gap-4">
             <div className="rounded-md border border-black/10 bg-neutral-50 p-4">
@@ -171,6 +172,8 @@ export default function AdminPage() {
           </div>
         </aside>
       </section>
+
+      <AdminOperations />
     </main>
   );
 }
