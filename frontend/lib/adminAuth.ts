@@ -130,8 +130,10 @@ export function parseAdminSession(token: string | undefined): AdminSessionPayloa
   if (!segment || !signature || extra) return null;
 
   try {
-    const expected = Buffer.from(signSegment(segment), "utf8");
-    const supplied = Buffer.from(signature, "utf8");
+    const expected = Uint8Array.from(
+      Buffer.from(signSegment(segment), "utf8"),
+    );
+    const supplied = Uint8Array.from(Buffer.from(signature, "utf8"));
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
       return null;
     }
