@@ -235,9 +235,6 @@ export function buildMainnetForwardingFeeUrl(
   sourceChainId: number,
   destinationChainId: number
 ): string {
-  if (sourceChainId !== XDC_MAINNET_CHAIN_ID) {
-    throw new Error("Automatic forwarding is currently available from XDC only");
-  }
   const source = requireNetwork(sourceChainId);
   const destination = requireNetwork(destinationChainId);
   if (source.chainId === destination.chainId) {
@@ -292,8 +289,11 @@ export function parseMainnetForwardingQuote(payload: unknown): {
   return { forwardFee, minimumFeeBps };
 }
 
-export function prepareXdcidConvenienceFeeTransfer(amount: bigint) {
-  const source = requireNetwork(XDC_MAINNET_CHAIN_ID);
+export function prepareXdcidConvenienceFeeTransfer(
+  sourceChainId: number,
+  amount: bigint
+) {
+  const source = requireNetwork(sourceChainId);
   return {
     chainId: source.chainId,
     address: source.usdcAddress as Address,
@@ -314,9 +314,6 @@ export function prepareMainnetCctpForwardedBurn(input: {
   forwardFee: bigint;
   minimumFeeBps: number;
 }) {
-  if (input.sourceChainId !== XDC_MAINNET_CHAIN_ID) {
-    throw new Error("Automatic forwarding is currently available from XDC only");
-  }
   const source = requireNetwork(input.sourceChainId);
   const destination = requireNetwork(input.destinationChainId);
   if (source.chainId === destination.chainId) {
