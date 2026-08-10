@@ -41,7 +41,6 @@ export default function PayLinksPage() {
   const [payLink, setPayLink] = useState("");
   const [portablePayLink, setPortablePayLink] = useState("");
   const [shortId, setShortId] = useState("");
-  const [revocationToken, setRevocationToken] = useState("");
   const [shortLinkExpiresAt, setShortLinkExpiresAt] = useState("");
   const [shortLinkNotice, setShortLinkNotice] = useState("");
   const [cancellationLink, setCancellationLink] = useState("");
@@ -132,7 +131,6 @@ export default function PayLinksPage() {
     setPayLink("");
     setPortablePayLink("");
     setShortId("");
-    setRevocationToken("");
     setShortLinkExpiresAt("");
     setShortLinkNotice("");
     setRevoked(false);
@@ -200,8 +198,7 @@ export default function PayLinksPage() {
           !response.ok ||
           !body.id ||
           !body.path ||
-          !body.expiresAt ||
-          !body.revocationToken
+          !body.expiresAt
         ) {
           throw new Error(body.error || "Short Pay Link could not be created.");
         }
@@ -209,7 +206,6 @@ export default function PayLinksPage() {
         setPayLink(shortLink);
         setCancellationLink(shortLink);
         setShortId(body.id);
-        setRevocationToken(body.revocationToken);
         setShortLinkExpiresAt(body.expiresAt);
       } catch (shortLinkError) {
         setPayLink(portableLink);
