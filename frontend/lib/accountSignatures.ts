@@ -5,6 +5,7 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
+import { paymentCancellationTypedData, type PaymentRequestCancellation } from "./paymentCancellation";
 import { paymentRequestTypedData, type PaymentRequest } from "./paymentRequests";
 
 export const ERC1271_MAGIC_VALUE = "0x1626ba7e" as const;
@@ -77,6 +78,60 @@ export async function verifyPaymentRequestSignature(
       error: accountType === "contract"
         ? "The smart account signature check failed or reverted."
         : "Payment request signature could not be verified.",
+    };
+  }
+}
+
+
+export async function verifyPaymentCancellationSignature(
+  client: PublicClient,
+  cancellation: PaymentRequestCancellation,
+  signature: Hex,
+  expectedSigner: Address,
+): Promise<PaymentRequestSignatureVerification> {
+  let accountType: PaymentRequestSignatureVerification["accountType"] = "unknown";
+
+  try {
+    const bytecode = await client.getBytecode({ address: expectedSigner });
+    accountType = bytecode && bytecode !== "0x" ? "contract" : "eoa";
+    const typedData = paymentCancellationTypedData(cancellation);
+
+    if (accountType === "eoa") {
+      const recoveredSigner = await recoverTypedDataAddress({
+        ...typedData,
+        signature,
+      });
+      const valid = recoveredSigner.toLowerCase() === expectedSigner.toLowerCase();
+      return {
+        valid,
+        accountType,
+        signer: expectedSigner,
+        error: valid ? undefined : "The cancellation was not signed by the current XNS owner.",
+      };
+    }
+
+    const digest = hashTypedData(typedData);
+    const result = await client.readContract({
+      address: expectedSigner,
+      abi: erc1271Abi,
+      functionName: "isValidSignature",
+      args: [digest, signature],
+    });
+    const valid = result.toLowerCase() === ERC1271_MAGIC_VALUE;
+    return {
+      valid,
+      accountType,
+      signer: expectedSigner,
+      error: valid ? undefined : "The smart account rejected this cancellation.",
+    };
+  } catch {
+    return {
+      valid: false,
+      accountType,
+      signer: expectedSigner,
+      error: accountType === "contract"
+        ? "The smart account cancellation check failed or reverted."
+        : "Payment cancellation signature could not be verified.",
     };
   }
 }

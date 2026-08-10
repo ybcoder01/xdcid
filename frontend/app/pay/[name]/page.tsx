@@ -29,6 +29,7 @@ const explorerUrls: Record<number, string> = {
 };
 import { MultichainUsdcExecutor } from "../../../components/MultichainUsdcExecutor";
 import { parseXnsName } from "../../../lib/names";
+import { paymentRequestId } from "../../../lib/paymentCancellation";
 import { selectPaymentDestination } from "../../../lib/paymentPreparation";
 import { useRegistryStatus } from "../../../lib/useRegistryStatus";
 import {
@@ -120,6 +121,13 @@ export default function PayRequestPage() {
   }, [encodedRequest, encodedSignature]);
 
   const signedRequest = signedPayload.request;
+  const signedRequestId = useMemo(
+    () => signedRequest ? paymentRequestId(signedRequest) : undefined,
+    [signedRequest],
+  );
+  const [cancellationStatus, setCancellationStatus] = useState<
+    "not-applicable" | "checking" | "active" | "cancelled" | "unavailable"
+  >("not-applicable");
   const legacyRequest = !encodedRequest && !encodedSignature;
   const awaitingShortLink = Boolean(shortId && !shortPayload && !shortLinkError);
   const amount = signedRequest?.amount ?? searchParams.get("amount") ?? "";
@@ -143,6 +151,39 @@ export default function PayRequestPage() {
       return 0n;
     }
   }, [amount, token]);
+
+  useEffect(() => {
+    let current = true;
+    if (!signedRequestId) {
+      setCancellationStatus("not-applicable");
+      return;
+    }
+
+    setCancellationStatus("checking");
+    fetch(
+      "/api/pay-links/cancellations/" + encodeURIComponent(signedRequestId),
+      { cache: "no-store" },
+    )
+      .then(async (response) => {
+        const body = await response.json() as {
+          cancelled?: boolean;
+          error?: string;
+        };
+        if (!response.ok || typeof body.cancelled !== "boolean") {
+          throw new Error(body.error || "Cancellation status could not be verified.");
+        }
+        if (current) {
+          setCancellationStatus(body.cancelled ? "cancelled" : "active");
+        }
+      })
+      .catch(() => {
+        if (current) setCancellationStatus("unavailable");
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [signedRequestId]);
 
   const route = signedRequest
     ? paymentRequestRoute(signedRequest)
@@ -282,8 +323,10 @@ export default function PayRequestPage() {
   const nativeXdcPayment = token === "XDC" && route.sourceChainId === 50 && route.destinationChainId === 50;
   const pending = nativePayment.isPending || receipt.isLoading;
   const wrongNetwork = isConnected && nativeXdcPayment && chainId !== 50;
+  const cancellationAllowsPayment = legacyRequest || cancellationStatus === "active";
   const signedRequestValid = legacyRequest || Boolean(
-    signedRequest && signatureVerification?.valid && !signatureError && payerAllowed,
+    signedRequest && signatureVerification?.valid && !signatureError && payerAllowed &&
+    cancellationAllowsPayment,
   );
   const routeReady = Boolean(
     !requestError && registrySafe && hasOwner && paymentAddress && value > 0n &&
@@ -332,6 +375,21 @@ export default function PayRequestPage() {
           </p>
         )}
         {signatureError && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{signatureError}</p>}
+        {signedRequest && cancellationStatus === "checking" && (
+          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            Checking whether this payment request is still active...
+          </p>
+        )}
+        {signedRequest && cancellationStatus === "cancelled" && (
+          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+            This payment request was cancelled by its creator. Payment is disabled.
+          </p>
+        )}
+        {signedRequest && cancellationStatus === "unavailable" && (
+          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Cancellation status cannot be verified right now. Payment is temporarily disabled for safety.
+          </p>
+        )}
         {signedRequest && signedRequest.payer !== zeroAddress && isConnected && !payerAllowed && (
           <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             This request is designated for a different payer wallet.

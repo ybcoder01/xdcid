@@ -92,3 +92,22 @@ export const payLinks = pgTable(
     index("pay_links_expires_at_idx").on(table.expiresAt)
   ]
 );
+
+
+export const payLinkCancellations = pgTable(
+  "pay_link_cancellations",
+  {
+    requestId: varchar("request_id", { length: 66 }).primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    nonce: varchar("nonce", { length: 66 }).notNull(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true, mode: "date" }).notNull(),
+    cancellationSignature: text("cancellation_signature").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    index("pay_link_cancellations_name_idx").on(table.name),
+    index("pay_link_cancellations_nonce_idx").on(table.nonce)
+  ]
+);
