@@ -1,21 +1,37 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatEther, isAddress } from "viem";
 import {
   useAccount,
   useBalance,
   useReadContract,
+  useSignMessage,
   useWaitForTransactionReceipt,
   useWriteContract
 } from "wagmi";
 import { addresses, registrarAbi } from "../../config/contracts";
 import { AdminOperations } from "../../components/AdminOperations";
 
+type AdminSession = {
+  authenticated: boolean;
+  address?: string;
+  expiresAt?: string;
+};
+
+async function responseJson(response: Response): Promise<Record<string, unknown>> {
+  return response.json().catch(() => ({}));
+}
+
 export default function AdminPage() {
   const { address: account, isConnected } = useAccount();
   const [recipient, setRecipient] = useState("");
+  const [session, setSession] = useState<AdminSession>({ authenticated: false });
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [loginPending, setLoginPending] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const signing = useSignMessage();
 
   const owner = useReadContract({
     address: addresses.registrar,
@@ -36,8 +52,13 @@ export default function AdminPage() {
       ownerAddress.toLowerCase() === account.toLowerCase(),
     [account, ownerAddress]
   );
-  const canWithdraw =
+  const isAuthenticated =
     isOwner &&
+    session.authenticated &&
+    !!session.address &&
+    session.address.toLowerCase() === account?.toLowerCase();
+  const canWithdraw =
+    isAuthenticated &&
     isAddress(recipient) &&
     !!contractBalance &&
     contractBalance > 0n &&
@@ -51,13 +72,103 @@ export default function AdminPage() {
     receipt.error?.message ||
     "";
 
+  const checkSession = useCallback(async () => {
+    if (!isOwner || !account) {
+      setSession({ authenticated: false });
+      return;
+    }
+    setSessionLoading(true);
+    try {
+      const response = await fetch("/api/admin/auth/session", {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      const data = (await responseJson(response)) as AdminSession;
+      setSession(
+        response.ok && data.authenticated
+          ? data
+          : { authenticated: false }
+      );
+    } catch {
+      setSession({ authenticated: false });
+    } finally {
+      setSessionLoading(false);
+    }
+  }, [account, isOwner]);
+
   useEffect(() => {
     setRecipient(account || "");
-  }, [account]);
+    setAuthError("");
+    void checkSession();
+  }, [account, checkSession]);
 
   useEffect(() => {
     if (receipt.isSuccess) void refetchBalance();
   }, [receipt.isSuccess, refetchBalance]);
+
+  async function authenticate() {
+    if (!account || !isOwner || loginPending) return;
+    setLoginPending(true);
+    setAuthError("");
+
+    try {
+      const challengeResponse = await fetch("/api/admin/auth/challenge", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address: account })
+      });
+      const challenge = await responseJson(challengeResponse);
+      if (
+        !challengeResponse.ok ||
+        typeof challenge.challengeId !== "string" ||
+        typeof challenge.message !== "string"
+      ) {
+        throw new Error(
+          typeof challenge.error === "string"
+            ? challenge.error
+            : "Unable to start admin login"
+        );
+      }
+
+      const signature = await signing.signMessageAsync({
+        message: challenge.message
+      });
+      const verifyResponse = await fetch("/api/admin/auth/verify", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          challengeId: challenge.challengeId,
+          address: account,
+          message: challenge.message,
+          signature
+        })
+      });
+      const verified = await responseJson(verifyResponse);
+      if (!verifyResponse.ok || verified.authenticated !== true) {
+        throw new Error(
+          typeof verified.error === "string"
+            ? verified.error
+            : "Admin login failed"
+        );
+      }
+      setSession(verified as AdminSession);
+    } catch (cause) {
+      setSession({ authenticated: false });
+      setAuthError(cause instanceof Error ? cause.message : "Admin login failed");
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/admin/auth/logout", {
+      method: "POST",
+      credentials: "same-origin"
+    }).catch(() => undefined);
+    setSession({ authenticated: false });
+  }
 
   function withdraw() {
     if (!canWithdraw) return;
@@ -78,7 +189,7 @@ export default function AdminPage() {
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">Owner access required</h1>
           <p className="mt-2 text-sm text-neutral-600">
             {!isConnected
-              ? "Connect the registrar owner wallet to view withdrawal controls."
+              ? "Connect the registrar owner wallet to continue."
               : loading
                 ? "Checking registrar ownership..."
                 : "The connected wallet is not the registrar owner."}
@@ -95,6 +206,35 @@ export default function AdminPage() {
             <p className="mt-4 text-xs text-red-600">Connected wallet is not the registrar owner.</p>
           ) : null}
           {error ? <p className="mt-4 break-words text-xs text-red-600">{error}</p> : null}
+        </section>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10">
+        <section className="rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Secure admin login</p>
+          <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">Verify the owner wallet</h1>
+          <p className="mt-2 text-sm text-neutral-600">
+            Sign a short login message to open a 15-minute admin session. This does not submit a transaction or cost gas.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />
+            <button
+              className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+              disabled={sessionLoading || loginPending || signing.isPending}
+              onClick={authenticate}
+            >
+              {sessionLoading
+                ? "Checking session..."
+                : loginPending || signing.isPending
+                  ? "Confirm in wallet..."
+                  : "Verify owner wallet"}
+            </button>
+          </div>
+          {authError ? <p className="mt-4 break-words text-xs text-red-600">{authError}</p> : null}
         </section>
       </main>
     );
@@ -144,6 +284,12 @@ export default function AdminPage() {
                     ? "Withdrawing..."
                     : "Withdraw all funds"}
               </button>
+              <button
+                className="rounded-md border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-neutral-50"
+                onClick={logout}
+              >
+                End admin session
+              </button>
             </div>
 
             {withdrawal.data ? (
@@ -166,8 +312,13 @@ export default function AdminPage() {
               <p className="mt-1 break-all">{ownerAddress || (loading ? "Loading..." : "Unavailable")}</p>
             </div>
             <div className="border-t border-white/10 pt-4">
-              <p className="text-slate-300">Status</p>
-              <p className="mt-1">Owner wallet connected</p>
+              <p className="text-slate-300">Server session</p>
+              <p className="mt-1">Verified</p>
+              {session.expiresAt ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  Expires {new Date(session.expiresAt).toLocaleTimeString()}
+                </p>
+              ) : null}
             </div>
           </div>
         </aside>
