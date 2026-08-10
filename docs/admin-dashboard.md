@@ -1,10 +1,32 @@
 # Admin operations dashboard
 
-The admin page is restricted in the interface to the wallet returned by the registrar contract's `owner()` function.
+The admin page requires both the registrar owner wallet and a server-verified admin session.
 
-## First phase
+## Authentication
 
-The first operations phase adds read-only visibility without expanding administrator authority:
+After the connected wallet matches the registrar contract's current `owner()`, the owner signs a human-readable login message. Signing does not submit a transaction or cost gas.
+
+The server:
+
+- issues a random challenge that expires after five minutes;
+- stores only the challenge hash and metadata in Neon;
+- accepts each challenge once to prevent replay;
+- re-reads the registrar owner directly from XDC;
+- verifies normal wallet signatures and ERC-1271 smart-account signatures;
+- returns a signed, HTTP-only, SameSite=Strict session cookie that expires after 15 minutes;
+- re-checks the current registrar owner when an authenticated endpoint is used.
+
+Changing accounts, transferring registrar ownership, expiry, signature tampering, or ending the session removes access. Wallet signatures and private keys are not stored.
+
+## Deployment configuration
+
+Set `ADMIN_SESSION_SECRET` in Vercel as a server-only environment variable. Use at least 32 random bytes, keep it out of source control, and redeploy after adding or rotating it. The existing `DATABASE_URL` is used for one-time challenges. The application creates the challenge table and indexes with `IF NOT EXISTS`; migration `db/migrations/0005_admin_auth_challenges.sql` is also included for managed database rollouts.
+
+Rotating `ADMIN_SESSION_SECRET` immediately invalidates existing admin sessions.
+
+## Operations view
+
+The operations view provides:
 
 - live latest-block checks for Ethereum, XDC, Polygon, Base, and Arbitrum;
 - coarse Neon database connectivity and latency;
@@ -15,12 +37,8 @@ The first operations phase adds read-only visibility without expanding administr
 
 ## Data and security boundaries
 
-The health endpoint returns only whether the database is configured and reachable, its check latency, and the check timestamp. It does not return database records, connection strings, environment variables, API keys, wallet secrets, or user information.
+The protected health endpoint returns only whether the database is configured and reachable, its check latency, and the check timestamp. It does not return database records, connection strings, environment variables, API keys, wallet secrets, or user information.
 
 Network checks use the same public RPC configuration as the application. A green RPC result confirms that a recent block number was readable; it does not guarantee that Circle, a wallet, or every transaction route will succeed.
 
-Client-side owner gating protects the administrative interface, but future APIs that expose private aggregates or perform mutations must add server-verified wallet sessions. High-impact actions should not rely on the hidden interface alone.
-
-## Later phases
-
-Payment search and recovery, private revenue aggregates, feature flags, pricing, discounts, whitelists, and migration controls remain separate phases. Any server-side administrative mutation should require a fresh wallet signature, an expiring session, role checks where applicable, and an audit trail.
+Payment search and recovery, private revenue aggregates, feature flags, pricing, discounts, whitelists, migration controls, privileged mutations, and audit trails remain separate phases.
