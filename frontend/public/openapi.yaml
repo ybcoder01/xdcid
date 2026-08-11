@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: XDCID Read API
-  version: 1.2.0
+  title: XDCID API
+  version: 1.3.0
   description: |
     Versioned, read-only access to XDCID name and reverse-resolution data on
     XDC mainnet. The API version is present in both the URL and every
@@ -305,6 +305,124 @@ paths:
           $ref: "#/components/responses/GatewayUnauthorized"
         "503":
           $ref: "#/components/responses/GatewayServiceUnavailable"
+  /api/v1/registrar/quote:
+    post:
+      operationId: createRegistrarQuote
+      summary: Create a short-lived registration or renewal quote
+      description: |
+        Returns a ten-minute EIP-712 quote bound to the payer, owner, name,
+        registrar, chain, policy version, and next nonce. The endpoint is
+        available only after the registrar, policy, RPC, CoinGecko, and
+        server-side signer settings are configured.
+      tags:
+        - Registration quotes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - name
+                - product
+                - termYears
+                - paymentCurrency
+                - payer
+                - nameOwner
+              properties:
+                name:
+                  type: string
+                  examples:
+                    - alice.xdc
+                product:
+                  type: string
+                  enum:
+                    - registration
+                    - renewal
+                termYears:
+                  type: integer
+                  enum:
+                    - 1
+                    - 3
+                    - 5
+                    - 10
+                paymentCurrency:
+                  type: string
+                  enum:
+                    - XDC
+                    - USDC
+                payer:
+                  $ref: "#/components/schemas/Address"
+                nameOwner:
+                  $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          description: Signed quote returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - version
+                  - data
+                properties:
+                  version:
+                    type: string
+                    const: v1
+                  data:
+                    type: object
+                    required:
+                      - authorizedForPayment
+                      - chainId
+                      - registrar
+                      - policy
+                      - product
+                      - name
+                      - paymentCurrency
+                      - quote
+                      - signature
+                    properties:
+                      authorizedForPayment:
+                        type: boolean
+                        const: true
+                      chainId:
+                        type: integer
+                      registrar:
+                        $ref: "#/components/schemas/Address"
+                      policy:
+                        $ref: "#/components/schemas/Address"
+                      product:
+                        type: string
+                        enum:
+                          - registration
+                          - renewal
+                      name:
+                        type: string
+                      paymentCurrency:
+                        type: string
+                        enum:
+                          - XDC
+                          - USDC
+                      quote:
+                        type: object
+                      signature:
+                        type: string
+                        pattern: "^0x[a-fA-F0-9]+$"
+                      market:
+                        type:
+                          - object
+                          - "null"
+        "400":
+          description: Invalid request.
+        "403":
+          description: The payer is not authorized to renew the name.
+        "409":
+          description: The requested registration name is unavailable.
+        "429":
+          description: Quote request rate limit exceeded.
+        "503":
+          description: Quote signing, RPC, policy, or pricing is unavailable.
 components:
   securitySchemes:
     XdcAiGatewayKey:
