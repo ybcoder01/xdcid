@@ -34,8 +34,8 @@ contract XNSPricingPolicy is Ownable {
         bool usdcPaymentsEnabled;
     }
 
-    PricingConfig public config;
-    PricingConfig public pendingConfig;
+    PricingConfig private _config;
+    PricingConfig private _pendingConfig;
     uint256 public version = 1;
     uint256 public pendingActivationTime;
     bool public hasPendingConfig;
@@ -66,15 +66,23 @@ contract XNSPricingPolicy is Ownable {
         address initialOwner
     ) Ownable(initialOwner) {
         _validateConfig(initialConfig);
-        config = initialConfig;
+        _config = initialConfig;
         emit PricingConfigActivated(1, hashConfig(initialConfig));
+    }
+
+    function config() external view returns (PricingConfig memory) {
+        return _config;
+    }
+
+    function pendingConfig() external view returns (PricingConfig memory) {
+        return _pendingConfig;
     }
 
     function proposeConfig(
         PricingConfig calldata nextConfig
     ) external onlyOwner {
         _validateConfig(nextConfig);
-        pendingConfig = nextConfig;
+        _pendingConfig = nextConfig;
         pendingActivationTime = block.timestamp + UPDATE_DELAY;
         hasPendingConfig = true;
         emit PricingConfigProposed(
@@ -86,7 +94,7 @@ contract XNSPricingPolicy is Ownable {
 
     function cancelPendingConfig() external onlyOwner {
         if (!hasPendingConfig) revert NoPendingConfig();
-        delete pendingConfig;
+        delete _pendingConfig;
         delete pendingActivationTime;
         hasPendingConfig = false;
         emit PricingConfigCancelled(version + 1);
@@ -99,16 +107,16 @@ contract XNSPricingPolicy is Ownable {
         }
 
         previousVersion = version;
-        previousQuoteSigner = config.quoteSigner;
+        previousQuoteSigner = _config.quoteSigner;
         previousQuoteValidUntil = block.timestamp + QUOTE_GRACE_PERIOD;
 
-        config = pendingConfig;
+        _config = _pendingConfig;
         version += 1;
-        delete pendingConfig;
+        delete _pendingConfig;
         delete pendingActivationTime;
         hasPendingConfig = false;
 
-        emit PricingConfigActivated(version, hashConfig(config));
+        emit PricingConfigActivated(version, hashConfig(_config));
     }
 
     function priceUsdMicros(
@@ -118,12 +126,12 @@ contract XNSPricingPolicy is Ownable {
     ) external view returns (uint256) {
         if (product == Product.Migration) {
             if (years_ != 0) revert InvalidTerm();
-            return config.migrationUsdMicros;
+            return _config.migrationUsdMicros;
         }
 
         uint256 annualPrice;
         if (product == Product.Subdomain) {
-            annualPrice = config.subdomainAnnualUsdMicros;
+            annualPrice = _config.subdomainAnnualUsdMicros;
         } else {
             if (
                 labelLength < MIN_LABEL_LENGTH ||
@@ -132,10 +140,10 @@ contract XNSPricingPolicy is Ownable {
                 revert InvalidLabelLength();
             }
             annualPrice = labelLength == 3
-                ? config.threeCharacterAnnualUsdMicros
+                ? _config.threeCharacterAnnualUsdMicros
                 : labelLength == 4
-                    ? config.fourCharacterAnnualUsdMicros
-                    : config.standardAnnualUsdMicros;
+                    ? _config.fourCharacterAnnualUsdMicros
+                    : _config.standardAnnualUsdMicros;
         }
 
         uint256 discountBps = _discountForTerm(years_);
@@ -150,7 +158,7 @@ contract XNSPricingPolicy is Ownable {
         address signer,
         uint256 quoteVersion
     ) external view returns (bool) {
-        if (signer == config.quoteSigner && quoteVersion == version) {
+        if (signer == _config.quoteSigner && quoteVersion == version) {
             return true;
         }
         return
@@ -169,13 +177,20 @@ contract XNSPricingPolicy is Ownable {
         uint256 years_
     ) internal view returns (uint256) {
         if (years_ == 1) return 0;
-        if (years_ == 3) return config.threeYearDiscountBps;
-        if (years_ == 5) return config.fiveYearDiscountBps;
-        if (years_ == 10) return config.tenYearDiscountBps;
+        if (years_ == 3) return _config.threeYearDiscountBps;
+        if (years_ == 5) return _config.fiveYearDiscountBps;
+        if (years_ == 10) return _config.tenYearDiscountBps;
         revert InvalidTerm();
     }
 
     function _validateConfig(PricingConfig memory target) internal pure {
+        _validatePricesAndAddresses(target);
+        _validateDiscountsAndBuffer(target);
+    }
+
+    function _validatePricesAndAddresses(
+        PricingConfig memory target
+    ) internal pure {
         if (
             target.threeCharacterAnnualUsdMicros == 0 ||
             target.fourCharacterAnnualUsdMicros == 0 ||
@@ -184,7 +199,16 @@ contract XNSPricingPolicy is Ownable {
             target.migrationUsdMicros == 0 ||
             target.quoteSigner == address(0) ||
             target.usdcToken == address(0) ||
-            target.treasury == address(0) ||
+            target.treasury == address(0)
+        ) {
+            revert InvalidConfig();
+        }
+    }
+
+    function _validateDiscountsAndBuffer(
+        PricingConfig memory target
+    ) internal pure {
+        if (
             target.threeYearDiscountBps > target.fiveYearDiscountBps ||
             target.fiveYearDiscountBps > target.tenYearDiscountBps ||
             target.tenYearDiscountBps >= BASIS_POINTS ||
