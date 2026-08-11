@@ -105,27 +105,21 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
 
     event NameRegistered(
         bytes32 indexed node,
-        string name,
         address indexed nameOwner,
         address indexed payer,
         uint256 expiry,
         address paymentToken,
         uint256 paymentAmount,
-        uint256 usdMicros,
-        uint256 policyVersion,
-        uint256 nonce
+        bytes32 quoteHash
     );
     event NameRenewed(
         bytes32 indexed node,
-        string name,
         address indexed nameOwner,
         address indexed payer,
         uint256 expiry,
         address paymentToken,
         uint256 paymentAmount,
-        uint256 usdMicros,
-        uint256 policyVersion,
-        uint256 nonce
+        bytes32 quoteHash
     );
 
     constructor(
@@ -178,15 +172,12 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         registry.register(node, quote.nameOwner, expiry);
         emit NameRegistered(
             node,
-            canonicalName,
             quote.nameOwner,
             msg.sender,
             expiry,
             quote.paymentToken,
             quote.paymentAmount,
-            quote.usdMicros,
-            quote.policyVersion,
-            quote.nonce
+            _quoteStructHash(quote)
         );
     }
 
@@ -213,15 +204,12 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         registry.register(node, currentOwner, expiry);
         emit NameRenewed(
             node,
-            canonicalName,
             currentOwner,
             msg.sender,
             expiry,
             quote.paymentToken,
             quote.paymentAmount,
-            quote.usdMicros,
-            quote.policyVersion,
-            quote.nonce
+            _quoteStructHash(quote)
         );
     }
 
@@ -361,23 +349,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
     function _quoteStructHash(
         Quote calldata quote
     ) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                QUOTE_TYPEHASH,
-                quote.node,
-                quote.payer,
-                quote.nameOwner,
-                quote.product,
-                quote.termYears,
-                quote.paymentToken,
-                quote.paymentAmount,
-                quote.usdMicros,
-                quote.policyVersion,
-                quote.nonce,
-                quote.issuedAt,
-                quote.deadline
-            )
-        );
+        return keccak256(abi.encode(QUOTE_TYPEHASH, quote));
     }
 
     function _legacyRegistered(
