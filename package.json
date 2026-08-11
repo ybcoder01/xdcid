@@ -14,6 +14,8 @@
     "deploy:registrar-v2:xdc": "hardhat run scripts/deploy-registrar-v2.ts --network xdc",
     "deploy:registrar-v3:apothem": "hardhat run scripts/deploy-registrar-v3.ts --network apothem",
     "deploy:registrar-v3:xdc": "hardhat run scripts/deploy-registrar-v3.ts --network xdc",
+    "deploy:signed-quote-registrar:apothem": "hardhat run scripts/deploy-signed-quote-registrar.ts --network apothem",
+    "deploy:signed-quote-registrar:xdc": "hardhat run scripts/deploy-signed-quote-registrar.ts --network xdc",
     "activate:registrar-v2:apothem": "hardhat run scripts/activate-registrar-v2.ts --network apothem",
     "activate:registrar-v2:xdc": "hardhat run scripts/activate-registrar-v2.ts --network xdc",
     "activate:registrar-v3:apothem": "hardhat run scripts/activate-registrar-v3.ts --network apothem",
