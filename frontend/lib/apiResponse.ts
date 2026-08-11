@@ -8,16 +8,19 @@ export type ApiErrorCode =
   | "INVALID_NAME"
   | "INVALID_ADDRESS"
   | "INVALID_YEARS"
+  | "INVALID_PRODUCT"
   | "UNAUTHORIZED"
   | "NOT_FOUND"
   | "GATEWAY_UNAVAILABLE"
   | "XDC_INDEX_UNAVAILABLE"
-  | "XDC_RPC_UNAVAILABLE";
+  | "XDC_RPC_UNAVAILABLE"
+  | "PRICE_QUOTE_UNAVAILABLE";
 
 type InputErrorCode =
   | "INVALID_NAME"
   | "INVALID_ADDRESS"
-  | "INVALID_YEARS";
+  | "INVALID_YEARS"
+  | "INVALID_PRODUCT";
 
 export class ApiInputError extends Error {
   constructor(
