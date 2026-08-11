@@ -16,8 +16,8 @@ import {
   handleApiError,
   ApiInputError,
   ApiServiceError,
-} from "../../../../../../lib/apiResponse";
-import { getCoinGeckoXdcPrice } from "../../../../../../lib/coingeckoXdcPrice";
+} from "../../../../../lib/apiResponse";
+import { getCoinGeckoXdcPrice } from "../../../../../lib/coingeckoXdcPrice";
 import {
   buildRegistrarQuote,
   calculateBufferedXdcWeiForPolicy,
@@ -25,7 +25,7 @@ import {
   SIGNED_QUOTE_DOMAIN_NAME,
   SIGNED_QUOTE_DOMAIN_VERSION,
   signedQuoteTypes,
-} from "../../../../../../lib/signedRegistrarQuotes";
+} from "../../../../../lib/signedRegistrarQuotes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
