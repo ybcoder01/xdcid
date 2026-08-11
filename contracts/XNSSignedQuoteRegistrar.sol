@@ -61,7 +61,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
     uint8 private constant RENEWAL = 1;
 
     bytes32 public constant QUOTE_TYPEHASH = keccak256(
-        "Quote(bytes32 node,address payer,address nameOwner,uint8 product,uint256 years,address paymentToken,uint256 paymentAmount,uint256 usdMicros,uint256 policyVersion,uint256 nonce,uint256 issuedAt,uint256 deadline)"
+        "Quote(bytes32 node,address payer,address nameOwner,uint8 product,uint256 termYears,address paymentToken,uint256 paymentAmount,uint256 usdMicros,uint256 policyVersion,uint256 nonce,uint256 issuedAt,uint256 deadline)"
     );
 
     struct Quote {
@@ -69,7 +69,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         address payer;
         address nameOwner;
         uint8 product;
-        uint256 years;
+        uint256 termYears;
         address paymentToken;
         uint256 paymentAmount;
         uint256 usdMicros;
@@ -174,7 +174,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         _consumeQuote(quote, signature, node, labelLength);
         _collectPayment(quote);
 
-        uint256 expiry = block.timestamp + (quote.years * YEAR);
+        uint256 expiry = block.timestamp + (quote.termYears * YEAR);
         registry.register(node, quote.nameOwner, expiry);
         emit NameRegistered(
             node,
@@ -209,7 +209,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         _consumeQuote(quote, signature, node, labelLength);
         _collectPayment(quote);
 
-        uint256 expiry = registry.expiryOf(node) + (quote.years * YEAR);
+        uint256 expiry = registry.expiryOf(node) + (quote.termYears * YEAR);
         registry.register(node, currentOwner, expiry);
         emit NameRenewed(
             node,
@@ -291,7 +291,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         if (
             quote.node != expectedNode
                 || quote.payer != msg.sender
-                || quote.years == 0
+                || quote.termYears == 0
         ) {
             revert InvalidQuote();
         }
@@ -308,7 +308,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         uint256 expectedUsdMicros = pricingPolicy.priceUsdMicros(
             IXNSQuotePricingPolicy.Product(quote.product),
             labelLength,
-            quote.years
+            quote.termYears
         );
         if (quote.usdMicros != expectedUsdMicros) revert InvalidQuote();
 
@@ -368,7 +368,7 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
                 quote.payer,
                 quote.nameOwner,
                 quote.product,
-                quote.years,
+                quote.termYears,
                 quote.paymentToken,
                 quote.paymentAmount,
                 quote.usdMicros,
