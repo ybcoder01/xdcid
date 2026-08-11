@@ -9,7 +9,7 @@ describe("XNSSignedQuoteRegistrar", function () {
       { name: "payer", type: "address" },
       { name: "nameOwner", type: "address" },
       { name: "product", type: "uint8" },
-      { name: "years", type: "uint256" },
+      { name: "termYears", type: "uint256" },
       { name: "paymentToken", type: "address" },
       { name: "paymentAmount", type: "uint256" },
       { name: "usdMicros", type: "uint256" },
@@ -78,13 +78,13 @@ describe("XNSSignedQuoteRegistrar", function () {
       const nameOwner =
         (overrides.nameOwner as string | undefined) ?? alice.address;
       const product = (overrides.product as number | undefined) ?? 0;
-      const years = (overrides.years as number | undefined) ?? 1;
+      const termYears = (overrides.termYears as number | undefined) ?? 1;
       const issuedAt =
         (overrides.issuedAt as number | undefined) ?? (await time.latest());
       const labelLength = name.length - 4;
       const usdMicros =
         (overrides.usdMicros as bigint | undefined) ??
-        (await policy.priceUsdMicros(product, labelLength, years));
+        (await policy.priceUsdMicros(product, labelLength, termYears));
       const quote = {
         node:
           (overrides.node as string | undefined) ??
@@ -92,7 +92,7 @@ describe("XNSSignedQuoteRegistrar", function () {
         payer,
         nameOwner,
         product,
-        years,
+        termYears,
         paymentToken:
           (overrides.paymentToken as string | undefined) ??
           ethers.ZeroAddress,
@@ -167,7 +167,7 @@ describe("XNSSignedQuoteRegistrar", function () {
     await usdc.connect(alice).approve(await registrar.getAddress(), amount);
 
     const { name, quote, signature } = await makeQuote({
-      years: 3,
+      termYears: 3,
       paymentToken: await usdc.getAddress(),
       paymentAmount: amount,
     });
