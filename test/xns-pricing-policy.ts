@@ -119,7 +119,7 @@ describe("XNSPricingPolicy", function () {
   });
 
   it("rejects unsafe configuration", async function () {
-    const { owner, signer, treasury, usdc } = await deployPolicy();
+    const { policy, owner, signer, treasury, usdc } = await deployPolicy();
     const factory = await ethers.getContractFactory("XNSPricingPolicy");
     await expect(
       factory.deploy(
@@ -141,6 +141,6 @@ describe("XNSPricingPolicy", function () {
         },
         owner.address,
       ),
-    ).to.be.revertedWithCustomError(factory, "InvalidConfig");
+    ).to.be.revertedWithCustomError(policy, "InvalidConfig");
   });
 });
