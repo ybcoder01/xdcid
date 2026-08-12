@@ -3,7 +3,7 @@ import { getAddress, isAddress, isHex, type Hex } from "viem";
 import {
   adminSessionCookie,
   createAdminSession,
-  currentRegistrarOwner,
+  isCurrentAdmin,
   hashAdminMessage,
   isSameOrigin,
   verifyAdminWalletSignature,
@@ -76,9 +76,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const owner = await currentRegistrarOwner();
-    if (address !== owner) {
-      return Response.json({ error: "Wallet is not the registrar owner" }, { status: 403 });
+    if (!(await isCurrentAdmin(address))) {
+      return Response.json(
+        { error: "Wallet is not a registry or pricing-policy owner" },
+        { status: 403 },
+      );
     }
 
     const valid = await verifyAdminWalletSignature(
