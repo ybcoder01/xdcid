@@ -12,7 +12,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { addresses, registrarAbi } from "../config/contracts";
+import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
 import {
   ERC1271_MAGIC_VALUE,
   erc1271Abi,
@@ -157,14 +157,30 @@ export function parseAdminSession(token: string | undefined): AdminSessionPayloa
   }
 }
 
-export async function currentRegistrarOwner(): Promise<Address> {
-  return getAddress(
-    await xdcClient.readContract({
-      address: addresses.registrar,
-      abi: registrarAbi,
-      functionName: "owner",
-    }),
+export async function currentAdminOwners(): Promise<Address[]> {
+  const targets = [addresses.registry];
+  if (addresses.pricingPolicy !== zeroAddress) {
+    targets.push(addresses.pricingPolicy);
+  }
+  const owners = await Promise.all(
+    targets.map((target) =>
+      xdcClient.readContract({
+        address: target,
+        abi: ownableAbi,
+        functionName: "owner",
+      }),
+    ),
   );
+  return [...new Set(owners.map((owner) => getAddress(owner)))];
+}
+
+export async function currentRegistrarOwner(): Promise<Address> {
+  return (await currentAdminOwners())[0];
+}
+
+export async function isCurrentAdmin(address: Address): Promise<boolean> {
+  const admins = await currentAdminOwners();
+  return admins.includes(getAddress(address));
 }
 
 export async function verifyAdminWalletSignature(
@@ -201,8 +217,7 @@ export async function requireAdminSession(
   if (!session) return null;
 
   try {
-    const owner = await currentRegistrarOwner();
-    return owner === session.address ? session : null;
+    return (await isCurrentAdmin(session.address)) ? session : null;
   } catch {
     return null;
   }
