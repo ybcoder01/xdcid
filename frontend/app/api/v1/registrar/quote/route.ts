@@ -64,6 +64,13 @@ const registrarAbi = [
     inputs: [],
     outputs: [{ name: "", type: "address" }],
   },
+  {
+    type: "function",
+    name: "pricingPolicy",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
 ] as const;
 
 const registryAbi = [
@@ -161,6 +168,19 @@ export async function POST(request: Request) {
       throw new ApiServiceError(
         "QUOTE_SIGNING_UNAVAILABLE",
         "Quote RPC is connected to the wrong network",
+        503,
+      );
+    }
+
+    const registrarPolicy = await client.readContract({
+      address: registrar,
+      abi: registrarAbi,
+      functionName: "pricingPolicy",
+    });
+    if (getAddress(registrarPolicy) !== pricingPolicy) {
+      throw new ApiServiceError(
+        "QUOTE_SIGNING_UNAVAILABLE",
+        "Registrar and pricing policy configuration do not match",
         503,
       );
     }
