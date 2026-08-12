@@ -22,8 +22,12 @@
     "activate:registrar-v3:xdc": "hardhat run scripts/activate-registrar-v3.ts --network xdc",
     "transfer-ownership:xdc": "hardhat run scripts/transfer-ownership.ts --network xdc",
     "dev": "cd frontend && next dev",
-    "build": "pnpm build:sdk && pnpm generate:apothem-deployment && cd frontend && next build",
-    "generate:apothem-deployment": "hardhat compile && node scripts/generate-apothem-deployment-bundle.mjs"
+    "build": "pnpm build:sdk && cd frontend && next build",
+    "deploy:pricing-stack:xdc": "hardhat run scripts/deploy-mainnet-pricing-stack.ts --network xdc",
+    "preflight:signed-registrar:xdc": "hardhat run scripts/activate-signed-quote-registrar.ts --network xdc",
+    "activate:signed-registrar:xdc": "hardhat run scripts/activate-signed-quote-registrar.ts --network xdc",
+    "rollback:signed-registrar:xdc": "hardhat run scripts/rollback-signed-quote-registrar.ts --network xdc",
+    "verify:pricing-stack:xdc": "hardhat run scripts/verify-mainnet-pricing-stack.ts --network xdc"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",
