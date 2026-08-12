@@ -22,7 +22,8 @@
     "activate:registrar-v3:xdc": "hardhat run scripts/activate-registrar-v3.ts --network xdc",
     "transfer-ownership:xdc": "hardhat run scripts/transfer-ownership.ts --network xdc",
     "dev": "cd frontend && next dev",
-    "build": "pnpm build:sdk && cd frontend && next build"
+    "build": "pnpm build:sdk && pnpm generate:apothem-deployment && cd frontend && next build",
+    "generate:apothem-deployment": "hardhat compile && node scripts/generate-apothem-deployment-bundle.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",
