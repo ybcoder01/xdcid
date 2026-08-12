@@ -61,6 +61,34 @@ export const signedRegistrarAbi = [
       { name: "signature", type: "bytes" }
     ],
     outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "nameOwner", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "signature", type: "bytes" }
+    ],
+    outputs: []
   }
 ] as const;
 
