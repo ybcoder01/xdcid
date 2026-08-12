@@ -7,6 +7,7 @@ import {
   custom,
   encodeDeployData,
   getAddress,
+  getContractAddress,
   type Abi,
   type Address,
   type EIP1193Provider,
@@ -20,6 +21,8 @@ const REGISTRY = getAddress("0x05fa64a05bc205DeDF47e023d2D90c2d119cd097");
 const LEGACY_REGISTRY = getAddress("0x295a7aB79368187a6CD03c464cfaAb04d799784E");
 const USDC = getAddress("0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1");
 const CHAIN_ID = 50;
+const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920ca78fbf26c0b4956c");
+const CREATE2_SALT = `0x${"00".repeat(32)}` as Hex;
 
 const xdcMainnet = {
   id: CHAIN_ID,
@@ -202,6 +205,7 @@ export default function MainnetPricingDeploymentClient() {
             <Detail label="Existing registry" value={REGISTRY} />
             <Detail label="Legacy collision registry" value={LEGACY_REGISTRY} />
             <Detail label="XDC USDC (6 decimals)" value={USDC} />
+            <Detail label="Rabby-compatible deployment proxy" value={CREATE2_DEPLOYER} />
           </dl>
           <p className="mt-5 rounded-xl bg-slate-100 p-4">{message}</p>
           <div className="mt-5 flex flex-wrap gap-3">
@@ -290,10 +294,27 @@ async function deployContract(input: {
       bytecode: input.artifact.bytecode as Hex,
       args: input.args,
     });
+    const address = getAddress(
+      getContractAddress({
+        bytecode: data,
+        from: CREATE2_DEPLOYER,
+        opcode: "CREATE2",
+        salt: CREATE2_SALT,
+      }),
+    );
+    const existingCode = await input.clients.publicClient.getCode({ address });
+    if (existingCode && existingCode !== "0x") {
+      input.updateStep(input.index, { state: "complete", address });
+      return address;
+    }
+
+    const factoryData = `${CREATE2_SALT}${data.slice(2)}` as Hex;
     const hash = await input.clients.walletClient.sendTransaction({
       account: input.clients.account,
       chain: xdcMainnet,
-      data,
+      to: CREATE2_DEPLOYER,
+      data: factoryData,
+      value: 0n,
     });
     input.updateStep(input.index, { state: "confirming", hash });
     const receipt = await input.clients.publicClient.waitForTransactionReceipt({
@@ -301,10 +322,9 @@ async function deployContract(input: {
       confirmations: 2,
       timeout: 180_000,
     });
-    if (receipt.status !== "success" || !receipt.contractAddress) {
+    if (receipt.status !== "success") {
       throw new Error(initialSteps[input.index].label + " failed");
     }
-    const address = getAddress(receipt.contractAddress);
     await requireCode(input.clients.publicClient, address, "deployed contract");
     input.updateStep(input.index, { state: "complete", hash, address });
     return address;
@@ -335,6 +355,7 @@ async function validateDependencies(publicClient: PublicClient, account: Address
   await requireCode(publicClient, REGISTRY, "registry");
   await requireCode(publicClient, LEGACY_REGISTRY, "legacy registry");
   await requireCode(publicClient, USDC, "USDC");
+  await requireCode(publicClient, CREATE2_DEPLOYER, "deployment proxy");
 
   const owner = await publicClient.readContract({
     address: REGISTRY,
