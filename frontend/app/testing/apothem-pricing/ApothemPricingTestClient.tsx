@@ -60,7 +60,7 @@ export default function ApothemPricingTestClient() {
       const canonical = canonicalize(name);
       const node = keccak256(toBytes(canonical));
       const labelLength = canonical.length - 4;
-      const productId = product === "registration" ? 0 : 1;
+      const productId: 0 | 1 = product === "registration" ? 0 : 1;
 
       if (product === "registration") {
         const available = await publicClient.readContract({
@@ -94,7 +94,7 @@ export default function ApothemPricingTestClient() {
           functionName: "config",
         }),
       ]);
-      const policy = config as { quoteSigner: Address; usdcToken: Address;
+      const policy = config as unknown as { quoteSigner: Address; usdcToken: Address;
         xdcPaymentsEnabled: boolean; usdcPaymentsEnabled: boolean };
       if (getAddress(policy.quoteSigner) !== account) throw new Error("Wallet is not the active quote signer");
 
@@ -231,7 +231,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 async function fetchXdcAmount(name: string, product: Product, years: number) {
   const query = new URLSearchParams({ name, product, years: String(years) });
-  const response = await fetch("/api/v1/pricing/quote?" + query, { cache: "no-store" });
+  const response = await fetch("/api/v1/pricing/quote?" + query.toString(), { cache: "no-store" });
   const body = await response.json();
   if (!response.ok) throw new Error(body?.error?.message || "Unable to obtain XDC conversion");
   const data = body?.data ?? body;
