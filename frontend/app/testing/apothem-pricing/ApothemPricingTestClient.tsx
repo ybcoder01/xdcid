@@ -38,6 +38,7 @@ export default function ApothemPricingTestClient() {
   const [message, setMessage] = useState("Connect the designated Apothem wallet.");
   const [hash, setHash] = useState<Hex>();
   const [result, setResult] = useState<{ owner: Address; expiry: bigint }>();
+  const [securityResult, setSecurityResult] = useState("");
 
   async function connect() {
     try {
@@ -192,6 +193,88 @@ export default function ApothemPricingTestClient() {
     finally { setBusy(false); }
   }
 
+  async function runQuoteSecurityTests() {
+    if (!account || !prepared || busy) return;
+    setBusy(true); setSecurityResult("");
+    try {
+      const provider = injectedProvider();
+      await ensureApothem(provider);
+      const { publicClient } = clients(provider);
+      const currentNonce = await publicClient.readContract({
+        address: APOTHEM_PRICING.registrar, abi: artifacts.registrar.abi,
+        functionName: "nonces", args: [account],
+      }) as bigint;
+      if (currentNonce !== prepared.quote.nonce) {
+        throw new Error("Prepare a fresh unused quote before running these tests.");
+      }
+      const functionName = prepared.quote.product === 0 ? "registerWithQuote" : "renewWithQuote";
+      const now = BigInt(Math.floor(Date.now() / 1000));
+      const expired = { ...prepared.quote, issuedAt: now - 700n, deadline: now - 100n };
+      const tampered = { ...prepared.quote, paymentAmount: prepared.quote.paymentAmount + 1n };
+
+      let expiredRejected = false;
+      try {
+        await publicClient.simulateContract({
+          account, address: APOTHEM_PRICING.registrar, abi: artifacts.registrar.abi,
+          functionName, args: [prepared.name, expired, prepared.signature],
+          value: prepared.currency === "XDC" ? expired.paymentAmount : 0n,
+        });
+      } catch { expiredRejected = true; }
+
+      let tamperedRejected = false;
+      try {
+        await publicClient.simulateContract({
+          account, address: APOTHEM_PRICING.registrar, abi: artifacts.registrar.abi,
+          functionName, args: [prepared.name, tampered, prepared.signature],
+          value: prepared.currency === "XDC" ? tampered.paymentAmount : 0n,
+        });
+      } catch { tamperedRejected = true; }
+
+      if (!expiredRejected || !tamperedRejected) {
+        throw new Error("A negative quote test was unexpectedly accepted.");
+      }
+      setSecurityResult("Passed: expired and modified quotes were rejected on-chain without broadcasting.");
+      setMessage("Quote security simulations passed. The prepared quote remains unused.");
+    } catch (error) { setMessage(errorMessage(error)); }
+    finally { setBusy(false); }
+  }
+
+  async function setLegacyCollision(registered: boolean) {
+    if (!account || busy || !name.trim()) return;
+    setBusy(true); setSecurityResult("");
+    try {
+      const provider = injectedProvider();
+      await ensureApothem(provider);
+      const { publicClient, walletClient } = clients(provider);
+      const canonical = canonicalize(name);
+      const tokenId = BigInt(keccak256(toBytes(canonical)));
+      setMessage(registered
+        ? "Confirm the test-only transaction that marks this name in the legacy mock."
+        : "Confirm removal of this name from the legacy mock.");
+      const simulation = await publicClient.simulateContract({
+        account, address: APOTHEM_PRICING.legacyRegistry,
+        abi: artifacts.legacyRegistry.abi, functionName: "setName",
+        args: [canonical, tokenId, registered],
+      });
+      const tx = await walletClient.writeContract(simulation.request);
+      await publicClient.waitForTransactionReceipt({ hash: tx, confirmations: 2 });
+      const available = await publicClient.readContract({
+        address: APOTHEM_PRICING.registrar, abi: artifacts.registrar.abi,
+        functionName: "available", args: [canonical],
+      });
+      if (registered && available) throw new Error("Legacy collision was not blocked");
+      if (!registered && !available) {
+        throw new Error("Name remains unavailable; it may already exist in the test registry");
+      }
+      setSecurityResult(registered
+        ? "Passed: the registrar blocked the legacy-colliding name. Clear it before other tests."
+        : "Legacy collision marker cleared.");
+      setPrepared(undefined);
+      setMessage(registered ? "Legacy collision blocking passed." : "Legacy test marker cleared.");
+    } catch (error) { setMessage(errorMessage(error)); }
+    finally { setBusy(false); }
+  }
+
   return <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-950">
     <div className="mx-auto max-w-4xl space-y-7">
       <section className="rounded-3xl border border-amber-300 bg-amber-50 p-7">
@@ -224,8 +307,19 @@ export default function ApothemPricingTestClient() {
             onClick={prepareQuote} disabled={!account || busy || !name.trim()}>Prepare and sign quote</button>
           <button className="rounded-xl bg-blue-700 px-5 py-3 font-semibold text-white disabled:opacity-50"
             onClick={submit} disabled={!prepared || busy}>Submit prepared quote</button>
+          <button className="rounded-xl bg-violet-700 px-5 py-3 font-semibold text-white disabled:opacity-50"
+            onClick={runQuoteSecurityTests} disabled={!prepared || busy}>Test expired and modified quote</button>
+          <button className="rounded-xl bg-rose-700 px-5 py-3 font-semibold text-white disabled:opacity-50"
+            onClick={() => setLegacyCollision(true)} disabled={!account || busy || !name.trim()}>
+            Mark and test legacy collision
+          </button>
+          <button className="rounded-xl border border-rose-700 px-5 py-3 font-semibold text-rose-800 disabled:opacity-50"
+            onClick={() => setLegacyCollision(false)} disabled={!account || busy || !name.trim()}>
+            Clear legacy test marker
+          </button>
         </div>
       </section>
+      {securityResult && <p className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900">{securityResult}</p>}
       {prepared && <section className="rounded-3xl border bg-white p-7 shadow-sm">
         <h2 className="text-2xl font-semibold">Prepared quote</h2>
         <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
