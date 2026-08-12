@@ -14,6 +14,23 @@ const config: HardhatUserConfig = {
       chainId: 50,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
     }
+  },
+  etherscan: {
+    apiKey: {
+      xdc: process.env.XDCSCAN_API_KEY || ""
+    },
+    customChains: [
+      {
+        network: "xdc",
+        chainId: 50,
+        urls: {
+          apiURL:
+            process.env.XDCSCAN_API_URL ||
+            "https://api.etherscan.io/v2/api",
+          browserURL: "https://xdcscan.com"
+        }
+      }
+    ]
   }
 };
 

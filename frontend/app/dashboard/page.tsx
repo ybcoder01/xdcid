@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { formatEther, type Hex } from "viem";
+import { SignedRenewalControls } from "../../components/SignedRenewalControls";
 import {
   useAccount,
   useReadContract,
@@ -12,7 +13,8 @@ import {
 import {
   addresses,
   registrarAbi,
-  reverseResolverAbi
+  reverseResolverAbi,
+  signedRegistrarEnabled
 } from "../../config/contracts";
 
 type OwnedName = {
@@ -41,7 +43,8 @@ function NameRow({ record }: { record: OwnedName }) {
     address: addresses.registrar,
     abi: registrarAbi,
     functionName: "price",
-    args: [record.name]
+    args: [record.name],
+    query: { enabled: !signedRegistrarEnabled }
   });
 
   return (
@@ -62,27 +65,31 @@ function NameRow({ record }: { record: OwnedName }) {
         </div>
         <p className="text-sm text-neutral-600">
           Expires: {new Date(record.expiry.iso).toLocaleDateString()}
-          {price.data
+          {!signedRegistrarEnabled && price.data
             ? " - renew " + formatEther(price.data) + " XDC/year"
             : ""}
         </p>
       </div>
-      <button
-        className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-        disabled={!price.data || isPending}
-        onClick={() =>
-          price.data &&
-          writeContract({
-            address: addresses.registrar,
-            abi: registrarAbi,
-            functionName: "renew",
-            args: [record.name, 1n],
-            value: price.data
-          })
-        }
-      >
-        {isPending ? "Confirm in wallet" : "Renew"}
-      </button>
+      {signedRegistrarEnabled ? (
+        <SignedRenewalControls name={record.name} />
+      ) : (
+        <button
+          className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+          disabled={!price.data || isPending}
+          onClick={() =>
+            price.data &&
+            writeContract({
+              address: addresses.registrar,
+              abi: registrarAbi,
+              functionName: "renew",
+              args: [record.name, 1n],
+              value: price.data
+            })
+          }
+        >
+          {isPending ? "Confirm in wallet" : "Renew"}
+        </button>
+      )}
     </div>
   );
 }

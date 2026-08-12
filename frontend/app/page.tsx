@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEther } from "viem";
+import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { addresses, contractsConfigured, registrarAbi } from "../config/contracts";
+import { addresses, contractsConfigured, registrarAbi, signedRegistrarEnabled } from "../config/contracts";
 import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
@@ -46,7 +47,7 @@ export default function Home() {
     abi: registrarAbi,
     functionName: "price",
     args: [name],
-    query: { enabled: canReadContracts }
+    query: { enabled: canReadContracts && !signedRegistrarEnabled }
   });
 
   const registry = useRegistryStatus(
@@ -58,7 +59,7 @@ export default function Home() {
     availability.data === true && registry.status?.registrationAllowed === true;
 
   function claim() {
-    if (!isValid || !contractsConfigured || !address || !price.data || !registrationAllowed) return;
+    if (signedRegistrarEnabled || !isValid || !contractsConfigured || !address || !price.data || !registrationAllowed) return;
     writeContract(
       {
         address: addresses.registrar,
@@ -171,9 +172,9 @@ export default function Home() {
           </p>
 
           <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-3">
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">3 chars</p><p>500 XDC/year</p></div>
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">4 chars</p><p>100 XDC/year</p></div>
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">5+ chars</p><p>10 XDC/year</p></div>
+            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">3 chars</p><p>{signedRegistrarEnabled ? "$20/year" : "500 XDC/year"}</p></div>
+            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">4 chars</p><p>{signedRegistrarEnabled ? "$10/year" : "100 XDC/year"}</p></div>
+            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">5+ chars</p><p>{signedRegistrarEnabled ? "$5/year" : "10 XDC/year"}</p></div>
           </div>
 
           {hasInput && (
@@ -186,9 +187,9 @@ export default function Home() {
                       ? validationError
                       : !contractsConfigured
                         ? "Contracts not configured"
-                        : availability.isLoading || price.isLoading || registry.isChecking
+                        : availability.isLoading || (!signedRegistrarEnabled && price.isLoading) || registry.isChecking
                           ? "Checking both registries..."
-                          : availability.isError || price.isError || registry.isError
+                          : availability.isError || (!signedRegistrarEnabled && price.isError) || registry.isError
                             ? "Could not check registry status"
                             : registry.status?.state === "legacy"
                               ? "Reserved in XDCDomains; migration required"
@@ -199,17 +200,21 @@ export default function Home() {
                                   : registry.status?.state === "xdcid"
                                     ? "Already registered with XDCID"
                                     : "Unavailable"}
-                    {price.data ? " - " + formatEther(price.data) + " XDC/year" : ""}
+                    {!signedRegistrarEnabled && price.data ? " - " + formatEther(price.data) + " XDC/year" : ""}
                   </p>
                 </div>
                 {isValid && registrationAllowed ? (
-                  <button
-                    className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
-                    disabled={!contractsConfigured || !isConnected || isPending}
-                    onClick={claim}
-                  >
-                    Claim
-                  </button>
+                  signedRegistrarEnabled ? (
+                    <SignedRegistrationControls name={name} enabled={contractsConfigured && isConnected} />
+                  ) : (
+                    <button
+                      className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
+                      disabled={!contractsConfigured || !isConnected || isPending}
+                      onClick={claim}
+                    >
+                      Claim
+                    </button>
+                  )
                 ) : isValid && registry.status?.state === "xdcid" ? (
                   <Link className="rounded-xl border border-black/10 px-5 py-3 text-sm font-semibold hover:bg-neutral-50" href={"/name/" + name}>View</Link>
                 ) : (
