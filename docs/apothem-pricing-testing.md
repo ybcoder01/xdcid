@@ -27,8 +27,12 @@ The designated wallet signs an EIP-712 quote in the browser, then submits the co
 5. Submit registration and verify owner/expiry.
 6. Prepare a new renewal quote and submit renewal.
 7. Try the previously used quote again and confirm nonce replay protection rejects it.
-8. Let a prepared quote expire or alter its fields and confirm rejection.
+8. Prepare a fresh unused quote and click **Test expired and modified quote**. Both read-only simulations must be rejected without a wallet transaction.
+9. Enter a fresh unregistered name and click **Mark and test legacy collision**. Approve the test-only mock transaction and confirm the registrar reports the name unavailable.
+10. Click **Clear legacy test marker** and approve cleanup before using that name in another test.
 
 The XDC path obtains only the market conversion from the existing pricing endpoint. The on-chain policy remains authoritative for the USD amount, policy version, nonce, signer authorization, and payment configuration.
 
 After testing, remove the Preview flag. Do not enable this self-signing test harness in Production.
+
+The legacy mock is an Apothem test dependency only. Its mutation functions are intentionally permissionless and must never be used as a production legacy-data source.
