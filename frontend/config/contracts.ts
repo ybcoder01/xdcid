@@ -27,6 +27,10 @@ export const addresses = {
   reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`,
   multichainResolver: (
     process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER || MULTICHAIN_RESOLVER_ADDRESS
+  ) as `0x${string}`,
+  pricingPolicy: (
+    process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
+    "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`
 };
 
@@ -267,6 +271,115 @@ export const reverseResolverAbi = [
       { name: "name", type: "string" },
       { name: "node", type: "bytes32" }
     ],
+    outputs: []
+  }
+] as const;
+
+
+export const ownableAbi = [
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "transferOwnership",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "newOwner", type: "address" }],
+    outputs: []
+  }
+] as const;
+
+export const pricingPolicyAbi = [
+  ...ownableAbi,
+  {
+    type: "function",
+    name: "version",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "config",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{
+      name: "",
+      type: "tuple",
+      components: [
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }]
+  },
+  {
+    type: "function",
+    name: "hasPendingConfig",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "pendingActivationTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "proposeConfig",
+    stateMutability: "nonpayable",
+    inputs: [{
+      name: "nextConfig",
+      type: "tuple",
+      components: [
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "cancelPendingConfig",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "activatePendingConfig",
+    stateMutability: "nonpayable",
+    inputs: [],
     outputs: []
   }
 ] as const;

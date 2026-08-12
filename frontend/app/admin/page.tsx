@@ -11,8 +11,9 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract
 } from "wagmi";
-import { addresses, registrarAbi } from "../../config/contracts";
+import { addresses, ownableAbi, registrarAbi, signedRegistrarEnabled, zeroAddress } from "../../config/contracts";
 import { AdminOperations } from "../../components/AdminOperations";
+import { AdminRoleManagement } from "../../components/AdminRoleManagement";
 
 type AdminSession = {
   authenticated: boolean;
@@ -34,9 +35,15 @@ export default function AdminPage() {
   const signing = useSignMessage();
 
   const owner = useReadContract({
-    address: addresses.registrar,
-    abi: registrarAbi,
+    address: addresses.registry,
+    abi: ownableAbi,
     functionName: "owner"
+  });
+  const policyOwner = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: ownableAbi,
+    functionName: "owner",
+    query: { enabled: addresses.pricingPolicy !== zeroAddress }
   });
   const balance = useBalance({ address: addresses.registrar });
   const refetchBalance = balance.refetch;
@@ -48,10 +55,13 @@ export default function AdminPage() {
   const isOwner = useMemo(
     () =>
       !!account &&
-      !!ownerAddress &&
-      ownerAddress.toLowerCase() === account.toLowerCase(),
-    [account, ownerAddress]
+      [ownerAddress, policyOwner.data || ""]
+        .filter(Boolean)
+        .some((candidate) => candidate.toLowerCase() === account.toLowerCase()),
+    [account, ownerAddress, policyOwner.data]
   );
+  const isRegistryOwner =
+    !!account && !!ownerAddress && ownerAddress.toLowerCase() === account.toLowerCase();
   const isAuthenticated =
     isOwner &&
     session.authenticated &&
@@ -59,12 +69,14 @@ export default function AdminPage() {
     session.address.toLowerCase() === account?.toLowerCase();
   const canWithdraw =
     isAuthenticated &&
+    isRegistryOwner &&
+    !signedRegistrarEnabled &&
     isAddress(recipient) &&
     !!contractBalance &&
     contractBalance > 0n &&
     !withdrawal.isPending &&
     !receipt.isLoading;
-  const loading = owner.isLoading || balance.isLoading;
+  const loading = owner.isLoading || policyOwner.isLoading || balance.isLoading;
   const error =
     owner.error?.message ||
     balance.error?.message ||
@@ -189,10 +201,10 @@ export default function AdminPage() {
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">Owner access required</h1>
           <p className="mt-2 text-sm text-neutral-600">
             {!isConnected
-              ? "Connect the registrar owner wallet to continue."
+              ? "Connect the registry or pricing-policy owner wallet to continue."
               : loading
                 ? "Checking registrar ownership..."
-                : "The connected wallet is not the registrar owner."}
+                : "The connected wallet is not an authorized contract owner."}
           </p>
 
           <div className="mt-8">
@@ -203,7 +215,7 @@ export default function AdminPage() {
           account &&
           ownerAddress &&
           account.toLowerCase() !== ownerAddress.toLowerCase() ? (
-            <p className="mt-4 text-xs text-red-600">Connected wallet is not the registrar owner.</p>
+            <p className="mt-4 text-xs text-red-600">Connected wallet is not a registry or pricing-policy owner.</p>
           ) : null}
           {error ? <p className="mt-4 break-words text-xs text-red-600">{error}</p> : null}
         </section>
@@ -308,7 +320,7 @@ export default function AdminPage() {
               <p className="mt-1 break-all">{account || "Not connected"}</p>
             </div>
             <div className="border-t border-white/10 pt-4">
-              <p className="text-slate-300">Registrar owner</p>
+              <p className="text-slate-300">Registry owner</p>
               <p className="mt-1 break-all">{ownerAddress || (loading ? "Loading..." : "Unavailable")}</p>
             </div>
             <div className="border-t border-white/10 pt-4">
@@ -323,6 +335,8 @@ export default function AdminPage() {
           </div>
         </aside>
       </section>
+
+      <AdminRoleManagement />
 
       <AdminOperations />
     </main>

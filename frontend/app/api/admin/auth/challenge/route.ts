@@ -4,7 +4,7 @@ import { getAddress, isAddress } from "viem";
 import {
   ADMIN_CHALLENGE_TTL_MS,
   buildAdminChallenge,
-  currentRegistrarOwner,
+  isCurrentAdmin,
   hashAdminMessage,
   isSameOrigin,
 } from "../../../../../lib/adminAuth";
@@ -42,9 +42,11 @@ export async function POST(request: Request) {
 
   try {
     const address = getAddress(body.address);
-    const owner = await currentRegistrarOwner();
-    if (address !== owner) {
-      return Response.json({ error: "Wallet is not the registrar owner" }, { status: 403 });
+    if (!(await isCurrentAdmin(address))) {
+      return Response.json(
+        { error: "Wallet is not a registry or pricing-policy owner" },
+        { status: 403 },
+      );
     }
 
     const issuedAt = new Date();
