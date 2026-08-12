@@ -19,6 +19,8 @@ existing registry.
 - Reserved prices: $1 annual subdomain and $3 migration
 - Term discounts: 10% for three years, 15% for five, and 20% for ten
 - XDC quote buffer: 2%
+- Rabby-compatible deterministic deployment proxy:
+  `0x4e59b44847b379578588920ca78fbf26c0b4956c`
 
 ## Safety boundary
 
@@ -28,7 +30,8 @@ The page:
   `ENABLE_MAINNET_PRICING_DEPLOYMENT=true`;
 - accepts only the fixed owner wallet on chain ID 50;
 - validates existing dependency bytecode, registry ownership, and USDC decimals;
-- deploys `XNSPricingPolicy`, then `XNSSignedQuoteRegistrar`;
+- deploys `XNSPricingPolicy`, then `XNSSignedQuoteRegistrar`, through the
+  deterministic proxy so every Rabby transaction has a valid `to` address;
 - waits for two confirmations and validates owners, roles, payment settings,
   policy version, and registrar immutable dependencies;
 - has no registrar activation function;
@@ -43,8 +46,8 @@ The page:
 4. Redeploy the Preview and visit `/deployment/mainnet-pricing`.
 5. Connect the current owner wallet and complete the read-only preflight.
 6. Review the four fixed public addresses and pricing values.
-7. Approve the pricing-policy deployment.
-8. Approve the registrar deployment.
+7. Approve the pricing-policy proxy transaction.
+8. Approve the registrar proxy transaction.
 9. Save both contract addresses and transaction hashes.
 10. Remove the Preview flag immediately and redeploy or delete the Preview.
 
