@@ -39,6 +39,7 @@ jobs:
       - name: Verify pricing policy and signed registrar
         env:
           XDCSCAN_API_KEY: ${{ secrets.XDCSCAN_API_KEY }}
+          XDCSCAN_API_URL: https://api.xdcscan.com/api
           XDC_MAINNET_RPC_URL: https://earpc.xinfin.network
           PRICING_POLICY_ADDRESS: "0xCdAFe55B0F34eBa2b3a4C8b6d41c2810B5458426"
           NEW_SIGNED_REGISTRAR: "0xa1584cb17523CEb991155328EdFAD2293b66bd94"
