@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - verify/mainnet-activation-preflight
+  pull_request:
+    paths:
+      - ".github/workflows/preflight-mainnet-activation.yml"
+      - "scripts/preflight-mainnet-pricing-stack-readonly.ts"
   workflow_dispatch:
 
 permissions:
