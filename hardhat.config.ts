@@ -16,9 +16,7 @@ const config: HardhatUserConfig = {
     }
   },
   etherscan: {
-    apiKey: {
-      xdc: process.env.XDCSCAN_API_KEY || ""
-    },
+    apiKey: process.env.XDCSCAN_API_KEY || "",
     customChains: [
       {
         network: "xdc",
