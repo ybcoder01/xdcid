@@ -6,6 +6,9 @@ on:
       - verify/mainnet-pricing-stack
     paths:
       - ".github/workflows/verify-mainnet-pricing-stack.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/verify-mainnet-pricing-stack.yml"
   workflow_dispatch:
 
 permissions:
