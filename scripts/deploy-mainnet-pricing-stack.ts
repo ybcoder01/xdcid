@@ -42,6 +42,13 @@ async function main() {
   const quoteSigner = requiredAddress("QUOTE_SIGNER");
   const usdcToken = await requireContract("USDC_ADDRESS");
   const treasury = requiredAddress("TREASURY_ADDRESS");
+  const usdc = await ethers.getContractAt(
+    ["function decimals() view returns (uint8)"],
+    usdcToken,
+  );
+  if ((await usdc.decimals()) !== 6n) {
+    throw new Error("USDC_ADDRESS must use six decimals");
+  }
 
   const config = {
     threeCharacterAnnualUsdMicros: requiredPositiveInteger(
