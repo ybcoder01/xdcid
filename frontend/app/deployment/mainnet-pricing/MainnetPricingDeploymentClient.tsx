@@ -405,15 +405,39 @@ async function validateDeployment(
     throw new Error("Pricing-policy owner or version validation failed");
   }
 
-  const values = config as readonly unknown[];
+  const values = config as {
+    threeCharacterAnnualUsdMicros: bigint;
+    fourCharacterAnnualUsdMicros: bigint;
+    standardAnnualUsdMicros: bigint;
+    subdomainAnnualUsdMicros: bigint;
+    migrationUsdMicros: bigint;
+    threeYearDiscountBps: number;
+    fiveYearDiscountBps: number;
+    tenYearDiscountBps: number;
+    xdcQuoteBufferBps: number;
+    quoteSigner: Address;
+    usdcToken: Address;
+    treasury: Address;
+    xdcPaymentsEnabled: boolean;
+    usdcPaymentsEnabled: boolean;
+  };
   if (
-    getAddress(values[13] as Address) !== expectedConfig.quoteSigner ||
-    getAddress(values[14] as Address) !== expectedConfig.usdcToken ||
-    getAddress(values[15] as Address) !== expectedConfig.treasury ||
-    values[16] !== true ||
-    values[17] !== true
+    values.threeCharacterAnnualUsdMicros !== 20_000_000n ||
+    values.fourCharacterAnnualUsdMicros !== 10_000_000n ||
+    values.standardAnnualUsdMicros !== 5_000_000n ||
+    values.subdomainAnnualUsdMicros !== 1_000_000n ||
+    values.migrationUsdMicros !== 3_000_000n ||
+    values.threeYearDiscountBps !== 1_000 ||
+    values.fiveYearDiscountBps !== 1_500 ||
+    values.tenYearDiscountBps !== 2_000 ||
+    values.xdcQuoteBufferBps !== 200 ||
+    getAddress(values.quoteSigner) !== expectedConfig.quoteSigner ||
+    getAddress(values.usdcToken) !== expectedConfig.usdcToken ||
+    getAddress(values.treasury) !== expectedConfig.treasury ||
+    values.xdcPaymentsEnabled !== true ||
+    values.usdcPaymentsEnabled !== true
   ) {
-    throw new Error("Pricing-policy role or payment validation failed");
+    throw new Error("Pricing-policy configuration validation failed");
   }
 
   if (
