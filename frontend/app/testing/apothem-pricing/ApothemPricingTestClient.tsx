@@ -13,6 +13,8 @@ import {
 } from "../../../lib/signedRegistrarQuotes";
 
 const erc20Abi = [
+  { type: "function", name: "balanceOf", stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "allowance", stateMutability: "view",
     inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }],
     outputs: [{ type: "uint256" }] },
@@ -30,7 +32,7 @@ export default function ApothemPricingTestClient() {
   const [name, setName] = useState("");
   const [product, setProduct] = useState<Product>("registration");
   const [years, setYears] = useState(1);
-  const [currency, setCurrency] = useState<Currency>("USDC");
+  const [currency, setCurrency] = useState<Currency>("XDC");
   const [prepared, setPrepared] = useState<Prepared>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("Connect the designated Apothem wallet.");
@@ -134,7 +136,25 @@ export default function ApothemPricingTestClient() {
       const provider = injectedProvider();
       await ensureApothem(provider);
       const { publicClient, walletClient } = clients(provider);
+
+      if (BigInt(Math.floor(Date.now() / 1000)) > prepared.quote.deadline) {
+        throw new Error("This quote has expired. Prepare and sign a new quote.");
+      }
+      const currentNonce = await publicClient.readContract({
+        address: APOTHEM_PRICING.registrar, abi: artifacts.registrar.abi,
+        functionName: "nonces", args: [account],
+      }) as bigint;
+      if (currentNonce !== prepared.quote.nonce) {
+        throw new Error("This quote has already been used. Prepare and sign a new quote.");
+      }
+
       if (prepared.currency === "USDC") {
+        const balance = await publicClient.readContract({
+          address: APOTHEM_PRICING.usdc, abi: erc20Abi, functionName: "balanceOf", args: [account],
+        }) as bigint;
+        if (balance < prepared.quote.paymentAmount) {
+          throw new Error("Insufficient Apothem USDC balance for this renewal.");
+        }
         const allowance = await publicClient.readContract({
           address: APOTHEM_PRICING.usdc, abi: erc20Abi, functionName: "allowance",
           args: [account, APOTHEM_PRICING.registrar],
@@ -148,14 +168,15 @@ export default function ApothemPricingTestClient() {
           await publicClient.waitForTransactionReceipt({ hash: approval, confirmations: 2 });
         }
       }
-      setMessage("Confirm the registrar transaction.");
-      const tx = await walletClient.writeContract({
-        account, chain: apothem, address: APOTHEM_PRICING.registrar,
-        abi: artifacts.registrar.abi,
+      setMessage("Checking the transaction before opening the wallet.");
+      const simulation = await publicClient.simulateContract({
+        account, address: APOTHEM_PRICING.registrar, abi: artifacts.registrar.abi,
         functionName: prepared.quote.product === 0 ? "registerWithQuote" : "renewWithQuote",
         args: [prepared.name, prepared.quote, prepared.signature],
         value: prepared.currency === "XDC" ? prepared.quote.paymentAmount : 0n,
       });
+      setMessage("Confirm the registrar transaction.");
+      const tx = await walletClient.writeContract(simulation.request);
       setHash(tx);
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx, confirmations: 2, timeout: 120_000 });
       if (receipt.status !== "success") throw new Error("Registrar transaction reverted");
@@ -267,5 +288,16 @@ async function ensureApothem(provider: EIP1193Provider) {
   }
 }
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Wallet operation failed";
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("already been used") || message.includes("InvalidNonce"))
+    return "This quote has already been used. Prepare and sign a new quote.";
+  if (message.toLowerCase().includes("expired") || message.includes("QuoteExpired"))
+    return "This quote has expired. Prepare and sign a new quote.";
+  if (message.toLowerCase().includes("insufficient") && message.toLowerCase().includes("usdc"))
+    return "Insufficient Apothem USDC balance for this payment.";
+  if (message.includes("tx fee") && message.includes("configured cap"))
+    return "The transaction could not be simulated safely. Check the selected currency and balance, then prepare a new quote.";
+  if (message.length > 240)
+    return "The transaction was rejected during its safety check. Prepare a new quote and verify the payment currency and balance.";
+  return message || "Wallet operation failed";
 }
