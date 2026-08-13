@@ -27,7 +27,7 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL:
             process.env.XDCSCAN_APOTHEM_API_URL ||
-            "https://api-apothem.xdcscan.io/api",
+            "https://api.xdcscan.io/api?chainId=51",
           browserURL: "https://testnet.xdcscan.com"
         }
       },
