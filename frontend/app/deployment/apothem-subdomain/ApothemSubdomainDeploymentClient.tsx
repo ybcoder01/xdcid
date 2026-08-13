@@ -33,6 +33,12 @@ const apothem = {
   },
 } as const;
 
+type MetaMaskProvider = EIP1193Provider & {
+  isMetaMask?: boolean;
+  isRabby?: boolean;
+  providers?: MetaMaskProvider[];
+};
+
 type StepState = "pending" | "wallet" | "confirming" | "complete" | "failed";
 type Step = {
   label: string;
@@ -202,7 +208,7 @@ export default function ApothemSubdomainDeploymentClient() {
             <Detail label="Designated test wallet and owner" value={OWNER} />
             <Detail label="Existing Apothem registry" value={REGISTRY} />
             <Detail label="Existing Pricing Policy V2" value={PRICING_POLICY} />
-            <Detail label="Rabby-compatible deployment proxy" value={CREATE2_DEPLOYER} />
+            <Detail label="CREATE2 deployment proxy" value={CREATE2_DEPLOYER} />
           </dl>
           <p className="mt-5 rounded-xl bg-slate-100 p-4">{message}</p>
           <div className="mt-5 flex flex-wrap gap-3">
@@ -395,9 +401,19 @@ async function requireCode(
 }
 
 function injectedProvider(): EIP1193Provider {
-  const provider = (window as Window & { ethereum?: EIP1193Provider }).ethereum;
-  if (!provider) throw new Error("No injected browser wallet was detected");
-  return provider;
+  const injected = (
+    window as Window & { ethereum?: MetaMaskProvider }
+  ).ethereum;
+  if (!injected) throw new Error("MetaMask was not detected");
+
+  const providers = injected.providers ?? [injected];
+  const metamask = providers.find(
+    (provider) => provider.isMetaMask === true && provider.isRabby !== true,
+  );
+  if (!metamask) {
+    throw new Error("Enable the MetaMask extension to continue on Apothem");
+  }
+  return metamask;
 }
 
 async function ensureApothem(provider: EIP1193Provider) {
