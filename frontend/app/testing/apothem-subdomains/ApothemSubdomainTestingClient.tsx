@@ -588,7 +588,6 @@ async function requireCode(publicClient: ReturnType<typeof createPublicClient>) 
 
 function errorMessage(cause: unknown) {
   const raw = cause instanceof Error ? cause.message : "Wallet operation failed";
-  const first = raw.split("
-")[0];
+  const first = raw.split(String.fromCharCode(10))[0];
   return first.length > 320 ? first.slice(0, 317) + "..." : first;
 }
