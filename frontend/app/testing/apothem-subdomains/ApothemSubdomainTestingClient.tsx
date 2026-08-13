@@ -33,7 +33,8 @@ const registrarAbi = parseAbi([
   "function pricingPolicy() view returns (address)",
   "function nonces(address) view returns (uint256)",
   "function available(string parentName,string label) view returns (bool)",
-  "function nodeFor(string parentName,string label) pure returns (bytes32)",\n  "function parentNodeFor(string parentName) pure returns (bytes32)",
+  "function nodeFor(string parentName,string label) pure returns (bytes32)",
+  "function parentNodeFor(string parentName) pure returns (bytes32)",
   "function ownerOf(bytes32 node) view returns (address)",
   "function addressOf(bytes32 node,uint256 chainId) view returns (address)",
   "function records(bytes32 node) view returns (address owner,bytes32 parentNode,uint256 expiry)",
@@ -587,6 +588,7 @@ async function requireCode(publicClient: ReturnType<typeof createPublicClient>) 
 
 function errorMessage(cause: unknown) {
   const raw = cause instanceof Error ? cause.message : "Wallet operation failed";
-  const first = raw.split("\n")[0];
+  const first = raw.split("
+")[0];
   return first.length > 320 ? first.slice(0, 317) + "..." : first;
 }
