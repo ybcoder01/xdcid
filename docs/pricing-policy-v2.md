@@ -5,7 +5,7 @@ not connected to the production registry by this change.
 
 ## Initial commercial policy
 
-- Two-character names: $100 per year, enforced as an immutable minimum floor.
+- Two-character names: initially $50 per year and adjustable through delayed administration.
 - Three-character names: $20 per year.
 - Four-character names: $10 per year.
 - Standard names: $5 per year.
@@ -15,10 +15,7 @@ not connected to the production registry by this change.
 - Migration: $3.
 - Three, five, and ten-year discounts remain 10%, 15%, and 20%.
 
-All prices except the protected two-character floor can be adjusted by proposing
-a complete configuration and waiting 48 hours. The two-character price can be
-raised or later reduced, but never below $100 without deploying a different
-policy contract.
+All prices, including the two-character price, can be adjusted by proposing a\ncomplete configuration and waiting 48 hours. Prices must remain non-zero, but\nchanging them does not require deploying a replacement policy contract.
 
 ## Module boundaries
 
