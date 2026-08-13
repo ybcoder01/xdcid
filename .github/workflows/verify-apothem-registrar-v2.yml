@@ -61,6 +61,7 @@ jobs:
       - name: Verify and publish contracts
         env:
           APOTHEM_RPC_URL: ${{ env.APOTHEM_RPC_URL }}
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
           XDCSCAN_API_KEY: ${{ secrets.XDCSCAN_API_KEY }}
           PRICING_POLICY_V2_ADDRESS: ${{ inputs.pricing_policy_v2 }}
           DISCOUNT_AUTHORIZATION_ADDRESS: ${{ inputs.discount_authorization }}
