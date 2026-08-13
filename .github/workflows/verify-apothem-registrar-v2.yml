@@ -37,9 +37,30 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Select synchronized Apothem RPC
+        env:
+          CONTRACT_ADDRESS: ${{ inputs.pricing_policy_v2 }}
+        run: |
+          for rpc in \
+            https://rpc.apothem.network \
+            https://erpc.apothem.network \
+            https://apothem.xdcrpc.com
+          do
+            code="$(curl --fail --silent --show-error --max-time 15 \
+              --header 'content-type: application/json' \
+              --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getCode\",\"params\":[\"$CONTRACT_ADDRESS\",\"latest\"],\"id\":1}" \
+              "$rpc" | jq -r '.result // empty')" || continue
+            if [ -n "$code" ] && [ "$code" != "0x" ]; then
+              echo "APOTHEM_RPC_URL=$rpc" >> "$GITHUB_ENV"
+              echo "Selected synchronized Apothem RPC: $rpc"
+              exit 0
+            fi
+          done
+          echo "No configured Apothem RPC can read deployed bytecode" >&2
+          exit 1
       - name: Verify and publish contracts
         env:
-          APOTHEM_RPC_URL: https://rpc.apothem.network
+          APOTHEM_RPC_URL: ${{ env.APOTHEM_RPC_URL }}
           XDCSCAN_API_KEY: ${{ secrets.XDCSCAN_API_KEY }}
           PRICING_POLICY_V2_ADDRESS: ${{ inputs.pricing_policy_v2 }}
           DISCOUNT_AUTHORIZATION_ADDRESS: ${{ inputs.discount_authorization }}
