@@ -39,7 +39,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify and publish contracts
         env:
-          APOTHEM_RPC_URL: https://erpc.apothem.network
+          APOTHEM_RPC_URL: https://rpc.apothem.network
           XDCSCAN_API_KEY: ${{ secrets.XDCSCAN_API_KEY }}
           PRICING_POLICY_V2_ADDRESS: ${{ inputs.pricing_policy_v2 }}
           DISCOUNT_AUTHORIZATION_ADDRESS: ${{ inputs.discount_authorization }}
