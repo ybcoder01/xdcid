@@ -330,4 +330,145 @@ describe("XNSRegistrarV2", function () {
       ),
     ).to.be.revertedWithCustomError(registrar, "InvalidQuote");
   });
+
+  it("prices every name tier and supported multi-year term", async function () {
+    const { policy } = await fixture();
+
+    expect(await policy.priceUsdMicros(0, 2, 1)).to.equal(50_000_000n);
+    expect(await policy.priceUsdMicros(0, 3, 1)).to.equal(20_000_000n);
+    expect(await policy.priceUsdMicros(0, 4, 1)).to.equal(10_000_000n);
+    expect(await policy.priceUsdMicros(0, 5, 1)).to.equal(5_000_000n);
+
+    expect(await policy.priceUsdMicros(0, 5, 3)).to.equal(13_500_000n);
+    expect(await policy.priceUsdMicros(0, 5, 5)).to.equal(21_250_000n);
+    expect(await policy.priceUsdMicros(0, 5, 10)).to.equal(40_000_000n);
+  });
+
+  it("registers and renews with XDC for every supported term", async function () {
+    for (const termYears of [1, 3, 5, 10]) {
+      const { alice, registry, registrar, makeQuote } = await fixture();
+      const name = `term${termYears}.xdc`;
+      const registration = await makeQuote({ name, termYears });
+
+      await registrar.connect(alice).registerWithQuote(
+        registration.name,
+        registration.quote,
+        registration.signature,
+        { value: registration.quote.paymentAmount },
+      );
+
+      const oldExpiry = await registry.expiryOf(registration.quote.node);
+      const renewal = await makeQuote({
+        name,
+        product: 1,
+        termYears,
+      });
+      await registrar.connect(alice).renewWithQuote(
+        renewal.name,
+        renewal.quote,
+        renewal.signature,
+        { value: renewal.quote.paymentAmount },
+      );
+
+      expect(await registry.expiryOf(registration.quote.node)).to.equal(
+        oldExpiry + BigInt(termYears) * 365n * 24n * 60n * 60n,
+      );
+    }
+  });
+
+  it("applies an exact-name partial discount", async function () {
+    const {
+      discountSigner,
+      alice,
+      treasury,
+      authorization,
+      authorizationDomain,
+      registrar,
+      makeQuote,
+    } = await fixture();
+    const paymentAmount = ethers.parseEther("0.075");
+    const made = await makeQuote({
+      name: "discount.xdc",
+      discountBps: 2_500,
+      paymentAmount,
+    });
+    const now = await time.latest();
+    const grant = {
+      node: made.quote.node,
+      beneficiary: alice.address,
+      product: 0,
+      termYears: 1,
+      discountBps: 2_500,
+      maxUses: 1,
+      validAfter: now - 1,
+      deadline: now + 3600,
+      nonce: 7,
+    };
+    const grantSignature = await discountSigner.signTypedData(
+      authorizationDomain,
+      authorizationTypes,
+      grant,
+    );
+    const before = await ethers.provider.getBalance(treasury.address);
+
+    await registrar.connect(alice).registerWithDiscountQuote(
+      made.name,
+      made.quote,
+      made.signature,
+      grant,
+      grantSignature,
+      { value: paymentAmount },
+    );
+
+    expect(made.quote.usdMicros).to.equal(3_750_000n);
+    expect(await ethers.provider.getBalance(treasury.address)).to.equal(
+      before + paymentAmount,
+    );
+  });
+
+  it("pauses and unpauses registrations and renewals independently", async function () {
+    const { owner, alice, registrar, makeQuote } = await fixture();
+    const registration = await makeQuote({ name: "pause.xdc" });
+
+    await registrar.connect(owner).setRegistrationsPaused(true);
+    await expect(
+      registrar.connect(alice).registerWithQuote(
+        registration.name,
+        registration.quote,
+        registration.signature,
+        { value: registration.quote.paymentAmount },
+      ),
+    ).to.be.revertedWithCustomError(registrar, "RegistrationsPaused");
+
+    await registrar.connect(owner).setRegistrationsPaused(false);
+    await registrar.connect(alice).registerWithQuote(
+      registration.name,
+      registration.quote,
+      registration.signature,
+      { value: registration.quote.paymentAmount },
+    );
+
+    const renewal = await makeQuote({
+      name: registration.name,
+      product: 1,
+    });
+    await registrar.connect(owner).setRenewalsPaused(true);
+    await expect(
+      registrar.connect(alice).renewWithQuote(
+        renewal.name,
+        renewal.quote,
+        renewal.signature,
+        { value: renewal.quote.paymentAmount },
+      ),
+    ).to.be.revertedWithCustomError(registrar, "RenewalsPaused");
+
+    await registrar.connect(owner).setRenewalsPaused(false);
+    await registrar.connect(alice).renewWithQuote(
+      renewal.name,
+      renewal.quote,
+      renewal.signature,
+      { value: renewal.quote.paymentAmount },
+    );
+  });
+
 });
