@@ -12,7 +12,6 @@ contract XNSPricingPolicyV2 is Ownable {
     uint256 public constant BASIS_POINTS = 10_000;
     uint256 public constant MIN_LABEL_LENGTH = 2;
     uint256 public constant MAX_LABEL_LENGTH = 63;
-    uint256 public constant MIN_TWO_CHARACTER_ANNUAL_USD_MICROS = 100_000_000;
 
     enum Product {
         Registration,
@@ -198,8 +197,7 @@ contract XNSPricingPolicyV2 is Ownable {
 
     function _validateConfig(PricingConfig memory target) internal pure {
         if (
-            target.twoCharacterAnnualUsdMicros <
-                MIN_TWO_CHARACTER_ANNUAL_USD_MICROS ||
+            target.twoCharacterAnnualUsdMicros == 0 ||
             target.threeCharacterAnnualUsdMicros == 0 ||
             target.fourCharacterAnnualUsdMicros == 0 ||
             target.standardAnnualUsdMicros == 0 ||
