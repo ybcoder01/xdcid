@@ -1,0 +1,35 @@
+name: Confirm mainnet registrar
+
+on:
+  push:
+    branches:
+      - temporary/activate-mainnet-registrar
+    paths:
+      - "scripts/confirm-mainnet-registrar-readonly.ts"
+      - ".github/workflows/confirm-mainnet-registrar.yml"
+  pull_request:
+    paths:
+      - "scripts/confirm-mainnet-registrar-readonly.ts"
+      - ".github/workflows/confirm-mainnet-registrar.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  confirm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm active registrar
+        env:
+          XDC_MAINNET_RPC_URL: https://earpc.xinfin.network
+        run: pnpm hardhat run scripts/confirm-mainnet-registrar-readonly.ts --network xdc
