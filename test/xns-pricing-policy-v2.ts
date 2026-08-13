@@ -53,7 +53,20 @@ describe("XNSPricingPolicyV2", function () {
     expect(await policy.priceUsdMicros(3, 0, 10)).to.equal(40_000_000);
   });
 
-  it("allows delayed adjustment of the two-character price", async function () {\n    const { policy, config } = await deployPolicy();\n    await expect(\n      policy.proposeConfig({\n        ...config,\n        twoCharacterAnnualUsdMicros: 75_000_000,\n      }),\n    ).to.emit(policy, "PricingConfigProposed");\n  });\n\n  it("allows delayed admin price changes", async function () {
+  it("allows delayed adjustment of the two-character price", async function () {
+    const { policy, config } = await deployPolicy();
+    await expect(
+      policy.proposeConfig({
+        ...config,
+        twoCharacterAnnualUsdMicros: 75_000_000,
+      }),
+    ).to.emit(policy, "PricingConfigProposed");
+    await expect(
+      policy.proposeConfig({ ...config, twoCharacterAnnualUsdMicros: 0 }),
+    ).to.be.revertedWithCustomError(policy, "InvalidConfig");
+  });
+
+  it("allows delayed admin price changes", async function () {
     const { policy, config, other } = await deployPolicy();
     const nextConfig = {
       ...config,
