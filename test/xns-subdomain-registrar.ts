@@ -65,7 +65,7 @@ describe("XNSSubdomainRegistrar", function () {
 
     const parentName = "alice.xdc";
     const parentNode = ethers.keccak256(ethers.toUtf8Bytes(parentName));
-    const parentExpiry = (await time.latest()) + 20 * 365 * 24 * 60 * 60;
+    const parentExpiry = (await time.latest()) + 5 * 365 * 24 * 60 * 60;
     await registry.register(parentNode, alice.address, parentExpiry);
 
     const network = await ethers.provider.getNetwork();
