@@ -16,6 +16,13 @@ contract XNSDiscountAuthorization is Ownable, EIP712 {
         "DiscountAuthorization(bytes32 node,address beneficiary,uint8 product,uint256 termYears,uint16 discountBps,uint32 maxUses,uint64 validAfter,uint64 deadline,uint256 nonce)"
     );
 
+    struct ConsumptionContext {
+        bytes32 node;
+        address beneficiary;
+        uint8 product;
+        uint256 termYears;
+    }
+
     struct DiscountAuthorization {
         bytes32 node;
         address beneficiary;
@@ -140,16 +147,13 @@ contract XNSDiscountAuthorization is Ownable, EIP712 {
     function consume(
         DiscountAuthorization calldata authorization,
         bytes calldata signature,
-        bytes32 expectedNode,
-        address expectedBeneficiary,
-        uint8 expectedProduct,
-        uint256 expectedTermYears
+        ConsumptionContext calldata context
     ) external onlyConsumer returns (uint16 discountBps) {
         if (
-            authorization.node != expectedNode ||
-            authorization.beneficiary != expectedBeneficiary ||
-            authorization.product != expectedProduct ||
-            authorization.termYears != expectedTermYears ||
+            authorization.node != context.node ||
+            authorization.beneficiary != context.beneficiary ||
+            authorization.product != context.product ||
+            authorization.termYears != context.termYears ||
             authorization.beneficiary == address(0) ||
             authorization.discountBps == 0 ||
             authorization.discountBps > BASIS_POINTS ||
