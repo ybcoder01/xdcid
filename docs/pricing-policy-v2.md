@@ -15,7 +15,9 @@ not connected to the production registry by this change.
 - Migration: $3.
 - Three, five, and ten-year discounts remain 10%, 15%, and 20%.
 
-All prices, including the two-character price, can be adjusted by proposing a\ncomplete configuration and waiting 48 hours. Prices must remain non-zero, but\nchanging them does not require deploying a replacement policy contract.
+All prices, including the two-character price, can be adjusted by proposing a
+complete configuration and waiting 48 hours. Prices must remain non-zero, but
+changing them does not require deploying a replacement policy contract.
 
 ## Module boundaries
 
