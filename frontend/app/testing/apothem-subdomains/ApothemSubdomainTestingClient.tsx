@@ -557,7 +557,7 @@ function injectedMetaMask(): MetaMaskProvider {
   const injected = (window as Window & { ethereum?: MetaMaskProvider }).ethereum;
   if (!injected) throw new Error("MetaMask was not detected");
   const providers = injected.providers ?? [injected];
-  const metamask = providers.find((provider) => provider.isMetaMask === true && provider.isRabby !== true);
+  const metamask = providers.find((provider: MetaMaskProvider) => provider.isMetaMask === true && provider.isRabby !== true);
   if (!metamask) throw new Error("Enable MetaMask to continue on Apothem");
   return metamask;
 }
