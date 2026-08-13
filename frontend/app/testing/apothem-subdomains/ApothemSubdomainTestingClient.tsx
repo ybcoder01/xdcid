@@ -9,7 +9,9 @@ import {
   formatUnits,
   getAddress,
   isAddress,
+  keccak256,
   parseAbi,
+  toBytes,
   type Address,
   type EIP1193Provider,
   type Hex,
@@ -309,12 +311,7 @@ export default function ApothemSubdomainTestingClient() {
         functionName: "nodeFor",
         args: [canonicalParent(), canonicalLabel()],
       }),
-      publicClient.readContract({
-        address: policy,
-        abi: policyAbi,
-        functionName: "parentNodeFor",
-        args: [canonicalParent()],
-      }),
+      Promise.resolve(keccak256(toBytes(canonicalParent()))),
       publicClient.readContract({
         address: REGISTRAR,
         abi: registrarAbi,
