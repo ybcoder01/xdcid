@@ -69,10 +69,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         authorization,
         signature,
-        authorization.node,
-        authorization.beneficiary,
-        authorization.product,
-        authorization.termYears,
+        {
+          node: authorization.node,
+          beneficiary: authorization.beneficiary,
+          product: authorization.product,
+          termYears: authorization.termYears,
+        },
       ),
     )
       .to.emit(module, "AuthorizationConsumed")
@@ -92,10 +94,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         authorization,
         signature,
-        authorization.node,
-        authorization.beneficiary,
-        authorization.product,
-        authorization.termYears,
+        {
+          node: authorization.node,
+          beneficiary: authorization.beneficiary,
+          product: authorization.product,
+          termYears: authorization.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "AuthorizationExhausted");
   });
@@ -106,10 +110,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(outsider).consume(
         authorization,
         await sign(),
-        authorization.node,
-        authorization.beneficiary,
-        authorization.product,
-        authorization.termYears,
+        {
+          node: authorization.node,
+          beneficiary: authorization.beneficiary,
+          product: authorization.product,
+          termYears: authorization.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "UnauthorizedConsumer");
   });
@@ -122,10 +128,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         authorization,
         signature,
-        ethers.keccak256(ethers.toUtf8Bytes("bb.xdc")),
-        authorization.beneficiary,
-        authorization.product,
-        authorization.termYears,
+        {
+          node: ethers.keccak256(ethers.toUtf8Bytes("bb.xdc")),
+          beneficiary: authorization.beneficiary,
+          product: authorization.product,
+          termYears: authorization.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "InvalidAuthorization");
 
@@ -133,10 +141,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         authorization,
         signature,
-        authorization.node,
-        outsider.address,
-        authorization.product,
-        authorization.termYears,
+        {
+          node: authorization.node,
+          beneficiary: outsider.address,
+          product: authorization.product,
+          termYears: authorization.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "InvalidAuthorization");
   });
@@ -160,10 +170,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         future,
         await sign(future),
-        future.node,
-        future.beneficiary,
-        future.product,
-        future.termYears,
+        {
+          node: future.node,
+          beneficiary: future.beneficiary,
+          product: future.product,
+          termYears: future.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "AuthorizationNotYetValid");
 
@@ -173,10 +185,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         authorization,
         await sign(),
-        authorization.node,
-        authorization.beneficiary,
-        authorization.product,
-        authorization.termYears,
+        {
+          node: authorization.node,
+          beneficiary: authorization.beneficiary,
+          product: authorization.product,
+          termYears: authorization.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "AuthorizationIsRevoked");
 
@@ -185,10 +199,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(consumer).consume(
         future,
         await sign(future),
-        future.node,
-        future.beneficiary,
-        future.product,
-        future.termYears,
+        {
+          node: future.node,
+          beneficiary: future.beneficiary,
+          product: future.product,
+          termYears: future.termYears,
+        },
       ),
     ).to.be.revertedWithCustomError(module, "AuthorizationExpired");
   });
@@ -220,10 +236,12 @@ describe("XNSDiscountAuthorization", function () {
       module.connect(base.consumer).consume(
         base.authorization,
         signature,
-        base.authorization.node,
-        base.authorization.beneficiary,
-        base.authorization.product,
-        base.authorization.termYears,
+        {
+          node: base.authorization.node,
+          beneficiary: base.authorization.beneficiary,
+          product: base.authorization.product,
+          termYears: base.authorization.termYears,
+        },
       ),
     ).to.emit(module, "AuthorizationConsumed");
   });
