@@ -47,7 +47,7 @@ contract XNSDiscountAuthorization is Ownable, EIP712 {
     error AuthorizationNotYetValid();
     error AuthorizationExpired();
     error AuthorizationExhausted();
-    error AuthorizationRevoked();
+    error AuthorizationIsRevoked();
     error InvalidSignature();
     error AlreadyRevoked();
 
@@ -166,7 +166,7 @@ contract XNSDiscountAuthorization is Ownable, EIP712 {
         }
 
         bytes32 authorizationHash = hashAuthorization(authorization);
-        if (revoked[authorizationHash]) revert AuthorizationRevoked();
+        if (revoked[authorizationHash]) revert AuthorizationIsRevoked();
 
         uint256 useCount = uses[authorizationHash];
         if (useCount >= authorization.maxUses) {
