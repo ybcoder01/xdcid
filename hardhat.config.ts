@@ -26,8 +26,8 @@ const config: HardhatUserConfig = {
         chainId: 51,
         urls: {
           apiURL:
-            process.env.XDCSCAN_API_URL ||
-            "https://api.etherscan.io/v2/api",
+            process.env.XDCSCAN_APOTHEM_API_URL ||
+            "https://api-apothem.xdcscan.io/api",
           browserURL: "https://testnet.xdcscan.com"
         }
       },
@@ -37,7 +37,7 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL:
             process.env.XDCSCAN_API_URL ||
-            "https://api.etherscan.io/v2/api",
+            "https://api.xdcscan.io/api",
           browserURL: "https://xdcscan.com"
         }
       }
