@@ -5,7 +5,7 @@ const config: HardhatUserConfig = {
   solidity: "0.8.24",
   networks: {
     apothem: {
-      url: process.env.APOTHEM_RPC_URL || "https://erpc.apothem.network",
+      url: process.env.APOTHEM_RPC_URL || "https://rpc.apothem.network",
       chainId: 51,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
     },
