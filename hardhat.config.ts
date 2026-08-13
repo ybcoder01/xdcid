@@ -1,6 +1,9 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 
+const explorerApiKey =
+  process.env.ETHERSCAN_API_KEY || process.env.XDCSCAN_API_KEY || "";
+
 const config: HardhatUserConfig = {
   solidity: "0.8.24",
   networks: {
@@ -16,10 +19,7 @@ const config: HardhatUserConfig = {
     }
   },
   etherscan: {
-    apiKey: {
-      apothem: process.env.XDCSCAN_API_KEY || "",
-      xdc: process.env.XDCSCAN_API_KEY || ""
-    },
+    apiKey: explorerApiKey,
     customChains: [
       {
         network: "apothem",
@@ -27,7 +27,7 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL:
             process.env.XDCSCAN_APOTHEM_API_URL ||
-            "https://api.xdcscan.io/api?chainId=51",
+            "https://api.etherscan.io/v2/api",
           browserURL: "https://testnet.xdcscan.com"
         }
       },
@@ -37,7 +37,7 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL:
             process.env.XDCSCAN_API_URL ||
-            "https://api.xdcscan.io/api",
+            "https://api.etherscan.io/v2/api",
           browserURL: "https://xdcscan.com"
         }
       }
