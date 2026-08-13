@@ -50,7 +50,7 @@ const policyAbi = parseAbi([
   "function version() view returns (uint256)",
   "function parentNodeFor(string parentName) pure returns (bytes32)",
   "function isQuoteAuthorizationValid(address signer,uint256 quoteVersion) view returns (bool)",
-  "function config() view returns ((uint64 threeCharacterAnnualUsdMicros,uint64 fourCharacterAnnualUsdMicros,uint64 standardAnnualUsdMicros,uint64 subdomainAnnualUsdMicros,uint64 migrationUsdMicros,uint16 threeYearDiscountBps,uint16 fiveYearDiscountBps,uint16 tenYearDiscountBps,uint16 xdcQuoteBufferBps,address quoteSigner,address usdcToken,address treasury,bool xdcPaymentsEnabled,bool usdcPaymentsEnabled))",
+  "function config() view returns ((uint64 twoCharacterAnnualUsdMicros,uint64 threeCharacterAnnualUsdMicros,uint64 fourCharacterAnnualUsdMicros,uint64 standardAnnualUsdMicros,uint64 subdomainAnnualUsdMicros,uint64 premiumSubdomainAnnualUsdMicros,uint64 migrationUsdMicros,uint16 threeYearDiscountBps,uint16 fiveYearDiscountBps,uint16 tenYearDiscountBps,uint16 xdcQuoteBufferBps,address quoteSigner,address usdcToken,address treasury,bool xdcPaymentsEnabled,bool usdcPaymentsEnabled))",
 ]);
 
 const erc20Abi = parseAbi([
