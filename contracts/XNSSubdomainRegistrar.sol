@@ -214,16 +214,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         _collectPayment(quote);
 
         record.expiry = expiry;
-        emit SubdomainRenewed(
-            node,
-            currentOwner,
-            msg.sender,
-            expiry,
-            quote.paymentToken,
-            quote.paymentAmount,
-            quote.usdMicros,
-            _quoteStructHash(quote)
-        );
+        _emitRenewal(node, currentOwner, expiry, quote);
     }
 
     function transferSubdomain(bytes32 node, address newOwner) external {
@@ -311,6 +302,24 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         SubdomainQuote calldata quote
     ) external view returns (bytes32) {
         return _hashTypedDataV4(_quoteStructHash(quote));
+    }
+
+    function _emitRenewal(
+        bytes32 node,
+        address subdomainOwner,
+        uint256 expiry,
+        SubdomainQuote calldata quote
+    ) internal {
+        emit SubdomainRenewed(
+            node,
+            subdomainOwner,
+            msg.sender,
+            expiry,
+            quote.paymentToken,
+            quote.paymentAmount,
+            quote.usdMicros,
+            _quoteStructHash(quote)
+        );
     }
 
     function _recordRegistration(
