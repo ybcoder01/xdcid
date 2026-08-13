@@ -266,17 +266,12 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
 
         uint256 expiry = block.timestamp + quote.termYears * YEAR;
         registry.register(node, quote.nameOwner, expiry);
-        emit NameRegistered(
+        _emitNameRegistered(
             node,
-            quote.nameOwner,
-            msg.sender,
             expiry,
-            quote.paymentToken,
-            quote.paymentAmount,
             grossUsdMicros,
-            quote.usdMicros,
             discountBps,
-            _quoteStructHash(quote)
+            quote
         );
     }
 
@@ -308,9 +303,48 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
 
         uint256 expiry = registry.expiryOf(node) + quote.termYears * YEAR;
         registry.register(node, currentOwner, expiry);
-        emit NameRenewed(
+        _emitNameRenewed(
             node,
             currentOwner,
+            expiry,
+            grossUsdMicros,
+            discountBps,
+            quote
+        );
+    }
+
+    function _emitNameRegistered(
+        bytes32 node,
+        uint256 expiry,
+        uint256 grossUsdMicros,
+        uint16 discountBps,
+        Quote calldata quote
+    ) internal {
+        emit NameRegistered(
+            node,
+            quote.nameOwner,
+            msg.sender,
+            expiry,
+            quote.paymentToken,
+            quote.paymentAmount,
+            grossUsdMicros,
+            quote.usdMicros,
+            discountBps,
+            _quoteStructHash(quote)
+        );
+    }
+
+    function _emitNameRenewed(
+        bytes32 node,
+        address nameOwner,
+        uint256 expiry,
+        uint256 grossUsdMicros,
+        uint16 discountBps,
+        Quote calldata quote
+    ) internal {
+        emit NameRenewed(
+            node,
+            nameOwner,
             msg.sender,
             expiry,
             quote.paymentToken,
