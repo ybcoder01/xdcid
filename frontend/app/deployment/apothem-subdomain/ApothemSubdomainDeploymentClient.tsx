@@ -408,7 +408,7 @@ function injectedProvider(): EIP1193Provider {
 
   const providers = injected.providers ?? [injected];
   const metamask = providers.find(
-    (provider) => provider.isMetaMask === true && provider.isRabby !== true,
+    (provider: MetaMaskProvider) =>\n      provider.isMetaMask === true && provider.isRabby !== true,
   );
   if (!metamask) {
     throw new Error("Enable the MetaMask extension to continue on Apothem");
