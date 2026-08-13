@@ -178,7 +178,7 @@ describe("XNSDiscountAuthorization", function () {
         authorization.product,
         authorization.termYears,
       ),
-    ).to.be.revertedWithCustomError(module, "AuthorizationRevoked");
+    ).to.be.revertedWithCustomError(module, "AuthorizationIsRevoked");
 
     await time.increaseTo(future.deadline + 1);
     await expect(
