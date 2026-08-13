@@ -185,23 +185,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         _consumeQuote(quote, quoteSignature, node, parentNode, quote.subdomainOwner);
         _collectPayment(quote);
 
-        records[node] = SubdomainRecord({
-            owner: quote.subdomainOwner,
-            parentNode: parentNode,
-            expiry: expiry
-        });
-
-        emit SubdomainRegistered(
-            node,
-            parentNode,
-            quote.subdomainOwner,
-            msg.sender,
-            expiry,
-            quote.paymentToken,
-            quote.paymentAmount,
-            quote.usdMicros,
-            _quoteStructHash(quote)
-        );
+        _recordRegistration(node, parentNode, expiry, quote);
     }
 
     function renewWithQuote(
@@ -327,6 +311,31 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         SubdomainQuote calldata quote
     ) external view returns (bytes32) {
         return _hashTypedDataV4(_quoteStructHash(quote));
+    }
+
+    function _recordRegistration(
+        bytes32 node,
+        bytes32 parentNode,
+        uint256 expiry,
+        SubdomainQuote calldata quote
+    ) internal {
+        records[node] = SubdomainRecord({
+            owner: quote.subdomainOwner,
+            parentNode: parentNode,
+            expiry: expiry
+        });
+
+        emit SubdomainRegistered(
+            node,
+            parentNode,
+            quote.subdomainOwner,
+            msg.sender,
+            expiry,
+            quote.paymentToken,
+            quote.paymentAmount,
+            quote.usdMicros,
+            _quoteStructHash(quote)
+        );
     }
 
     function _consumeQuote(
