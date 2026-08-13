@@ -33,7 +33,7 @@ const registrarAbi = parseAbi([
   "function pricingPolicy() view returns (address)",
   "function nonces(address) view returns (uint256)",
   "function available(string parentName,string label) view returns (bool)",
-  "function nodeFor(string parentName,string label) pure returns (bytes32)",
+  "function nodeFor(string parentName,string label) pure returns (bytes32)",\n  "function parentNodeFor(string parentName) pure returns (bytes32)",
   "function ownerOf(bytes32 node) view returns (address)",
   "function addressOf(bytes32 node,uint256 chainId) view returns (address)",
   "function records(bytes32 node) view returns (address owner,bytes32 parentNode,uint256 expiry)",
@@ -98,7 +98,7 @@ export default function ApothemSubdomainTestingClient() {
   const [recordChainId, setRecordChainId] = useState(51);
   const [recordAddress, setRecordAddress] = useState(TEST_WALLET);
   const [newOwner, setNewOwner] = useState("");
-  const [operator, setOperator] = useState("");
+  const [operator, setOperatorAddress] = useState("");
   const [status, setStatus] = useState<Status>({});
   const [message, setMessage] = useState("Connect MetaMask to run the read-only preflight.");
   const [busy, setBusy] = useState(false);
@@ -211,7 +211,7 @@ export default function ApothemSubdomainTestingClient() {
     await write("revokeSubdomain", [canonicalParent(), canonicalLabel()]);
   }
 
-  async function setOperator(approved: boolean) {
+  async function updateOperator(approved: boolean) {
     if (!isAddress(operator)) throw new Error("Enter a valid operator address");
     await write("setParentOperator", [canonicalParent(), getAddress(operator), approved]);
   }
@@ -507,10 +507,10 @@ export default function ApothemSubdomainTestingClient() {
 
         <section className="rounded-3xl border bg-white p-7 shadow-sm">
           <h2 className="text-xl font-semibold">Parent operator test</h2>
-          <Field label="Operator address" value={operator} onChange={setOperator} />
+          <Field label="Operator address" value={operator} onChange={setOperatorAddress} />
           <div className="mt-3 flex flex-wrap gap-3">
-            <Action label="Approve operator" onClick={() => setOperator(true)} disabled={!account || busy} />
-            <Action label="Remove operator" onClick={() => setOperator(false)} disabled={!account || busy} secondary />
+            <Action label="Approve operator" onClick={() => updateOperator(true)} disabled={!account || busy} />
+            <Action label="Remove operator" onClick={() => updateOperator(false)} disabled={!account || busy} secondary />
           </div>
         </section>
 
