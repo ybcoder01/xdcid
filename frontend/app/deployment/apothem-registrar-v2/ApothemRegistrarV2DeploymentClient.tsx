@@ -340,7 +340,7 @@ async function deployContract(input: {
       confirmations: 2,
       timeout: 180_000,
     });
-    if (receipt.status !== "success") throw new Error(input.label + " failed");
+    if (receipt.status !== "success") throw new Error("Contract deployment failed");
     await requireCode(input.clients.publicClient, address, "deployed contract");
     input.updateStep(input.index, { state: "complete", hash, address });
     return address;
