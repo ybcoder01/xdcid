@@ -250,8 +250,9 @@ describe("XNSSubdomainRegistrar", function () {
     ).to.be.revertedWithCustomError(subdomains, "TermExceedsParentExpiry");
   });
 
-  it("supports multichain records, owner transfers, and parent revocation", async function () {
-    const { alice, bob, carol, subdomains, makeQuote } = await fixture();
+  it("clears records on transfer and lets parent controllers assign and reclaim", async function () {
+    const { alice, bob, operator, carol, subdomains, parentName, makeQuote } =
+      await fixture();
     const made = await makeQuote();
     await subdomains.connect(alice).registerWithQuote(
       made.parentName,
@@ -272,12 +273,111 @@ describe("XNSSubdomainRegistrar", function () {
       .connect(bob)
       .transferSubdomain(made.quote.node, carol.address);
     expect(await subdomains.ownerOf(made.quote.node)).to.equal(carol.address);
+    expect(await subdomains.addressOf(made.quote.node, 42161)).to.equal(
+      carol.address,
+    );
 
     await subdomains
       .connect(alice)
-      .revokeSubdomain(made.parentName, made.label);
-    expect(await subdomains.ownerOf(made.quote.node)).to.equal(
-      ethers.ZeroAddress,
+      .setParentOperator(parentName, operator.address, true);
+    await subdomains
+      .connect(operator)
+      .assignSubdomain(made.parentName, made.label, bob.address);
+    await subdomains
+      .connect(operator)
+      .setAddress(made.quote.node, 42161, operator.address);
+    expect(await subdomains.addressOf(made.quote.node, 42161)).to.equal(
+      operator.address,
+    );
+
+    await subdomains
+      .connect(operator)
+      .reclaimSubdomain(made.parentName, made.label);
+    expect(await subdomains.ownerOf(made.quote.node)).to.equal(alice.address);
+    expect(await subdomains.addressOf(made.quote.node, 42161)).to.equal(
+      alice.address,
+    );
+    expect(await subdomains.available(made.parentName, made.label)).to.equal(
+      false,
+    );
+  });
+
+  it("reserves release for the parent owner and prevents stale records on re-registration", async function () {
+    const { alice, bob, operator, carol, subdomains, parentName, makeQuote } =
+      await fixture();
+    const made = await makeQuote();
+    await subdomains.connect(alice).registerWithQuote(
+      made.parentName,
+      made.label,
+      made.quote,
+      made.signature,
+      { value: made.quote.paymentAmount },
+    );
+    await subdomains
+      .connect(bob)
+      .setAddress(made.quote.node, 42161, carol.address);
+    await subdomains
+      .connect(alice)
+      .setParentOperator(parentName, operator.address, true);
+
+    await expect(
+      subdomains
+        .connect(operator)
+        .releaseSubdomain(made.parentName, made.label),
+    ).to.be.revertedWithCustomError(subdomains, "NotParentController");
+
+    await subdomains
+      .connect(alice)
+      .releaseSubdomain(made.parentName, made.label);
+    expect(await subdomains.available(made.parentName, made.label)).to.equal(
+      true,
+    );
+
+    const replacement = await makeQuote();
+    await subdomains.connect(alice).registerWithQuote(
+      replacement.parentName,
+      replacement.label,
+      replacement.quote,
+      replacement.signature,
+      { value: replacement.quote.paymentAmount },
+    );
+    expect(await subdomains.addressOf(made.quote.node, 42161)).to.equal(
+      bob.address,
+    );
+  });
+
+  it("allows a parent operator to renew an assigned subdomain", async function () {
+    const { alice, bob, operator, subdomains, parentName, makeQuote } =
+      await fixture();
+    await subdomains
+      .connect(alice)
+      .setParentOperator(parentName, operator.address, true);
+    const registration = await makeQuote({
+      payer: operator.address,
+      subdomainOwner: bob.address,
+    });
+    await subdomains.connect(operator).registerWithQuote(
+      registration.parentName,
+      registration.label,
+      registration.quote,
+      registration.signature,
+      { value: registration.quote.paymentAmount },
+    );
+    const oldExpiry = (await subdomains.records(registration.quote.node)).expiry;
+
+    const renewal = await makeQuote({
+      payer: operator.address,
+      subdomainOwner: bob.address,
+    });
+    await subdomains.connect(operator).renewWithQuote(
+      renewal.parentName,
+      renewal.label,
+      renewal.quote,
+      renewal.signature,
+      { value: renewal.quote.paymentAmount },
+    );
+    expect((await subdomains.records(registration.quote.node)).expiry).to.equal(
+      oldExpiry + 365n * 24n * 60n * 60n,
     );
   });
 

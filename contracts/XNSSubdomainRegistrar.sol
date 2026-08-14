@@ -48,7 +48,8 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
     XNSPricingPolicyV2 public immutable pricingPolicy;
 
     mapping(bytes32 => SubdomainRecord) public records;
-    mapping(bytes32 => mapping(uint256 => address)) private _addresses;
+    mapping(bytes32 => uint256) public addressVersions;
+    mapping(bytes32 => mapping(uint256 => mapping(uint256 => address))) private _addresses;
     mapping(bytes32 => mapping(address => mapping(address => bool))) public parentOperators;
     mapping(address => uint256) public nonces;
 
@@ -102,7 +103,27 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         address indexed previousOwner,
         address indexed newOwner
     );
-    event SubdomainRevoked(bytes32 indexed node, bytes32 indexed parentNode);
+    event SubdomainAssigned(
+        bytes32 indexed node,
+        bytes32 indexed parentNode,
+        address indexed previousOwner,
+        address newOwner,
+        address controller
+    );
+    event SubdomainReclaimed(
+        bytes32 indexed node,
+        bytes32 indexed parentNode,
+        address indexed previousOwner,
+        address parentOwner,
+        address controller
+    );
+    event SubdomainReleased(
+        bytes32 indexed node,
+        bytes32 indexed parentNode,
+        address indexed previousOwner,
+        address parentOwner
+    );
+    event AddressRecordsCleared(bytes32 indexed node, uint256 indexed version);
     event AddressChanged(
         bytes32 indexed node,
         uint256 indexed chainId,
@@ -200,9 +221,13 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         SubdomainRecord storage record = records[node];
         address currentOwner = ownerOf(node);
         if (currentOwner == address(0)) revert Unavailable();
-        if (msg.sender != currentOwner || quote.subdomainOwner != currentOwner) {
-            revert NotSubdomainOwner();
-        }
+        if (
+            quote.subdomainOwner != currentOwner ||
+            (
+                msg.sender != currentOwner &&
+                !_isParentController(parentNode, msg.sender)
+            )
+        ) revert NotSubdomainOwner();
         if (record.parentNode != parentNode) revert InvalidName();
 
         uint256 expiry = record.expiry + quote.termYears * YEAR;
@@ -225,24 +250,82 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         if (newOwner == address(0)) revert InvalidOwner();
 
         records[node].owner = newOwner;
+        _clearAddressRecords(node);
         emit SubdomainTransferred(node, currentOwner, newOwner);
     }
 
-    function revokeSubdomain(
+    /// @notice Assigns an active company-controlled subdomain to another wallet.
+    /// @dev Parent operators may onboard and reassign users without owning the parent.
+    function assignSubdomain(
+        string calldata parentName,
+        string calldata label,
+        address newOwner
+    ) external {
+        if (newOwner == address(0)) revert InvalidOwner();
+        (bytes32 parentNode, bytes32 node) = _nodes(parentName, label);
+        _requireParentController(parentNode);
+        SubdomainRecord storage record = records[node];
+        address previousOwner = ownerOf(node);
+        if (previousOwner == address(0) || record.parentNode != parentNode) {
+            revert Unavailable();
+        }
+
+        record.owner = newOwner;
+        _clearAddressRecords(node);
+        emit SubdomainAssigned(
+            node,
+            parentNode,
+            previousOwner,
+            newOwner,
+            msg.sender
+        );
+    }
+
+    /// @notice Returns an active subdomain to the current parent owner.
+    /// @dev This does not make the label publicly available.
+    function reclaimSubdomain(
+        string calldata parentName,
+        string calldata label
+    ) external {
+        (bytes32 parentNode, bytes32 node) = _nodes(parentName, label);
+        address parentOwner = _requireParentController(parentNode);
+        SubdomainRecord storage record = records[node];
+        address previousOwner = ownerOf(node);
+        if (previousOwner == address(0) || record.parentNode != parentNode) {
+            revert Unavailable();
+        }
+
+        record.owner = parentOwner;
+        _clearAddressRecords(node);
+        emit SubdomainReclaimed(
+            node,
+            parentNode,
+            previousOwner,
+            parentOwner,
+            msg.sender
+        );
+    }
+
+    /// @notice Permanently releases a subdomain label for registration again.
+    /// @dev Only the parent owner may release; delegated operators cannot delete it.
+    function releaseSubdomain(
         string calldata parentName,
         string calldata label
     ) external {
         (bytes32 parentNode, bytes32 node) = _nodes(parentName, label);
         address parentOwner = registry.ownerOf(parentNode);
         if (parentOwner == address(0)) revert ParentUnavailable();
-        if (
-            msg.sender != parentOwner &&
-            !parentOperators[parentNode][parentOwner][msg.sender]
-        ) revert NotParentController();
-        if (records[node].parentNode != parentNode) revert Unavailable();
+        if (msg.sender != parentOwner) revert NotParentController();
+
+        SubdomainRecord memory record = records[node];
+        address previousOwner = ownerOf(node);
+        if (previousOwner == address(0) || record.parentNode != parentNode) {
+            revert Unavailable();
+        }
 
         delete records[node];
-        emit SubdomainRevoked(node, parentNode);
+        _clearAddressRecords(node);
+        emit SubdomainReleased(node, parentNode, previousOwner, parentOwner);
     }
 
     function setAddress(
@@ -250,8 +333,17 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         uint256 chainId,
         address destination
     ) external {
-        if (ownerOf(node) != msg.sender) revert NotSubdomainOwner();
-        _addresses[node][chainId] = destination;
+        SubdomainRecord memory record = records[node];
+        address currentOwner = ownerOf(node);
+        if (
+            currentOwner == address(0) ||
+            (
+                msg.sender != currentOwner &&
+                !_isParentController(record.parentNode, msg.sender)
+            )
+        ) revert NotSubdomainOwner();
+
+        _addresses[node][addressVersions[node]][chainId] = destination;
         emit AddressChanged(node, chainId, destination);
     }
 
@@ -270,7 +362,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         uint256 chainId
     ) external view returns (address) {
         if (ownerOf(node) == address(0)) return address(0);
-        address destination = _addresses[node][chainId];
+        address destination = _addresses[node][addressVersions[node]][chainId];
         return destination == address(0) ? records[node].owner : destination;
     }
 
@@ -328,6 +420,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         uint256 expiry,
         SubdomainQuote calldata quote
     ) internal {
+        _clearAddressRecords(node);
         records[node] = SubdomainRecord({
             owner: quote.subdomainOwner,
             parentNode: parentNode,
@@ -345,6 +438,36 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
             quote.usdMicros,
             _quoteStructHash(quote)
         );
+    }
+
+    function _clearAddressRecords(bytes32 node) internal {
+        uint256 nextVersion = addressVersions[node] + 1;
+        addressVersions[node] = nextVersion;
+        emit AddressRecordsCleared(node, nextVersion);
+    }
+
+    function _requireParentController(
+        bytes32 parentNode
+    ) internal view returns (address parentOwner) {
+        parentOwner = registry.ownerOf(parentNode);
+        if (parentOwner == address(0)) revert ParentUnavailable();
+        if (
+            msg.sender != parentOwner &&
+            !parentOperators[parentNode][parentOwner][msg.sender]
+        ) revert NotParentController();
+    }
+
+    function _isParentController(
+        bytes32 parentNode,
+        address account
+    ) internal view returns (bool) {
+        address parentOwner = registry.ownerOf(parentNode);
+        return
+            parentOwner != address(0) &&
+            (
+                account == parentOwner ||
+                parentOperators[parentNode][parentOwner][account]
+            );
     }
 
     function _consumeQuote(
