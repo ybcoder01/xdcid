@@ -18,7 +18,7 @@ import {
 } from "viem";
 
 const TEST_WALLET = getAddress("0x9c67d6cfE6A73497e7348b6b852495CA6236C29a");
-const REGISTRAR = getAddress("0x3332EB7E6CD865178a9bc12E6F268736a0c97E6C");
+const REGISTRAR = getAddress("0xa2135729ce122ef93158FCc4C69683155e6707d3");
 const CHAIN_ID = 51;
 
 const apothem = {
@@ -44,7 +44,9 @@ const registrarAbi = parseAbi([
   "function renewWithQuote(string parentName,string label,(bytes32 node,bytes32 parentNode,address payer,address subdomainOwner,uint256 termYears,address paymentToken,uint256 paymentAmount,uint256 usdMicros,uint256 policyVersion,uint256 nonce,uint256 issuedAt,uint256 deadline) quote,bytes quoteSignature) payable",
   "function setAddress(bytes32 node,uint256 chainId,address destination)",
   "function transferSubdomain(bytes32 node,address newOwner)",
-  "function revokeSubdomain(string parentName,string label)",
+  "function assignSubdomain(string parentName,string label,address newOwner)",
+  "function reclaimSubdomain(string parentName,string label)",
+  "function releaseSubdomain(string parentName,string label)",
   "function setParentOperator(string parentName,address operator,bool approved)",
 ]);
 
@@ -158,10 +160,10 @@ export default function ApothemSubdomainTestingClient() {
   async function paidAction(action: "registerWithQuote" | "renewWithQuote") {
     await run(async () => {
       const { account: selected, publicClient, walletClient } = await clients();
-      const owner = getAddress(subdomainOwner);
-      if (action === "renewWithQuote" && status.owner && selected !== status.owner) {
-        throw new Error("Select the current subdomain owner in MetaMask to renew");
-      }
+      const owner =
+        action === "renewWithQuote" && status.owner && status.owner !== zeroAddress
+          ? status.owner
+          : getAddress(subdomainOwner);
       const { quote, signature, usdcToken } = await signedQuote(
         publicClient,
         walletClient,
@@ -210,8 +212,21 @@ export default function ApothemSubdomainTestingClient() {
     await write("transferSubdomain", [requiredNode(), getAddress(newOwner)]);
   }
 
-  async function revoke() {
-    await write("revokeSubdomain", [canonicalParent(), canonicalLabel()]);
+  async function assign() {
+    if (!isAddress(newOwner)) throw new Error("Enter a valid assignee address");
+    await write("assignSubdomain", [
+      canonicalParent(),
+      canonicalLabel(),
+      getAddress(newOwner),
+    ]);
+  }
+
+  async function reclaim() {
+    await write("reclaimSubdomain", [canonicalParent(), canonicalLabel()]);
+  }
+
+  async function release() {
+    await write("releaseSubdomain", [canonicalParent(), canonicalLabel()]);
   }
 
   async function updateOperator(approved: boolean) {
@@ -219,7 +234,16 @@ export default function ApothemSubdomainTestingClient() {
     await write("setParentOperator", [canonicalParent(), getAddress(operator), approved]);
   }
 
-  async function write(functionName: "setAddress" | "transferSubdomain" | "revokeSubdomain" | "setParentOperator", args: readonly unknown[]) {
+  async function write(
+    functionName:
+      | "setAddress"
+      | "transferSubdomain"
+      | "assignSubdomain"
+      | "reclaimSubdomain"
+      | "releaseSubdomain"
+      | "setParentOperator",
+    args: readonly unknown[],
+  ) {
     await run(async () => {
       const { account: selected, publicClient, walletClient } = await clients();
       const hash = await walletClient.writeContract({
@@ -494,20 +518,28 @@ export default function ApothemSubdomainTestingClient() {
             <Action label="Set destination" onClick={setDestination} disabled={!account || busy || !status.node} />
           </div>
           <div className="rounded-3xl border bg-white p-7 shadow-sm">
-            <h2 className="text-xl font-semibold">Ownership tests</h2>
-            <Field label="New subdomain owner" value={newOwner} onChange={setNewOwner} />
+            <h2 className="text-xl font-semibold">Ownership and company controls</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              A holder can transfer their assigned identity. The parent owner or an approved operator can assign or reclaim it. Only the parent owner can release the label for registration again.
+            </p>
+            <Field label="Assignee wallet" value={newOwner} onChange={setNewOwner} />
             <div className="mt-3 flex flex-wrap gap-3">
-              <Action label="Transfer" onClick={transfer} disabled={!account || busy || !status.node} />
-              <Action label="Revoke as parent controller" onClick={revoke} disabled={!account || busy || !status.node} secondary />
+              <Action label="Transfer as current holder" onClick={transfer} disabled={!account || busy || !status.node} />
+              <Action label="Assign as parent controller" onClick={assign} disabled={!account || busy || !status.node} />
+              <Action label="Reclaim to company" onClick={reclaim} disabled={!account || busy || !status.node} secondary />
+              <Action label="Release name" onClick={release} disabled={!account || busy || !status.node} secondary />
             </div>
           </div>
         </section>
 
         <section className="rounded-3xl border bg-white p-7 shadow-sm">
-          <h2 className="text-xl font-semibold">Parent operator test</h2>
-          <Field label="Operator address" value={operator} onChange={setOperatorAddress} />
+          <h2 className="text-xl font-semibold">Delegated company operator</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Authorize an HR or administrative wallet to register, renew, assign, reclaim, and manage resolution records. The parent owner can remove it at any time.
+          </p>
+          <Field label="HR or administrator wallet" value={operator} onChange={setOperatorAddress} />
           <div className="mt-3 flex flex-wrap gap-3">
-            <Action label="Approve operator" onClick={() => updateOperator(true)} disabled={!account || busy} />
+            <Action label="Authorize operator" onClick={() => updateOperator(true)} disabled={!account || busy} />
             <Action label="Remove operator" onClick={() => updateOperator(false)} disabled={!account || busy} secondary />
           </div>
         </section>
@@ -517,7 +549,16 @@ export default function ApothemSubdomainTestingClient() {
           <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
             <Detail label="Contract" value={REGISTRAR} />
             <Detail label="Node" value={status.node || "Refresh to calculate"} />
-            <Detail label="Available" value={status.available === undefined ? "Unknown" : String(status.available)} />
+            <Detail
+              label="Registration status"
+              value={
+                status.available === undefined
+                  ? "Unknown"
+                  : status.available
+                    ? "Available"
+                    : "Registered"
+              }
+            />
             <Detail label="Owner" value={status.owner || "Unknown"} />
             <Detail label="Expiry" value={status.expiry ? new Date(Number(status.expiry) * 1000).toLocaleString() : "Not registered"} />
             <Detail label={"Destination on chain " + recordChainId} value={status.destination || "Unknown"} />
