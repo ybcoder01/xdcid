@@ -99,9 +99,9 @@ export default function ApothemSubdomainTestingClient() {
   const [label, setLabel] = useState("pay");
   const [termYears, setTermYears] = useState(1);
   const [currency, setCurrency] = useState<Currency>("TXDC");
-  const [subdomainOwner, setSubdomainOwner] = useState(TEST_WALLET);
+  const [subdomainOwner, setSubdomainOwner] = useState<string>(TEST_WALLET);
   const [recordChainId, setRecordChainId] = useState(51);
-  const [recordAddress, setRecordAddress] = useState(TEST_WALLET);
+  const [recordAddress, setRecordAddress] = useState<string>(TEST_WALLET);
   const [newOwner, setNewOwner] = useState("");
   const [operator, setOperatorAddress] = useState("");
   const [status, setStatus] = useState<Status>({});
@@ -160,6 +160,12 @@ export default function ApothemSubdomainTestingClient() {
   async function paidAction(action: "registerWithQuote" | "renewWithQuote") {
     await run(async () => {
       const { account: selected, publicClient, walletClient } = await clients();
+      if (
+        action === "registerWithQuote" &&
+        !isAddress(subdomainOwner)
+      ) {
+        throw new Error("Enter a valid subdomain owner address");
+      }
       const owner =
         action === "renewWithQuote" && status.owner && status.owner !== zeroAddress
           ? status.owner
@@ -204,6 +210,9 @@ export default function ApothemSubdomainTestingClient() {
   }
 
   async function setDestination() {
+    if (!isAddress(recordAddress)) {
+      throw new Error("Enter a valid destination address");
+    }
     await write("setAddress", [requiredNode(), BigInt(recordChainId), getAddress(recordAddress)]);
   }
 
@@ -485,7 +494,7 @@ export default function ApothemSubdomainTestingClient() {
                 <option>TXDC</option><option>USDC</option>
               </select>
             </label>
-            <Field label="Subdomain owner" value={subdomainOwner} onChange={(value) => isAddress(value) && setSubdomainOwner(getAddress(value))} />
+            <Field label="Subdomain owner" value={subdomainOwner} onChange={setSubdomainOwner} />
             <label className="text-sm font-medium">Address-record chain
               <select className="mt-2 w-full rounded-xl border p-3" value={recordChainId} onChange={(event) => setRecordChainId(Number(event.target.value))}>
                 <option value={51}>Apothem (51)</option>
@@ -514,7 +523,7 @@ export default function ApothemSubdomainTestingClient() {
         <section className="grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border bg-white p-7 shadow-sm">
             <h2 className="text-xl font-semibold">Resolution record</h2>
-            <Field label="Destination address" value={recordAddress} onChange={(value) => isAddress(value) && setRecordAddress(getAddress(value))} />
+            <Field label="Destination address" value={recordAddress} onChange={setRecordAddress} />
             <Action label="Set destination" onClick={setDestination} disabled={!account || busy || !status.node} />
           </div>
           <div className="rounded-3xl border bg-white p-7 shadow-sm">
