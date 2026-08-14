@@ -27,6 +27,7 @@ Do not push feature work directly to `main`.
 - Secrets and API keys must remain in Vercel or the relevant provider; never commit them.
 - Apothem/testnet deployment controls must not be enabled in Production.
 - Mainnet deployment controls must not be enabled on staging unless a specific test requires read-only mainnet access.
+- The custom staging domain is assigned only to deployments created from the permanent `dev` branch.
 
 ## Release checklist
 
