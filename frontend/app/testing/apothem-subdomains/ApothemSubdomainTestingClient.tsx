@@ -108,6 +108,29 @@ type Diagnostic = {
   detail: string;
 };
 
+type PreparedQuote = {
+  action: "registerWithQuote" | "renewWithQuote";
+  parentName: string;
+  label: string;
+  currency: Currency;
+  quote: {
+    node: Hex;
+    parentNode: Hex;
+    payer: Address;
+    subdomainOwner: Address;
+    termYears: bigint;
+    paymentToken: Address;
+    paymentAmount: bigint;
+    usdMicros: bigint;
+    policyVersion: bigint;
+    nonce: bigint;
+    issuedAt: bigint;
+    deadline: bigint;
+  };
+  signature: Hex;
+  usdcToken: Address;
+};
+
 export default function ApothemSubdomainTestingClient() {
   const [account, setAccount] = useState<Address>();
   const [parentName, setParentName] = useState("testing123.xdc");
@@ -115,12 +138,14 @@ export default function ApothemSubdomainTestingClient() {
   const [termYears, setTermYears] = useState(1);
   const [currency, setCurrency] = useState<Currency>("TXDC");
   const [subdomainOwner, setSubdomainOwner] = useState<string>(TEST_WALLET);
+  const [payerAddress, setPayerAddress] = useState<string>(TEST_WALLET);
   const [recordChainId, setRecordChainId] = useState(51);
   const [recordAddress, setRecordAddress] = useState<string>(TEST_WALLET);
   const [newOwner, setNewOwner] = useState("");
   const [operator, setOperatorAddress] = useState("");
   const [status, setStatus] = useState<Status>({});
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
+  const [prepared, setPrepared] = useState<PreparedQuote>();
   const [message, setMessage] = useState("Connect MetaMask to run the read-only preflight.");
   const [busy, setBusy] = useState(false);
   const [lastHash, setLastHash] = useState<Hex>();
@@ -129,6 +154,36 @@ export default function ApothemSubdomainTestingClient() {
     await run(async () => {
       const { provider, account: selected, publicClient } = await clients();
       await requireCode(publicClient);
+      setAccount(selected);
+      setSubdomainOwner((current) => current || selected);
+      setPayerAddress(selected);
+      setRecordAddress((current) => current || selected);
+      setMessage("MetaMask, Apothem, and the registrar are connected. Refresh state before preparing a quote.");
+      await refreshWith(publicClient, selected);
+      void provider;
+    });
+  }
+
+  async function refresh() {
+    await run(async () => {
+      const { account: selected, publicClient } = await clients(false);
+      await refreshWith(publicClient, selected);
+      setMessage("On-chain subdomain state refreshed.");
+    });
+  }
+
+  async function preparePaidAction(
+    action: "registerWithQuote" | "renewWithQuote",
+  ) {
+    await run(async () => {
+      const { account: signer, publicClient, walletClient } = await clients();
+      if (!isAddress(payerAddress)) {
+        throw new Error("Enter a valid payer wallet address");
+      }
+      if (action === "registerWithQuote" && !isAddress(subdomainOwner)) {
+        throw new Error("Enter a valid subdomain owner address");
+      }
+
       const policy = await publicClient.readContract({
         address: REGISTRAR,
         abi: registrarAbi,
@@ -143,64 +198,66 @@ export default function ApothemSubdomainTestingClient() {
         address: policy,
         abi: policyAbi,
         functionName: "isQuoteAuthorizationValid",
-        args: [selected, version],
+        args: [signer, version],
       });
       if (!authorized) {
-        throw new Error("The selected MetaMask account is not the authorized Apothem quote signer");
+        throw new Error(
+          "Switch MetaMask to the authorized Apothem quote-signer wallet before preparing the quote",
+        );
       }
-      setAccount(selected);
-      setSubdomainOwner(selected);
-      setRecordAddress(selected);
-      setMessage("MetaMask, Apothem, registrar, and local test-quote authorization validated.");
-      await refreshWith(publicClient, selected);
-      void provider;
-    });
-  }
 
-  async function refresh() {
-    await run(async () => {
-      const { account: selected, publicClient } = await clients(false);
-      await refreshWith(publicClient, selected);
-      setMessage("On-chain subdomain state refreshed.");
-    });
-  }
-
-  async function register() {
-    await paidAction("registerWithQuote");
-  }
-
-  async function renew() {
-    await paidAction("renewWithQuote");
-  }
-
-  async function paidAction(action: "registerWithQuote" | "renewWithQuote") {
-    await run(async () => {
-      const { account: selected, publicClient, walletClient } = await clients();
-      if (
-        action === "registerWithQuote" &&
-        !isAddress(subdomainOwner)
-      ) {
-        throw new Error("Enter a valid subdomain owner address");
-      }
       const owner =
         action === "renewWithQuote" && status.owner && status.owner !== zeroAddress
           ? status.owner
           : getAddress(subdomainOwner);
-      const { quote, signature, usdcToken } = await signedQuote(
+      const parent = canonicalParent();
+      const child = canonicalLabel();
+      const signed = await signedQuote(
         publicClient,
         walletClient,
-        selected,
+        signer,
+        getAddress(payerAddress),
         owner,
       );
+      setPrepared({
+        action,
+        parentName: parent,
+        label: child,
+        currency,
+        ...signed,
+      });
+      setMessage(
+        "Quote prepared. Switch MetaMask to payer " +
+          getAddress(payerAddress) +
+          " and click Submit.",
+      );
+    });
+  }
 
-      if (currency === "USDC") {
+  async function submitPaidAction(
+    action: "registerWithQuote" | "renewWithQuote",
+  ) {
+    await run(async () => {
+      if (!prepared || prepared.action !== action) {
+        throw new Error("Prepare a fresh " + (action === "registerWithQuote" ? "registration" : "renewal") + " quote first");
+      }
+      const { account: selected, publicClient, walletClient } = await clients();
+      if (selected !== prepared.quote.payer) {
+        throw new Error("Switch MetaMask to the prepared payer wallet " + prepared.quote.payer);
+      }
+      if (BigInt(Math.floor(Date.now() / 1_000)) > prepared.quote.deadline) {
+        setPrepared(undefined);
+        throw new Error("The prepared quote expired. Switch to the quote signer and prepare a new one");
+      }
+
+      if (prepared.currency === "USDC") {
         const approval = await walletClient.writeContract({
           account: selected,
           chain: apothem,
-          address: usdcToken,
+          address: prepared.usdcToken,
           abi: erc20Abi,
           functionName: "approve",
-          args: [REGISTRAR, quote.paymentAmount],
+          args: [REGISTRAR, prepared.quote.paymentAmount],
         });
         setMessage("USDC approval submitted. Waiting for confirmation...");
         await publicClient.waitForTransactionReceipt({ hash: approval, confirmations: 1 });
@@ -212,20 +269,27 @@ export default function ApothemSubdomainTestingClient() {
         address: REGISTRAR,
         abi: registrarAbi,
         functionName: action,
-        args: [canonicalParent(), canonicalLabel(), quote, signature],
-        value: currency === "TXDC" ? quote.paymentAmount : 0n,
+        args: [
+          prepared.parentName,
+          prepared.label,
+          prepared.quote,
+          prepared.signature,
+        ],
+        value: prepared.currency === "TXDC" ? prepared.quote.paymentAmount : 0n,
       } as const;
 
-      setMessage("Running registration preflight...");
+      setMessage("Running " + (action === "registerWithQuote" ? "registration" : "renewal") + " preflight...");
       try {
         await publicClient.simulateContract(request);
       } catch (cause) {
-        throw new Error("Registration preflight failed: " + errorMessage(cause));
+        throw new Error("Transaction preflight failed: " + errorMessage(cause));
       }
 
       setMessage("Preflight passed. Confirm the transaction in MetaMask.");
       const hash = await walletClient.writeContract(request);
       await confirm(publicClient, hash);
+      setPrepared(undefined);
+      setAccount(selected);
       await refreshWith(publicClient, selected);
       setMessage(
         action === "registerWithQuote"
@@ -505,6 +569,7 @@ export default function ApothemSubdomainTestingClient() {
   async function signedQuote(
     publicClient: ReturnType<typeof createPublicClient>,
     walletClient: ReturnType<typeof createWalletClient>,
+    signer: Address,
     payer: Address,
     owner: Address,
   ) {
@@ -577,7 +642,7 @@ export default function ApothemSubdomainTestingClient() {
     };
 
     const signature = await walletClient.signTypedData({
-      account: payer,
+      account: signer,
       domain: {
         name: "XDCID Subdomain Registrar",
         version: "1",
@@ -598,9 +663,6 @@ export default function ApothemSubdomainTestingClient() {
     }) as string[];
     if (!accounts[0]) throw new Error("Connect MetaMask first");
     const selected = getAddress(accounts[0]);
-    if (selected !== TEST_WALLET && !account) {
-      throw new Error("Start with the designated Apothem test wallet");
-    }
     await ensureApothem(provider);
     return {
       provider,
@@ -671,6 +733,7 @@ export default function ApothemSubdomainTestingClient() {
               </select>
             </label>
             <Field label="Subdomain owner" value={subdomainOwner} onChange={setSubdomainOwner} />
+            <Field label="Payer / delegated officer wallet" value={payerAddress} onChange={setPayerAddress} />
             <label className="text-sm font-medium">Address-record chain
               <select className="mt-2 w-full rounded-xl border p-3" value={recordChainId} onChange={(event) => setRecordChainId(Number(event.target.value))}>
                 <option value={51}>Apothem (51)</option>
@@ -685,8 +748,19 @@ export default function ApothemSubdomainTestingClient() {
           <div className="mt-5 flex flex-wrap gap-3">
             <Action label={account ? "MetaMask verified" : "Connect MetaMask"} onClick={connect} disabled={busy} />
             <Action label="Refresh state" onClick={refresh} disabled={busy} secondary />
-            <Action label="Register" onClick={register} disabled={!account || busy || status.available === false} />
-            <Action label="Renew" onClick={renew} disabled={!account || busy || !status.owner || status.owner === zeroAddress} />
+            <Action label="1. Sign registration quote" onClick={() => preparePaidAction("registerWithQuote")} disabled={!account || busy || status.available === false} />
+            <Action label="2. Submit registration" onClick={() => submitPaidAction("registerWithQuote")} disabled={!prepared || prepared.action !== "registerWithQuote" || busy} />
+            <Action label="1. Sign renewal quote" onClick={() => preparePaidAction("renewWithQuote")} disabled={!account || busy || !status.owner || status.owner === zeroAddress} secondary />
+            <Action label="2. Submit renewal" onClick={() => submitPaidAction("renewWithQuote")} disabled={!prepared || prepared.action !== "renewWithQuote" || busy} secondary />
+          </div>
+          <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+            <p className="font-semibold">Delegated-officer test flow</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Enter the delegated officer as the payer.</li>
+              <li>Connect the authorized quote-signer wallet and sign the quote.</li>
+              <li>Switch MetaMask to the delegated officer and submit the prepared transaction.</li>
+            </ol>
+            <p className="mt-2">Prepared quotes remain only in this browser tab and expire after 10 minutes.</p>
           </div>
           <p className="mt-5 rounded-xl bg-slate-100 p-4 text-sm">{message}</p>
           {lastHash ? (
