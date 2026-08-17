@@ -190,7 +190,7 @@ export default function ApothemSubdomainTestingClient() {
         await publicClient.waitForTransactionReceipt({ hash: approval, confirmations: 1 });
       }
 
-      const hash = await walletClient.writeContract({
+      const request = {
         account: selected,
         chain: apothem,
         address: REGISTRAR,
@@ -198,7 +198,17 @@ export default function ApothemSubdomainTestingClient() {
         functionName: action,
         args: [canonicalParent(), canonicalLabel(), quote, signature],
         value: currency === "TXDC" ? quote.paymentAmount : 0n,
-      });
+      } as const;
+
+      setMessage("Running registration preflight...");
+      try {
+        await publicClient.simulateContract(request);
+      } catch (cause) {
+        throw new Error("Registration preflight failed: " + errorMessage(cause));
+      }
+
+      setMessage("Preflight passed. Confirm the transaction in MetaMask.");
+      const hash = await walletClient.writeContract(request);
       await confirm(publicClient, hash);
       await refreshWith(publicClient);
       setMessage(
@@ -255,14 +265,24 @@ export default function ApothemSubdomainTestingClient() {
   ) {
     await run(async () => {
       const { account: selected, publicClient, walletClient } = await clients();
-      const hash = await walletClient.writeContract({
+      const request = {
         account: selected,
         chain: apothem,
         address: REGISTRAR,
         abi: registrarAbi,
         functionName,
         args: args as never,
-      });
+      } as const;
+
+      setMessage("Running contract preflight...");
+      try {
+        await publicClient.simulateContract(request);
+      } catch (cause) {
+        throw new Error("Contract preflight failed: " + errorMessage(cause));
+      }
+
+      setMessage("Preflight passed. Confirm the transaction in MetaMask.");
+      const hash = await walletClient.writeContract(request);
       await confirm(publicClient, hash);
       await refreshWith(publicClient);
       setMessage(functionName + " confirmed.");
@@ -634,7 +654,34 @@ async function requireCode(publicClient: ReturnType<typeof createPublicClient>) 
 }
 
 function errorMessage(cause: unknown) {
-  const raw = cause instanceof Error ? cause.message : "Wallet operation failed";
-  const first = raw.split(String.fromCharCode(10))[0];
-  return first.length > 320 ? first.slice(0, 317) + "..." : first;
+  const messages: string[] = [];
+  const visited = new Set<unknown>();
+
+  function collect(value: unknown, depth = 0) {
+    if (depth > 5 || value == null || visited.has(value)) return;
+    if (typeof value === "string") {
+      if (value.trim()) messages.push(value.trim());
+      return;
+    }
+    if (typeof value !== "object") return;
+    visited.add(value);
+
+    const record = value as Record<string, unknown>;
+    for (const key of ["reason", "shortMessage", "details", "message"]) {
+      if (typeof record[key] === "string" && record[key].trim()) {
+        messages.push(record[key].trim());
+      }
+    }
+    collect(record.cause, depth + 1);
+  }
+
+  collect(cause);
+  const useful = messages.find((message) =>
+    !message.startsWith("The contract function") &&
+    !message.startsWith("ContractFunctionExecutionError") &&
+    message !== "Wallet operation failed"
+  );
+  const message = useful || messages[0] || "Wallet operation failed";
+  const compact = message.replace(/\s+/g, " ").trim();
+  return compact.length > 700 ? compact.slice(0, 697) + "..." : compact;
 }
