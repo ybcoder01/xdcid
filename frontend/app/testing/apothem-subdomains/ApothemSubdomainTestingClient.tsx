@@ -33,6 +33,9 @@ const apothem = {
 
 const registrarAbi = parseAbi([
   "function pricingPolicy() view returns (address)",
+  "function registry() view returns (address)",
+  "function registrationsPaused() view returns (bool)",
+  "function parentOperators(bytes32 parentNode,address parentOwner,address operator) view returns (bool)",
   "function nonces(address) view returns (uint256)",
   "function available(string parentName,string label) view returns (bool)",
   "function nodeFor(string parentName,string label) pure returns (bytes32)",
@@ -54,7 +57,13 @@ const policyAbi = parseAbi([
   "function version() view returns (uint256)",
   "function parentNodeFor(string parentName) pure returns (bytes32)",
   "function isQuoteAuthorizationValid(address signer,uint256 quoteVersion) view returns (bool)",
+  "function priceUsdMicros(uint8 product,uint256 labelLength,uint256 years_) view returns (uint256)",
   "function config() view returns ((uint64 twoCharacterAnnualUsdMicros,uint64 threeCharacterAnnualUsdMicros,uint64 fourCharacterAnnualUsdMicros,uint64 standardAnnualUsdMicros,uint64 subdomainAnnualUsdMicros,uint64 premiumSubdomainAnnualUsdMicros,uint64 migrationUsdMicros,uint16 threeYearDiscountBps,uint16 fiveYearDiscountBps,uint16 tenYearDiscountBps,uint16 xdcQuoteBufferBps,address quoteSigner,address usdcToken,address treasury,bool xdcPaymentsEnabled,bool usdcPaymentsEnabled))",
+]);
+
+const registryAbi = parseAbi([
+  "function ownerOf(bytes32 node) view returns (address)",
+  "function expiryOf(bytes32 node) view returns (uint256)",
 ]);
 
 const erc20Abi = parseAbi([
@@ -93,6 +102,12 @@ type Status = {
   destination?: Address;
 };
 
+type Diagnostic = {
+  label: string;
+  passed: boolean;
+  detail: string;
+};
+
 export default function ApothemSubdomainTestingClient() {
   const [account, setAccount] = useState<Address>();
   const [parentName, setParentName] = useState("testing123.xdc");
@@ -105,6 +120,7 @@ export default function ApothemSubdomainTestingClient() {
   const [newOwner, setNewOwner] = useState("");
   const [operator, setOperatorAddress] = useState("");
   const [status, setStatus] = useState<Status>({});
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [message, setMessage] = useState("Connect MetaMask to run the read-only preflight.");
   const [busy, setBusy] = useState(false);
   const [lastHash, setLastHash] = useState<Hex>();
@@ -136,15 +152,15 @@ export default function ApothemSubdomainTestingClient() {
       setSubdomainOwner(selected);
       setRecordAddress(selected);
       setMessage("MetaMask, Apothem, registrar, and local test-quote authorization validated.");
-      await refreshWith(publicClient);
+      await refreshWith(publicClient, selected);
       void provider;
     });
   }
 
   async function refresh() {
     await run(async () => {
-      const { publicClient } = await clients(false);
-      await refreshWith(publicClient);
+      const { account: selected, publicClient } = await clients(false);
+      await refreshWith(publicClient, selected);
       setMessage("On-chain subdomain state refreshed.");
     });
   }
@@ -210,7 +226,7 @@ export default function ApothemSubdomainTestingClient() {
       setMessage("Preflight passed. Confirm the transaction in MetaMask.");
       const hash = await walletClient.writeContract(request);
       await confirm(publicClient, hash);
-      await refreshWith(publicClient);
+      await refreshWith(publicClient, selected);
       setMessage(
         action === "registerWithQuote"
           ? "Subdomain registration confirmed."
@@ -284,7 +300,7 @@ export default function ApothemSubdomainTestingClient() {
       setMessage("Preflight passed. Confirm the transaction in MetaMask.");
       const hash = await walletClient.writeContract(request);
       await confirm(publicClient, hash);
-      await refreshWith(publicClient);
+      await refreshWith(publicClient, selected);
       setMessage(functionName + " confirmed.");
     });
   }
@@ -300,7 +316,10 @@ export default function ApothemSubdomainTestingClient() {
     if (receipt.status !== "success") throw new Error("Transaction reverted");
   }
 
-  async function refreshWith(publicClient: ReturnType<typeof createPublicClient>) {
+  async function refreshWith(
+    publicClient: ReturnType<typeof createPublicClient>,
+    selected: Address,
+  ) {
     const parent = canonicalParent();
     const child = canonicalLabel();
     const [node, available] = await Promise.all([
@@ -344,6 +363,143 @@ export default function ApothemSubdomainTestingClient() {
       expiry: record[2],
       destination,
     });
+    await diagnoseRegistration(publicClient, selected, available);
+  }
+
+  async function diagnoseRegistration(
+    publicClient: ReturnType<typeof createPublicClient>,
+    selected: Address,
+    available: boolean,
+  ) {
+    const parent = canonicalParent();
+    const parentNode = keccak256(toBytes(parent));
+    const [registry, policy, paused] = await Promise.all([
+      publicClient.readContract({
+        address: REGISTRAR,
+        abi: registrarAbi,
+        functionName: "registry",
+      }),
+      publicClient.readContract({
+        address: REGISTRAR,
+        abi: registrarAbi,
+        functionName: "pricingPolicy",
+      }),
+      publicClient.readContract({
+        address: REGISTRAR,
+        abi: registrarAbi,
+        functionName: "registrationsPaused",
+      }),
+    ]);
+    const [parentOwner, parentExpiry, approvedOperator, config, policyPrice] = await Promise.all([
+      publicClient.readContract({
+        address: registry,
+        abi: registryAbi,
+        functionName: "ownerOf",
+        args: [parentNode],
+      }),
+      publicClient.readContract({
+        address: registry,
+        abi: registryAbi,
+        functionName: "expiryOf",
+        args: [parentNode],
+      }),
+      publicClient.readContract({
+        address: REGISTRAR,
+        abi: registrarAbi,
+        functionName: "parentOperators",
+        args: [parentNode, await publicClient.readContract({
+          address: registry,
+          abi: registryAbi,
+          functionName: "ownerOf",
+          args: [parentNode],
+        }), selected],
+      }),
+      publicClient.readContract({
+        address: policy,
+        abi: policyAbi,
+        functionName: "config",
+      }),
+      publicClient.readContract({
+        address: policy,
+        abi: policyAbi,
+        functionName: "priceUsdMicros",
+        args: [2, 1n, BigInt(termYears)],
+      }),
+    ]);
+
+    let apiPrice = 0n;
+    let quoteAvailable = false;
+    try {
+      const response = await fetch(
+        "/api/v1/pricing/quote?product=subdomain&years=" + termYears,
+        { cache: "no-store" },
+      );
+      const body = await response.json() as {
+        data?: { pricing?: { totalMicros?: string }; xdc?: { wei?: string } };
+      };
+      apiPrice = BigInt(body.data?.pricing?.totalMicros || "0");
+      quoteAvailable = response.ok && apiPrice > 0n &&
+        (currency !== "TXDC" || BigInt(body.data?.xdc?.wei || "0") > 0n);
+    } catch {
+      quoteAvailable = false;
+    }
+
+    const proposedExpiry = BigInt(Math.floor(Date.now() / 1_000)) +
+      BigInt(termYears) * 365n * 24n * 60n * 60n;
+    const parentActive = parentOwner !== zeroAddress && parentExpiry > BigInt(Math.floor(Date.now() / 1_000));
+    const controller = selected === parentOwner || approvedOperator;
+    const paymentEnabled = currency === "TXDC"
+      ? config.xdcPaymentsEnabled
+      : config.usdcPaymentsEnabled;
+
+    setDiagnostics([
+      {
+        label: "Parent name active",
+        passed: parentActive,
+        detail: parentActive
+          ? "Parent owner " + parentOwner
+          : "The parent name is missing or expired",
+      },
+      {
+        label: "Connected wallet controls parent",
+        passed: controller,
+        detail: controller
+          ? "Connected as parent owner or approved operator"
+          : "Use the parent owner or authorize this wallet as an operator",
+      },
+      {
+        label: "Label available",
+        passed: available,
+        detail: available ? "The label can be registered" : "This label is already active",
+      },
+      {
+        label: "Registrations enabled",
+        passed: !paused,
+        detail: paused ? "Subdomain registrations are paused" : "Registrations are active",
+      },
+      {
+        label: "Term fits parent expiry",
+        passed: proposedExpiry <= parentExpiry,
+        detail: proposedExpiry <= parentExpiry
+          ? "Requested term ends before the parent name expires"
+          : "Renew the parent name first or select a shorter term",
+      },
+      {
+        label: "Pricing policy matches API",
+        passed: quoteAvailable && apiPrice === policyPrice,
+        detail: quoteAvailable && apiPrice === policyPrice
+          ? "$" + formatUnits(policyPrice, 6)
+          : "API quote $" + formatUnits(apiPrice, 6) +
+            " does not match policy $" + formatUnits(policyPrice, 6),
+      },
+      {
+        label: currency + " payments enabled",
+        passed: paymentEnabled,
+        detail: paymentEnabled
+          ? currency + " is accepted by the Apothem policy"
+          : currency + " payments are disabled",
+      },
+    ]);
   }
 
   async function signedQuote(
@@ -538,6 +694,30 @@ export default function ApothemSubdomainTestingClient() {
               {lastHash}
             </a>
           ) : null}
+        </section>
+
+        <section className="rounded-3xl border bg-white p-7 shadow-sm">
+          <h2 className="text-xl font-semibold">Registration diagnostics</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Refresh state after changing the parent, label, term, or payment method. Every check must pass before registration.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {diagnostics.length === 0 ? (
+              <p className="text-sm text-slate-600">Refresh state to run the checks.</p>
+            ) : diagnostics.map((diagnostic) => (
+              <div
+                key={diagnostic.label}
+                className={(diagnostic.passed
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-red-200 bg-red-50") + " rounded-xl border p-4"}
+              >
+                <p className="font-semibold">
+                  {diagnostic.passed ? "Pass · " : "Action needed · "}{diagnostic.label}
+                </p>
+                <p className="mt-1 break-all text-sm text-slate-700">{diagnostic.detail}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="grid gap-5 md:grid-cols-2">
