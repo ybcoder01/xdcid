@@ -10,11 +10,20 @@ import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
 
-const networks = [
+type Network = {
+  name: string;
+  logoClass: string;
+  logoSrc?: string;
+  logoImageClass?: string;
+  logoColor?: string;
+};
+
+const networks: Network[] = [
   {
     name: "XDC",
     logoClass: "bg-white",
-    logoSrc: "https://xinfin.org/assets/images/brand-assets/primary-icon.svg"
+    logoSrc: "https://images.prismic.io/xdcf/aCdGjSdWJ-7kSOdw_XDCPrimaryColor_Display.png?rect=340,390,900,500&auto=format%2Ccompress&w=180",
+    logoImageClass: "h-7 w-9 object-contain"
   },
   {
     name: "Ethereum",
@@ -24,7 +33,7 @@ const networks = [
   {
     name: "Base",
     logoClass: "bg-white",
-    logoSrc: "https://cdn.simpleicons.org/base/0052FF"
+    logoColor: "#0052FF"
   },
   {
     name: "Arbitrum",
@@ -143,15 +152,19 @@ export default function Home() {
                 {networks.map((network) => (
                   <div key={network.name} className="relative flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <span aria-hidden="true" className="absolute -left-5 top-1/2 hidden h-px w-5 bg-[#65d4e1] md:block" />
-                    <span className={"grid h-10 w-10 shrink-0 place-items-center rounded-xl " + network.logoClass}>
-                      <img
-                        alt=""
-                        aria-hidden="true"
-                        className="h-7 w-7 object-contain"
-                        height="28"
-                        src={network.logoSrc}
-                        width="28"
-                      />
+                    <span className={"grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl " + network.logoClass}>
+                      {network.logoColor ? (
+                        <span aria-hidden="true" className="h-7 w-7" style={{ backgroundColor: network.logoColor }} />
+                      ) : (
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className={network.logoImageClass ?? "h-7 w-7 object-contain"}
+                          height="28"
+                          src={network.logoSrc}
+                          width={network.name === "XDC" ? "36" : "28"}
+                        />
+                      )}
                     </span>
                     <span className="font-medium text-slate-800">{network.name}</span>
                   </div>
