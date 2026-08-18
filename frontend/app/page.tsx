@@ -22,8 +22,8 @@ const networks: Network[] = [
   {
     name: "XDC",
     logoClass: "bg-white",
-    logoSrc: "https://images.prismic.io/xdcf/aCdGjSdWJ-7kSOdw_XDCPrimaryColor_Display.png?rect=340,390,900,500&auto=format%2Ccompress&w=180",
-    logoImageClass: "h-7 w-9 object-contain"
+    logoSrc: "https://xinfin.org/assets/images/brand-assets/primary-icon.svg",
+    logoImageClass: "h-7 w-7 scale-[2.2] object-contain"
   },
   {
     name: "Ethereum",
