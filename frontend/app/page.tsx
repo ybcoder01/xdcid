@@ -23,7 +23,7 @@ const networks: Network[] = [
     name: "XDC",
     logoClass: "bg-white",
     logoSrc: "https://xinfin.org/assets/images/brand-assets/primary-icon.svg",
-    logoImageClass: "h-7 w-7 scale-[2.2] object-contain"
+    logoImageClass: "h-7 w-7 scale-[4.4] object-contain"
   },
   {
     name: "Ethereum",
