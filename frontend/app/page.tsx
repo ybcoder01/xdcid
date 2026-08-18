@@ -13,59 +13,28 @@ import { useRegistryStatus } from "../lib/useRegistryStatus";
 const networks = [
   {
     name: "XDC",
-    logoClass: "bg-[#eef9fa]",
-    logo: (
-      <img
-        alt=""
-        aria-hidden="true"
-        className="h-6 w-6 object-contain"
-        height="24"
-        src="https://xinfin.org/assets/images/brand-assets/primary-icon.svg"
-        width="24"
-      />
-    )
+    logoClass: "bg-white",
+    logoSrc: "https://xinfin.org/assets/images/brand-assets/primary-icon.svg"
   },
   {
     name: "Ethereum",
-    logoClass: "bg-[#eef0ff]",
-    logo: (
-      <svg aria-hidden="true" viewBox="0 0 32 32" className="h-6 w-6">
-        <path d="M16 2.5 8.2 15.7 16 20.3l7.8-4.6L16 2.5Z" fill="#627eea" />
-        <path d="m16 29.5-7.8-11L16 23l7.8-4.5-7.8 11Z" fill="#454a75" />
-        <path d="M16 20.3v-8.4l7.8 3.8-7.8 4.6Z" fill="#454a75" opacity=".72" />
-      </svg>
-    )
+    logoClass: "bg-white",
+    logoSrc: "https://ethereum.org/images/assets/svgs/eth-diamond-black.svg"
   },
   {
     name: "Base",
-    logoClass: "bg-[#eef4ff]",
-    logo: (
-      <svg aria-hidden="true" viewBox="0 0 32 32" className="h-6 w-6">
-        <circle cx="16" cy="16" r="13" fill="#0052ff" />
-        <path d="M15.7 8.3a7.7 7.7 0 1 1-7.4 9.8h10.8v-4.2H8.3a7.7 7.7 0 0 1 7.4-5.6Z" fill="white" />
-      </svg>
-    )
+    logoClass: "bg-white",
+    logoSrc: "https://cdn.simpleicons.org/base/0052FF"
   },
   {
     name: "Arbitrum",
-    logoClass: "bg-[#eef7ff]",
-    logo: (
-      <svg aria-hidden="true" viewBox="0 0 32 32" className="h-6 w-6">
-        <path d="m16 2.7 11.5 6.6v13.4L16 29.3 4.5 22.7V9.3L16 2.7Z" fill="#213147" />
-        <path d="m13 23.7 2.9 1.7 7.5-12.7-2.9-1.7L13 23.7Z" fill="#28a0f0" />
-        <path d="m8.5 21.1 2.9 1.7 7.5-12.7L16 8.4 8.5 21.1Z" fill="#96bedc" />
-        <path d="m18.3 23.5 2.8-1.6-3.4-5.8-1.7 2.8 2.3 4.6Z" fill="#fff" />
-      </svg>
-    )
+    logoClass: "bg-white",
+    logoSrc: "https://raw.githubusercontent.com/OffchainLabs/arbitrum-docs/master/static/img/logo.svg"
   },
   {
     name: "Polygon",
-    logoClass: "bg-[#f5efff]",
-    logo: (
-      <svg aria-hidden="true" viewBox="0 0 32 32" className="h-6 w-6">
-        <path d="M21.6 10.2a3.4 3.4 0 0 1 3.4 0l3.1 1.8a3.4 3.4 0 0 1 0 5.9L25 19.7a3.4 3.4 0 0 1-3.4 0l-3.1-1.8a3.4 3.4 0 0 1-1.7-2.9v-1.2l3 1.7a.6.6 0 0 0 .6 0l2.8-1.6a.6.6 0 0 0 0-1l-1.6-.9a.6.6 0 0 0-.6 0l-2.7 1.6-3-1.7 6.3-3.7Zm-11.2 2.1a3.4 3.4 0 0 1 3.4 0l3.1 1.8a3.4 3.4 0 0 1 1.7 2.9v1.2l-3-1.7a.6.6 0 0 0-.6 0l-2.8 1.6a.6.6 0 0 0 0 1l1.6.9a.6.6 0 0 0 .6 0l2.7-1.6 3 1.7-6.3 3.7a3.4 3.4 0 0 1-3.4 0L7.3 22a3.4 3.4 0 0 1 0-5.9l3.1-1.8Z" fill="#8247e5" />
-      </svg>
-    )
+    logoClass: "bg-white",
+    logoSrc: "https://cdn.simpleicons.org/polygon/8247E5"
   }
 ];
 
@@ -174,7 +143,16 @@ export default function Home() {
                 {networks.map((network) => (
                   <div key={network.name} className="relative flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <span aria-hidden="true" className="absolute -left-5 top-1/2 hidden h-px w-5 bg-[#65d4e1] md:block" />
-                    <span className={"grid h-9 w-9 shrink-0 place-items-center rounded-full " + network.logoClass}>{network.logo}</span>
+                    <span className={"grid h-10 w-10 shrink-0 place-items-center rounded-xl " + network.logoClass}>
+                      <img
+                        alt=""
+                        aria-hidden="true"
+                        className="h-7 w-7 object-contain"
+                        height="28"
+                        src={network.logoSrc}
+                        width="28"
+                      />
+                    </span>
                     <span className="font-medium text-slate-800">{network.name}</span>
                   </div>
                 ))}
