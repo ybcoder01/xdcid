@@ -15,11 +15,14 @@ const networks = [
     name: "XDC",
     logoClass: "bg-[#eef9fa]",
     logo: (
-      <svg aria-hidden="true" viewBox="0 0 32 32" className="h-6 w-6">
-        <path d="M8.2 7.1 3.5 16l4.7 8.9h7.1l-4.8-5.8H7.8L6.2 16l1.6-3.1h2.7l4.8-5.8H8.2Z" fill="#0b6670" />
-        <path d="m23.8 7.1 4.7 8.9-4.7 8.9h-7.1l4.8-5.8h2.7l1.6-3.1-1.6-3.1h-2.7l-4.8-5.8h7.1Z" fill="#ff735d" />
-        <path d="m12.1 11.2 3.9 4.6 3.9-4.6h3.6L17.8 18l3.1 3.7h-3.7L16 20.3l-1.2 1.4h-3.7l3.1-3.7-5.7-6.8h3.6Z" fill="#131619" />
-      </svg>
+      <img
+        alt=""
+        aria-hidden="true"
+        className="h-6 w-6 object-contain"
+        height="24"
+        src="https://xinfin.org/assets/images/brand-assets/primary-icon.svg"
+        width="24"
+      />
     )
   },
   {
