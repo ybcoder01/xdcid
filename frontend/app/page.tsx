@@ -10,7 +10,15 @@ import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
 
-const networks = [
+type Network = {
+  name: string;
+  logoClass: string;
+  logoSrc?: string;
+  logoImageClass?: string;
+  logoColor?: string;
+};
+
+const networks: Network[] = [
   {
     name: "XDC",
     logoClass: "bg-white",
