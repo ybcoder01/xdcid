@@ -72,14 +72,6 @@ const phaseLabels: Record<Phase, string> = {
   complete: "Transfer complete"
 };
 
-const explorerUrls: Record<number, string> = {
-  1: "https://etherscan.io",
-  50: "https://xdcscan.com",
-  137: "https://polygonscan.com",
-  8453: "https://basescan.org",
-  42161: "https://arbiscan.io"
-};
-
 export function MultichainUsdcExecutor({
   sourceChainId,
   destinationChainId,
@@ -617,21 +609,21 @@ export function MultichainUsdcExecutor({
         <TransactionLink
           label="XDCID fee"
           hash={feeHash}
-          explorerUrl={explorerUrls[sourceChainId]}
+          explorerUrl={source?.explorerUrl}
         />
       ) : null}
       {burnHash ? (
         <TransactionLink
           label="Burn"
           hash={burnHash}
-          explorerUrl={explorerUrls[sourceChainId]}
+          explorerUrl={source?.explorerUrl}
         />
       ) : null}
       {receiveHash ? (
         <TransactionLink
           label={crossChain ? "Mint" : "Transfer"}
           hash={receiveHash}
-          explorerUrl={explorerUrls[destinationChainId]}
+          explorerUrl={destination?.explorerUrl}
         />
       ) : null}
 
