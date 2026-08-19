@@ -14,12 +14,16 @@ import {
   useAccount,
   useChainId,
   usePublicClient,
+  useReadContract,
   useWriteContract,
 } from "wagmi";
 import {
   addresses,
   erc20ApprovalAbi,
+  pricingPolicyAbi,
   signedRegistrarAbi,
+  signedRegistrarEnabled,
+  zeroAddress,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 
@@ -67,6 +71,37 @@ export function SignedRegistrationControls(props: {
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const labelLength = props.name.endsWith(".xdc")
+    ? props.name.slice(0, -4).length
+    : props.name.length;
+  const pricingEnabled =
+    signedRegistrarEnabled && addresses.pricingPolicy !== zeroAddress;
+  const annualPrice = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, BigInt(labelLength), 1n],
+    query: { enabled: pricingEnabled },
+  });
+  const discountedPrice = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, BigInt(labelLength), BigInt(termYears)],
+    query: { enabled: pricingEnabled },
+  });
+  const grossUsdMicros =
+    typeof annualPrice.data === "bigint"
+      ? annualPrice.data * BigInt(termYears)
+      : undefined;
+  const finalUsdMicros =
+    typeof discountedPrice.data === "bigint"
+      ? discountedPrice.data
+      : undefined;
+  const discountBps =
+    grossUsdMicros && finalUsdMicros !== undefined
+      ? ((grossUsdMicros - finalUsdMicros) * 10_000n) / grossUsdMicros
+      : 0n;
 
   async function register() {
     if (!props.enabled || !isConnected || !address || !client) return;
@@ -195,6 +230,21 @@ export function SignedRegistrationControls(props: {
           </select>
         </label>
       </div>
+      {pricingEnabled ? (
+        <div className="mt-4 rounded-lg border border-black/10 bg-white p-3 text-sm text-slate-700">
+          {annualPrice.isLoading || discountedPrice.isLoading ? (
+            <p>Reading the live on-chain price…</p>
+          ) : annualPrice.isError || discountedPrice.isError ? (
+            <p className="text-red-600">Unable to read the live pricing policy.</p>
+          ) : grossUsdMicros !== undefined && finalUsdMicros !== undefined ? (
+            <div className="grid gap-1 sm:grid-cols-3">
+              <p><span className="block text-xs text-slate-500">Regular cost</span>{formatUsdMicros(grossUsdMicros)}</p>
+              <p><span className="block text-xs text-slate-500">Discount</span>{formatDiscount(discountBps)}</p>
+              <p><span className="block text-xs text-slate-500">You pay</span><strong>{formatUsdMicros(finalUsdMicros)}</strong></p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <button
         className="mt-4 w-full rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
         disabled={!props.enabled || !isConnected || busy}
@@ -224,4 +274,19 @@ function deserializeQuote(value: SerializedQuote) {
     issuedAt: BigInt(value.issuedAt),
     deadline: BigInt(value.deadline),
   };
+}
+
+
+function formatUsdMicros(value: bigint): string {
+  const whole = value / 1_000_000n;
+  const fraction = (value % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return "$" + whole.toString() + (fraction ? "." + fraction : "");
+}
+
+function formatDiscount(value: bigint): string {
+  const whole = value / 100n;
+  const fraction = value % 100n;
+  return fraction === 0n
+    ? whole.toString() + "%"
+    : whole.toString() + "." + fraction.toString().padStart(2, "0") + "%";
 }
