@@ -27,6 +27,21 @@ describe("signed registrar quote helpers", function () {
     expect(request.paymentCurrency).to.equal("XDC");
   });
 
+  it("accepts and canonicalizes two-character names for registrar v2", function () {
+    const request = normalizeSignedQuoteRequest({
+      name: "AB.XDC",
+      product: "registration",
+      termYears: 10,
+      paymentCurrency: "USDC",
+      payer,
+      nameOwner,
+    });
+
+    expect(request.name).to.equal("ab.xdc");
+    expect(request.labelLength).to.equal(2);
+    expect(request.termYears).to.equal(10);
+  });
+
   it("builds the exact contract typed-data shape and ten-minute lifetime", function () {
     const request = normalizeSignedQuoteRequest({
       name: "example.xdc",
