@@ -5,8 +5,7 @@ import { useBlockNumber } from "wagmi";
 import {
   CCTP_MESSAGE_TRANSMITTER_V2,
   CCTP_TOKEN_MESSENGER_V2,
-  PAYMENT_NETWORKS,
-  type PaymentNetwork,
+  MAINNET_PAYMENT_NETWORKS,
 } from "../config/paymentNetworks";
 import { getRpcUrls } from "../config/rpcTransports";
 import {
@@ -50,7 +49,9 @@ function StatusBadge({
   );
 }
 
-function NetworkHealthCard({ network }: { network: PaymentNetwork }) {
+type MainnetPaymentNetwork = (typeof MAINNET_PAYMENT_NETWORKS)[number];
+
+function NetworkHealthCard({ network }: { network: MainnetPaymentNetwork }) {
   const block = useBlockNumber({
     chainId: network.chainId,
     query: { refetchInterval: 30_000 },
@@ -108,8 +109,8 @@ export function AdminOperations() {
     void refreshHealth();
   }, [refreshHealth]);
 
-  const routes = PAYMENT_NETWORKS.flatMap((source) =>
-    PAYMENT_NETWORKS.map((destination) => ({
+  const routes = MAINNET_PAYMENT_NETWORKS.flatMap((source) =>
+    MAINNET_PAYMENT_NETWORKS.map((destination) => ({
       source,
       destination,
       capability: getPaymentRouteCapability(
@@ -148,7 +149,7 @@ export function AdminOperations() {
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {PAYMENT_NETWORKS.map((network) => (
+          {MAINNET_PAYMENT_NETWORKS.map((network) => (
             <NetworkHealthCard key={network.chainId} network={network} />
           ))}
           <div className="rounded-xl border border-slate-200 bg-white p-4">

@@ -8,12 +8,13 @@ import {
   type Hex
 } from "viem";
 import {
+  CCTP_IRIS_API,
   CCTP_MESSAGE_TRANSMITTER_V2,
   CCTP_TOKEN_MESSENGER_V2,
   getPaymentNetwork
 } from "../config/paymentNetworks";
 
-export const CCTP_MAINNET_IRIS_API = "https://iris-api.circle.com";
+export const CCTP_MAINNET_IRIS_API = CCTP_IRIS_API;
 export const CCTP_STANDARD_FINALITY_THRESHOLD = 2_000;
 export const CCTP_FORWARDING_HOOK_DATA =
   "0x636374702d666f72776172640000000000000000000000000000000000000000" as const;

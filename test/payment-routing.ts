@@ -2,7 +2,9 @@ import { expect } from "chai";
 import {
   CCTP_MESSAGE_TRANSMITTER_V2,
   CCTP_TOKEN_MESSENGER_V2,
+  MAINNET_PAYMENT_NETWORKS,
   PAYMENT_NETWORKS,
+  TESTNET_PAYMENT_NETWORKS,
   USDC_DECIMALS
 } from "../frontend/config/paymentNetworks";
 import {
@@ -64,6 +66,51 @@ describe("multichain payment routing", () => {
         usdcAddress: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
       }
     ]);
+  });
+
+  it("defines all five corresponding testnet networks", () => {
+    expect(
+      TESTNET_PAYMENT_NETWORKS.map(
+        ({ chainId, circleDomain, nativeSymbol, usdcAddress }) => ({
+          chainId,
+          circleDomain,
+          nativeSymbol,
+          usdcAddress
+        })
+      )
+    ).to.deep.equal([
+      {
+        chainId: 11155111,
+        circleDomain: 0,
+        nativeSymbol: "ETH",
+        usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+      },
+      {
+        chainId: 51,
+        circleDomain: 18,
+        nativeSymbol: "TXDC",
+        usdcAddress: "0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4"
+      },
+      {
+        chainId: 80002,
+        circleDomain: 7,
+        nativeSymbol: "POL",
+        usdcAddress: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"
+      },
+      {
+        chainId: 84532,
+        circleDomain: 6,
+        nativeSymbol: "ETH",
+        usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7c"
+      },
+      {
+        chainId: 421614,
+        circleDomain: 3,
+        nativeSymbol: "ETH",
+        usdcAddress: "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d"
+      }
+    ]);
+    expect(MAINNET_PAYMENT_NETWORKS).to.have.length(5);
   });
 
   it("plans same-chain payments as direct transfers", () => {
