@@ -23,7 +23,6 @@ import {
   pricingPolicyAbi,
   signedRegistrarAbi,
   signedRegistrarEnabled,
-  zeroAddress,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 
