@@ -5,7 +5,14 @@ import { useMemo, useState } from "react";
 import { formatEther } from "viem";
 import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { addresses, contractsConfigured, registrarAbi, signedRegistrarEnabled } from "../config/contracts";
+import {
+  addresses,
+  contractsConfigured,
+  pricingPolicyAbi,
+  registrarAbi,
+  signedRegistrarEnabled,
+  zeroAddress,
+} from "../config/contracts";
 import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
@@ -33,7 +40,10 @@ export default function Home() {
   const parsedName = useMemo(() => parseXnsName(input), [input]);
   const { name, isValid, error: validationError } = parsedName;
   const hasInput = input.trim().length > 0;
-  const canReadContracts = isValid && contractsConfigured;
+  const registrarSupportsName =
+    signedRegistrarEnabled || parsedName.label.length >= 3;
+  const canReadContracts =
+    isValid && contractsConfigured && registrarSupportsName;
   const availability = useReadContract({
     address: addresses.registrar,
     abi: registrarAbi,
@@ -168,14 +178,12 @@ export default function Home() {
           <p className={"mt-2 text-sm " + (hasInput && !isValid ? "text-red-600" : "text-neutral-500")}>
             {hasInput && !isValid
               ? validationError
-              : "Use 3-63 letters, numbers, or hyphens; a hyphen cannot be first or last."}
+              : signedRegistrarEnabled
+                ? "Use 2-63 letters, numbers, or hyphens; a hyphen cannot be first or last."
+                : "Use 3-63 letters, numbers, or hyphens; two-character names activate with Pricing V2."}
           </p>
 
-          <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-3">
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">3 chars</p><p>{signedRegistrarEnabled ? "$20/year" : "500 XDC/year"}</p></div>
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">4 chars</p><p>{signedRegistrarEnabled ? "$10/year" : "100 XDC/year"}</p></div>
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">5+ chars</p><p>{signedRegistrarEnabled ? "$5/year" : "10 XDC/year"}</p></div>
-          </div>
+          <LivePricingTiers />
 
           {hasInput && (
             <div className="mt-6 rounded-xl border border-black/10 bg-white p-4 shadow-sm">
@@ -187,7 +195,9 @@ export default function Home() {
                       ? validationError
                       : !contractsConfigured
                         ? "Contracts not configured"
-                        : availability.isLoading || (!signedRegistrarEnabled && price.isLoading) || registry.isChecking
+                        : !registrarSupportsName
+                          ? "Two-character names become available when Pricing V2 is activated"
+                          : availability.isLoading || (!signedRegistrarEnabled && price.isLoading) || registry.isChecking
                           ? "Checking both registries..."
                           : availability.isError || (!signedRegistrarEnabled && price.isError) || registry.isError
                             ? "Could not check registry status"
@@ -246,4 +256,81 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+
+function LivePricingTiers() {
+  const enabled =
+    signedRegistrarEnabled && addresses.pricingPolicy !== zeroAddress;
+  const two = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 2n, 1n],
+    query: { enabled },
+  });
+  const three = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 3n, 1n],
+    query: { enabled },
+  });
+  const four = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 4n, 1n],
+    query: { enabled },
+  });
+  const standard = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 5n, 1n],
+    query: { enabled },
+  });
+
+  if (!signedRegistrarEnabled) {
+    return (
+      <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-3">
+        <PriceCard label="3 chars" price="500 XDC/year" />
+        <PriceCard label="4 chars" price="100 XDC/year" />
+        <PriceCard label="5+ chars" price="10 XDC/year" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-4">
+      <PriceCard label="2 chars" price={formatLiveTier(two.data, two.isLoading, two.isError)} />
+      <PriceCard label="3 chars" price={formatLiveTier(three.data, three.isLoading, three.isError)} />
+      <PriceCard label="4 chars" price={formatLiveTier(four.data, four.isLoading, four.isError)} />
+      <PriceCard label="5+ chars" price={formatLiveTier(standard.data, standard.isLoading, standard.isError)} />
+    </div>
+  );
+}
+
+function PriceCard(props: { label: string; price: string }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-neutral-50 p-3">
+      <p className="font-semibold text-slate-950">{props.label}</p>
+      <p>{props.price}</p>
+    </div>
+  );
+}
+
+function formatLiveTier(
+  value: unknown,
+  loading: boolean,
+  failed: boolean,
+): string {
+  if (loading) return "Loading live price…";
+  if (failed || typeof value !== "bigint") return "Live price unavailable";
+  const whole = value / 1_000_000n;
+  const fraction = (value % 1_000_000n)
+    .toString()
+    .padStart(6, "0")
+    .replace(/0+$/, "");
+  return "$" + whole.toString() + (fraction ? "." + fraction : "") + "/year";
 }
