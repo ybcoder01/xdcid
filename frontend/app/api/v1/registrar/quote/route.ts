@@ -122,10 +122,12 @@ const pricingPolicyAbi = [
         name: "",
         type: "tuple",
         components: [
+          { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
           { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
           { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
           { name: "standardAnnualUsdMicros", type: "uint64" },
           { name: "subdomainAnnualUsdMicros", type: "uint64" },
+          { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
           { name: "migrationUsdMicros", type: "uint64" },
           { name: "threeYearDiscountBps", type: "uint16" },
           { name: "fiveYearDiscountBps", type: "uint16" },
