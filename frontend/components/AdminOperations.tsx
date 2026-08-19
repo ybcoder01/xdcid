@@ -109,7 +109,7 @@ export function AdminOperations() {
   }, [refreshHealth]);
 
   const routes = PAYMENT_NETWORKS.flatMap((source) =>
-    PAYMENT_NETWORKS.map((destination) => ({
+    MAINNET_PAYMENT_NETWORKS.map((destination) => ({
       source,
       destination,
       capability: getPaymentRouteCapability(
@@ -148,7 +148,7 @@ export function AdminOperations() {
         </div>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {PAYMENT_NETWORKS.map((network) => (
+          {MAINNET_PAYMENT_NETWORKS.map((network) => (
             <NetworkHealthCard key={network.chainId} network={network} />
           ))}
           <div className="rounded-xl border border-slate-200 bg-white p-4">
