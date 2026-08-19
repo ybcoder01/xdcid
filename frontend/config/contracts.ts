@@ -304,6 +304,17 @@ export const pricingPolicyAbi = [
   },
   {
     type: "function",
+    name: "priceUsdMicros",
+    stateMutability: "view",
+    inputs: [
+      { name: "product", type: "uint8" },
+      { name: "labelLength", type: "uint256" },
+      { name: "years_", type: "uint256" }
+    ],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
     name: "config",
     stateMutability: "view",
     inputs: [],
@@ -311,10 +322,12 @@ export const pricingPolicyAbi = [
       name: "",
       type: "tuple",
       components: [
+        { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
         { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
         { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
         { name: "standardAnnualUsdMicros", type: "uint64" },
         { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
         { name: "migrationUsdMicros", type: "uint64" },
         { name: "threeYearDiscountBps", type: "uint16" },
         { name: "fiveYearDiscountBps", type: "uint16" },
@@ -350,10 +363,12 @@ export const pricingPolicyAbi = [
       name: "nextConfig",
       type: "tuple",
       components: [
+        { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
         { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
         { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
         { name: "standardAnnualUsdMicros", type: "uint64" },
         { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
         { name: "migrationUsdMicros", type: "uint64" },
         { name: "threeYearDiscountBps", type: "uint16" },
         { name: "fiveYearDiscountBps", type: "uint16" },
