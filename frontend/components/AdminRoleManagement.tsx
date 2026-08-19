@@ -16,10 +16,12 @@ import {
 } from "../config/contracts";
 
 type PricingConfig = {
+  twoCharacterAnnualUsdMicros: bigint;
   threeCharacterAnnualUsdMicros: bigint;
   fourCharacterAnnualUsdMicros: bigint;
   standardAnnualUsdMicros: bigint;
   subdomainAnnualUsdMicros: bigint;
+  premiumSubdomainAnnualUsdMicros: bigint;
   migrationUsdMicros: bigint;
   threeYearDiscountBps: number;
   fiveYearDiscountBps: number;
