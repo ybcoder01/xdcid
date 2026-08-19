@@ -14,6 +14,7 @@ import {
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
+  PAYMENT_NETWORK_ENV,
   PAYMENT_NETWORKS,
   USDC_DECIMALS
 } from "../../config/paymentNetworks";
@@ -27,7 +28,11 @@ import {
 } from "../../lib/paymentRouting";
 import { useRegistryStatus } from "../../lib/useRegistryStatus";
 
-const XDC_CHAIN_ID = 50;
+const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
+const DEFAULT_SOURCE_CHAIN_ID =
+  PAYMENT_NETWORKS.find((network) =>
+    network.key === (PAYMENT_NETWORK_ENV === "testnet" ? "base-sepolia" : "base")
+  )?.chainId || PAYMENT_NETWORKS[0].chainId;
 
 function paymentUnits(amount: string, token: PaymentToken): bigint {
   try {
@@ -46,7 +51,7 @@ function routeLabel(route: PaymentRoute): string {
 export default function SendPage() {
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
-  const [sourceChainId, setSourceChainId] = useState(8453);
+  const [sourceChainId, setSourceChainId] = useState(DEFAULT_SOURCE_CHAIN_ID);
   const [destinationChainId, setDestinationChainId] = useState(XDC_CHAIN_ID);
   const [token, setToken] = useState<PaymentToken>("USDC");
   const { chainId: connectedChainId, isConnected } = useAccount();
@@ -233,9 +238,14 @@ export default function SendPage() {
     <main className="mx-auto max-w-6xl px-4 py-10">
       <section className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
-            XDCID multichain payments
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
+              XDCID multichain payments
+            </p>
+            <span className="rounded-full border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
+              {PAYMENT_NETWORK_ENV}
+            </span>
+          </div>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">
             Send to an XNS ID or wallet
           </h1>
