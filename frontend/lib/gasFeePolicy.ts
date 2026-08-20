@@ -76,7 +76,7 @@ export async function estimateAdaptiveGasFees(
   try {
     const [block, estimate] = await Promise.all([
       client.getBlock(),
-      client.estimateFeesPerGas({ type: "eip1559" })
+      client.estimateFeesPerGas({ type: "eip1559", chain: undefined })
     ]);
     if (block.baseFeePerGas === null) return {};
 
