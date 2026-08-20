@@ -3,11 +3,13 @@ import {
   CCTP_FORWARDING_HOOK_DATA,
   CCTP_STANDARD_FINALITY_THRESHOLD,
   CCTP_ZERO_BYTES32,
+  XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT,
   XDCID_FEE_RECIPIENT,
   addressToBytes32,
   buildMainnetAttestationUrl,
   buildMainnetForwardingFeeUrl,
   calculateXdcidConvenienceFee,
+  getCctpReceiveGasLimit,
   parseMainnetForwardingQuote,
   parseMainnetUsdcAmount,
   prepareMainnetCctpBurn,
@@ -93,6 +95,14 @@ describe("mainnet CCTP transaction preparation", function () {
     expect(prepared.address).to.equal(CCTP_MESSAGE_TRANSMITTER_V2);
     expect(prepared.functionName).to.equal("receiveMessage");
     expect(prepared.args).to.deep.equal(["0x1234", "0xabcd"]);
+  });
+
+  it("uses an explicit receiveMessage gas limit only on XDC Apothem", function () {
+    expect(getCctpReceiveGasLimit(51)).to.equal(
+      XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT
+    );
+    expect(getCctpReceiveGasLimit(50)).to.equal(undefined);
+    expect(getCctpReceiveGasLimit(421614)).to.equal(undefined);
   });
 
   it("builds the mainnet Iris lookup with the source domain", function () {
