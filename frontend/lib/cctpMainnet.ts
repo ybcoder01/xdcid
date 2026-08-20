@@ -19,6 +19,8 @@ export const CCTP_STANDARD_FINALITY_THRESHOLD = 2_000;
 export const CCTP_FORWARDING_HOOK_DATA =
   "0x636374702d666f72776172640000000000000000000000000000000000000000" as const;
 export const XDC_MAINNET_CHAIN_ID = 50;
+export const XDC_APOTHEM_CHAIN_ID = 51;
+export const XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT = 1_000_000n;
 export const XDCID_CONVENIENCE_FEE_BPS = 10n;
 export const XDCID_MIN_CONVENIENCE_FEE = 100_000n;
 export const XDCID_MAX_CONVENIENCE_FEE = 5_000_000n;
@@ -384,13 +386,17 @@ export function prepareMainnetCctpReceive(
     throw new Error("CCTP message and attestation must be non-empty hex bytes");
   }
 
-  return {
+  const request = {
     chainId: destination.chainId,
     address: CCTP_MESSAGE_TRANSMITTER_V2 as Address,
     abi: mainnetMessageTransmitterV2Abi,
     functionName: "receiveMessage" as const,
     args: [message as Hex, attestation as Hex] as const
   };
+
+  return destination.chainId === XDC_APOTHEM_CHAIN_ID
+    ? { ...request, gas: XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT }
+    : request;
 }
 
 export function buildMainnetAttestationUrl(
