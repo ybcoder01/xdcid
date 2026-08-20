@@ -94,7 +94,7 @@ export const TESTNET_PAYMENT_NETWORKS = [
     chainId: 84532,
     circleDomain: 6,
     nativeSymbol: "ETH",
-    usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7c",
+    usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     explorerUrl: "https://sepolia.basescan.org"
   },
   {
