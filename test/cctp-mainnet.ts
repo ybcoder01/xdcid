@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { isAddress } from "viem";
 import {
   CCTP_FORWARDING_HOOK_DATA,
   CCTP_STANDARD_FINALITY_THRESHOLD,
@@ -21,12 +22,23 @@ import {
 import {
   CCTP_MESSAGE_TRANSMITTER_V2,
   CCTP_TOKEN_MESSENGER_V2,
-  PAYMENT_NETWORKS
+  PAYMENT_NETWORKS,
+  TESTNET_PAYMENT_NETWORKS
 } from "../frontend/config/paymentNetworks";
 
 describe("mainnet CCTP transaction preparation", function () {
   const recipient = "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A";
   const transactionHash = `0x${"12".repeat(32)}`;
+
+  it("keeps every testnet USDC contract address checksum-valid", function () {
+    for (const network of TESTNET_PAYMENT_NETWORKS) {
+      expect(isAddress(network.usdcAddress), network.name).to.equal(true);
+    }
+    expect(
+      TESTNET_PAYMENT_NETWORKS.find((network) => network.chainId === 84532)
+        ?.usdcAddress
+    ).to.equal("0x036CbD53842c5426634e7929541eC2318f3dCF7e");
+  });
 
   it("parses USDC with six-decimal precision and rejects unsafe amounts", function () {
     expect(parseMainnetUsdcAmount("1.234567")).to.equal(1_234_567n);
