@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { getAddress, isAddress, parseEther, parseUnits, zeroAddress } from "viem";
-import { useAccount, useReadContract, useSendTransaction } from "wagmi";
+import {
+  useAccount,
+  usePublicClient,
+  useReadContract,
+  useSendTransaction
+} from "wagmi";
 import { MultichainUsdcExecutor } from "../../components/MultichainUsdcExecutor";
 import {
   addresses,
@@ -27,6 +32,10 @@ import {
   type PaymentToken
 } from "../../lib/paymentRouting";
 import { useRegistryStatus } from "../../lib/useRegistryStatus";
+import {
+  estimateAdaptiveGasFees,
+  isBaseFeeTooLowError
+} from "../../lib/gasFeePolicy";
 
 const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 const DEFAULT_SOURCE_CHAIN_ID =
@@ -55,7 +64,13 @@ export default function SendPage() {
   const [destinationChainId, setDestinationChainId] = useState(XDC_CHAIN_ID);
   const [token, setToken] = useState<PaymentToken>("USDC");
   const { chainId: connectedChainId, isConnected } = useAccount();
-  const { sendTransaction, isPending, data: hash, error } = useSendTransaction();
+  const {
+    sendTransactionAsync,
+    isPending,
+    data: hash,
+    error
+  } = useSendTransaction();
+  const sourceClient = usePublicClient({ chainId: sourceChainId });
 
   const directRecipient = useMemo(() => {
     const value = recipient.trim();
@@ -197,12 +212,27 @@ export default function SendPage() {
     sourceChainId === destinationChainId &&
     !isPending;
 
-  function sendNative() {
-    if (!canSendNative || !destination) return;
-    sendTransaction({
+  async function sendNative() {
+    if (!canSendNative || !destination || !sourceClient) return;
+    const request = {
       to: destination.address,
       value: parseEther(amount)
-    });
+    };
+    const initialFees = await estimateAdaptiveGasFees(
+      sourceClient,
+      sourceChainId
+    );
+    try {
+      await sendTransactionAsync({ ...request, ...initialFees });
+    } catch (cause) {
+      if (!isBaseFeeTooLowError(cause)) return;
+      const refreshedFees = await estimateAdaptiveGasFees(
+        sourceClient,
+        sourceChainId
+      );
+      if (refreshedFees.maxFeePerGas === undefined) return;
+      await sendTransactionAsync({ ...request, ...refreshedFees });
+    }
   }
 
   function swapNetworks() {
