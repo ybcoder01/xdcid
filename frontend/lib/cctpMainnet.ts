@@ -21,6 +21,12 @@ export const CCTP_FORWARDING_HOOK_DATA =
 export const XDC_MAINNET_CHAIN_ID = 50;
 export const XDC_APOTHEM_CHAIN_ID = 51;
 export const XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT = 1_000_000n;
+
+export function getCctpReceiveGasLimit(chainId: number): bigint | undefined {
+  return chainId === XDC_APOTHEM_CHAIN_ID
+    ? XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT
+    : undefined;
+}
 export const XDCID_CONVENIENCE_FEE_BPS = 10n;
 export const XDCID_MIN_CONVENIENCE_FEE = 100_000n;
 export const XDCID_MAX_CONVENIENCE_FEE = 5_000_000n;
@@ -394,9 +400,8 @@ export function prepareMainnetCctpReceive(
     args: [message as Hex, attestation as Hex] as const
   };
 
-  return destination.chainId === XDC_APOTHEM_CHAIN_ID
-    ? { ...request, gas: XDC_APOTHEM_CCTP_RECEIVE_GAS_LIMIT }
-    : request;
+  const gas = getCctpReceiveGasLimit(destination.chainId);
+  return gas === undefined ? request : { ...request, gas };
 }
 
 export function buildMainnetAttestationUrl(
