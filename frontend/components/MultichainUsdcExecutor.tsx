@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { formatUnits, type Address, type Hash, type Hex } from "viem";
+import {
+  formatUnits,
+  type Address,
+  type Hash,
+  type Hex,
+  type PublicClient
+} from "viem";
 import {
   useAccount,
   usePublicClient,
@@ -28,6 +34,10 @@ import {
   automaticForwardingMessage,
   getPaymentRouteCapability
 } from "../lib/paymentRouteCapabilities";
+import {
+  estimateAdaptiveGasFees,
+  isBaseFeeTooLowError
+} from "../lib/gasFeePolicy";
 
 type Phase =
   | "idle"
@@ -119,6 +129,22 @@ export function MultichainUsdcExecutor({
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
   const transferModeLocked = requestedTransferMode !== "payer-choice";
+
+  async function writeWithAdaptiveFees(
+    request: Record<string, unknown>,
+    client: PublicClient,
+    chainId: number
+  ): Promise<Hash> {
+    const initialFees = await estimateAdaptiveGasFees(client, chainId);
+    try {
+      return await writeContractAsync({ ...request, ...initialFees } as never);
+    } catch (cause) {
+      if (!isBaseFeeTooLowError(cause)) throw cause;
+      const refreshedFees = await estimateAdaptiveGasFees(client, chainId);
+      if (refreshedFees.maxFeePerGas === undefined) throw cause;
+      return writeContractAsync({ ...request, ...refreshedFees } as never);
+    }
+  }
 
   useEffect(() => {
     setTransferMode(
@@ -248,7 +274,11 @@ export function MultichainUsdcExecutor({
           recipient
         });
         setPhase("transferring");
-        const transferHash = await writeContractAsync(request as never);
+        const transferHash = await writeWithAdaptiveFees(
+          request,
+          sourceClient,
+          source.chainId
+        );
         setReceiveHash(transferHash);
         await sourceClient.waitForTransactionReceipt({ hash: transferHash });
         setPhase("complete");
@@ -275,7 +305,11 @@ export function MultichainUsdcExecutor({
 
       if (allowance < approvalAmount) {
         setPhase("approving");
-        const approvalHash = await writeContractAsync(plan.approvalRequest as never);
+        const approvalHash = await writeWithAdaptiveFees(
+          plan.approvalRequest,
+          sourceClient,
+          source.chainId
+        );
         await sourceClient.waitForTransactionReceipt({ hash: approvalHash });
       }
 
@@ -287,7 +321,11 @@ export function MultichainUsdcExecutor({
             sourceChainId,
             units
           );
-          const nextFeeHash = await writeContractAsync(feeRequest as never);
+          const nextFeeHash = await writeWithAdaptiveFees(
+            feeRequest,
+            sourceClient,
+            source.chainId
+          );
           setFeeHash(nextFeeHash);
           setRecoveryFeeHash(nextFeeHash);
           await sourceClient.waitForTransactionReceipt({ hash: nextFeeHash });
@@ -309,8 +347,10 @@ export function MultichainUsdcExecutor({
         }
 
         setPhase("burning");
-        const nextBurnHash = await writeContractAsync(
-          forwardedPlan.burnRequest as never
+        const nextBurnHash = await writeWithAdaptiveFees(
+          forwardedPlan.burnRequest,
+          sourceClient,
+          source.chainId
         );
         setBurnHash(nextBurnHash);
         await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
@@ -343,7 +383,11 @@ export function MultichainUsdcExecutor({
       }
 
       setPhase("burning");
-      const nextBurnHash = await writeContractAsync(plan.burnRequest as never);
+      const nextBurnHash = await writeWithAdaptiveFees(
+        plan.burnRequest,
+        sourceClient,
+        source.chainId
+      );
       setBurnHash(nextBurnHash);
       await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
 
@@ -448,7 +492,11 @@ export function MultichainUsdcExecutor({
       );
       setPhase("minting");
       await switchChainAsync({ chainId: destination.chainId });
-      const nextReceiveHash = await writeContractAsync(request as never);
+      const nextReceiveHash = await writeWithAdaptiveFees(
+        request,
+        destinationClient,
+        destination.chainId
+      );
       setReceiveHash(nextReceiveHash);
       await destinationClient.waitForTransactionReceipt({ hash: nextReceiveHash });
       setPhase("complete");
