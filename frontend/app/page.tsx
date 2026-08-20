@@ -17,12 +17,41 @@ import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
 
-const networks = [
-  { name: "XDC", badge: "X", badgeClass: "bg-[#0b5c70] text-white" },
-  { name: "Ethereum", badge: "E", badgeClass: "bg-slate-900 text-white" },
-  { name: "Base", badge: "B", badgeClass: "bg-blue-600 text-white" },
-  { name: "Arbitrum", badge: "A", badgeClass: "bg-sky-100 text-sky-900" },
-  { name: "Polygon", badge: "P", badgeClass: "bg-violet-600 text-white" }
+type Network = {
+  name: string;
+  logoClass: string;
+  logoSrc?: string;
+  logoImageClass?: string;
+  logoColor?: string;
+};
+
+const networks: Network[] = [
+  {
+    name: "XDC",
+    logoClass: "bg-white",
+    logoSrc: "https://xinfin.org/assets/images/brand-assets/primary-icon.svg",
+    logoImageClass: "h-7 w-7 scale-[4.4] object-contain"
+  },
+  {
+    name: "Ethereum",
+    logoClass: "bg-white",
+    logoSrc: "https://ethereum.org/images/assets/svgs/eth-diamond-black.svg"
+  },
+  {
+    name: "Base",
+    logoClass: "bg-white",
+    logoColor: "#0052FF"
+  },
+  {
+    name: "Arbitrum",
+    logoClass: "bg-white",
+    logoSrc: "https://raw.githubusercontent.com/OffchainLabs/arbitrum-docs/master/static/img/logo.svg"
+  },
+  {
+    name: "Polygon",
+    logoClass: "bg-white",
+    logoSrc: "https://cdn.simpleicons.org/polygon/8247E5"
+  }
 ];
 
 const capabilities = [
@@ -133,7 +162,20 @@ export default function Home() {
                 {networks.map((network) => (
                   <div key={network.name} className="relative flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <span aria-hidden="true" className="absolute -left-5 top-1/2 hidden h-px w-5 bg-[#65d4e1] md:block" />
-                    <span className={"grid h-9 w-9 place-items-center rounded-full text-sm font-semibold " + network.badgeClass}>{network.badge}</span>
+                    <span className={"grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl " + network.logoClass}>
+                      {network.logoColor ? (
+                        <span aria-hidden="true" className="h-7 w-7" style={{ backgroundColor: network.logoColor }} />
+                      ) : (
+                        <img
+                          alt=""
+                          aria-hidden="true"
+                          className={network.logoImageClass ?? "h-7 w-7 object-contain"}
+                          height="28"
+                          src={network.logoSrc}
+                          width={network.name === "XDC" ? "36" : "28"}
+                        />
+                      )}
+                    </span>
                     <span className="font-medium text-slate-800">{network.name}</span>
                   </div>
                 ))}
