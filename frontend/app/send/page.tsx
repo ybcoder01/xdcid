@@ -155,7 +155,7 @@ export default function SendPage() {
     address: addresses.multichainResolver,
     abi: multichainResolverAbi,
     functionName: "addressFor",
-    args: node.data ? [node.data, BigInt(destinationChainId)] : undefined,
+    args: node ? [node, BigInt(destinationChainId)] : undefined,
     query: { enabled: !!node && activeResolverSuiteAvailable }
   });
 
@@ -257,8 +257,6 @@ export default function SendPage() {
     ? "Direct wallet address. XNS resolution is not required."
     : !isValid
       ? validationError
-      : !contractsConfigured
-      ? "Contracts not configured"
       : readsLoading
         ? "Resolving the name and destination-chain address..."
         : readsFailed
