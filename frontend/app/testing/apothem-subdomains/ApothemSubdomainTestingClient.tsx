@@ -16,6 +16,7 @@ import {
   type EIP1193Provider,
   type Hex,
 } from "viem";
+import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../../../lib/xdcWriteGas";
 
 const TEST_WALLET = getAddress("0x9c67d6cfE6A73497e7348b6b852495CA6236C29a");
 const REGISTRAR = getAddress("0xa2135729ce122ef93158FCc4C69683155e6707d3");
@@ -251,6 +252,11 @@ export default function ApothemSubdomainTestingClient() {
       }
 
       if (prepared.currency === "USDC") {
+        const approvalGas = await xdcWriteOverrides(
+          publicClient,
+          CHAIN_ID,
+          XDC_WRITE_GAS_LIMITS.erc20Approval,
+        );
         const approval = await walletClient.writeContract({
           account: selected,
           chain: apothem,
@@ -258,11 +264,19 @@ export default function ApothemSubdomainTestingClient() {
           abi: erc20Abi,
           functionName: "approve",
           args: [REGISTRAR, prepared.quote.paymentAmount],
+          ...approvalGas,
         });
         setMessage("USDC approval submitted. Waiting for confirmation...");
         await publicClient.waitForTransactionReceipt({ hash: approval, confirmations: 1 });
       }
 
+      const paidActionGas = await xdcWriteOverrides(
+        publicClient,
+        CHAIN_ID,
+        action === "registerWithQuote"
+          ? XDC_WRITE_GAS_LIMITS.subdomainRegistration
+          : XDC_WRITE_GAS_LIMITS.subdomainRenewal,
+      );
       const request = {
         account: selected,
         chain: apothem,
@@ -276,6 +290,7 @@ export default function ApothemSubdomainTestingClient() {
           prepared.signature,
         ],
         value: prepared.currency === "TXDC" ? prepared.quote.paymentAmount : 0n,
+        ...paidActionGas,
       } as const;
 
       setMessage("Running " + (action === "registerWithQuote" ? "registration" : "renewal") + " preflight...");
@@ -345,6 +360,11 @@ export default function ApothemSubdomainTestingClient() {
   ) {
     await run(async () => {
       const { account: selected, publicClient, walletClient } = await clients();
+      const recordGas = await xdcWriteOverrides(
+        publicClient,
+        CHAIN_ID,
+        XDC_WRITE_GAS_LIMITS.recordUpdate,
+      );
       const request = {
         account: selected,
         chain: apothem,
@@ -352,6 +372,7 @@ export default function ApothemSubdomainTestingClient() {
         abi: registrarAbi,
         functionName,
         args: args as never,
+        ...recordGas,
       } as const;
 
       setMessage("Running contract preflight...");
