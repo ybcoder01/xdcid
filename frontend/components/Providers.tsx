@@ -25,8 +25,11 @@ import { injected } from "wagmi/connectors";
 import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
 import { getRpcTransport } from "../config/rpcTransports";
+import { PAYMENT_NETWORK_ENV } from "../config/paymentNetworks";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
+const defaultWalletChain =
+  PAYMENT_NETWORK_ENV === "testnet" ? xdcApothem : xdcMainnet;
 
 const connectors = walletConnectProjectId
   ? connectorsForWallets(
@@ -86,7 +89,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>{children}</RainbowKitProvider>
+        <RainbowKitProvider initialChain={defaultWalletChain}>
+          {children}
+        </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

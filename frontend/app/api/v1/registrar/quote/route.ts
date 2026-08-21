@@ -400,11 +400,15 @@ async function readBody(request: Request): Promise<unknown> {
 }
 
 function quoteSignerAccount() {
-  const key = process.env.XNS_QUOTE_SIGNER_PRIVATE_KEY?.trim();
+  const configuredKey = process.env.XNS_QUOTE_SIGNER_PRIVATE_KEY?.trim();
+  const key =
+    configuredKey && /^[0-9a-fA-F]{64}$/.test(configuredKey)
+      ? `0x${configuredKey}`
+      : configuredKey;
   if (!key || !isHex(key) || key.length !== 66) {
     throw new ApiServiceError(
       "QUOTE_SIGNING_UNAVAILABLE",
-      "Quote signing is not configured",
+      "Quote signer private key is missing or malformed",
       503,
     );
   }
