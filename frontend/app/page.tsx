@@ -257,7 +257,7 @@ export default function Home() {
                   <p className="text-sm text-neutral-600">
                     {!isValid
                       ? validationError
-                      : !contractsConfigured
+                      : !registrationContractsConfigured
                         ? "Contracts not configured"
                         : !registrarSupportsName
                           ? "Two-character names become available when Pricing V2 is activated"
