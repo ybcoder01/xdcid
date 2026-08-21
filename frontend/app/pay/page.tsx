@@ -117,7 +117,7 @@ export default function PayLinksPage() {
     address && owner.data && getAddress(address) === getAddress(owner.data),
   );
   const resolving =
-    node.isLoading || owner.isLoading || nameExpiry.isLoading || registry.isChecking;
+    owner.isLoading || nameExpiry.isLoading || registry.isChecking;
   const registrySafe = registry.status?.state === "xdcid";
   const wrongNetwork = isConnected && chainId !== PAYMENT_REQUEST_CHAIN_ID;
   const canCreate = Boolean(
