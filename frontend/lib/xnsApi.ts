@@ -7,7 +7,9 @@ import {
   zeroAddress
 } from "viem";
 import {
+  activeRegistryAddress,
   addresses,
+  isTestnetEnvironment,
   registrarAbi,
   registryAbi,
   resolverAbi,
@@ -54,6 +56,60 @@ export async function getNameData(input: string, years: number) {
 
   return withShortCache("name:" + parsed.name + ":" + years, async () => {
     const node = keccak256(stringToHex(parsed.name));
+
+    if (isTestnetEnvironment) {
+      const [owner, expiry] = await Promise.all([
+        xdcClient.readContract({
+          address: activeRegistryAddress,
+          abi: registryAbi,
+          functionName: "ownerOf",
+          args: [node]
+        }),
+        xdcClient.readContract({
+          address: activeRegistryAddress,
+          abi: registryAbi,
+          functionName: "expiryOf",
+          args: [node]
+        })
+      ]);
+      const registered = owner !== zeroAddress;
+      const normalizedOwner = registered ? getAddress(owner) : null;
+      const profile = Object.fromEntries(
+        profileKeys.map((key) => [key, null])
+      ) as Profile;
+
+      return {
+        name: parsed.name,
+        label: parsed.label,
+        node,
+        network: { chainId: 51, name: "XDC Apothem" },
+        available: !registered,
+        registered,
+        owner: normalizedOwner,
+        resolvedAddress: normalizedOwner,
+        registry: {
+          state: registered ? "xdcid" : "available",
+          registrationAllowed: !registered,
+          xdcid: {
+            contract: activeRegistryAddress,
+            registered,
+            owner: normalizedOwner
+          },
+          legacy: {
+            contract: legacyXdcDomainsAddress,
+            tokenId: null,
+            registered: false,
+            owner: null
+          }
+        },
+        expiry: {
+          timestamp: expiry > 0n ? expiry.toString() : null,
+          iso: expiry > 0n ? new Date(Number(expiry) * 1000).toISOString() : null
+        },
+        pricing: null,
+        profile
+      };
+    }
     const legacyTokenId = await xdcClient.readContract({
       address: legacyXdcDomainsAddress,
       abi: legacyXdcDomainsAbi,
@@ -192,6 +248,9 @@ export async function getReverseData(input: string) {
   }
 
   const address = getAddress(input);
+  if (isTestnetEnvironment) {
+    return { address, name: null, verified: false };
+  }
   return withShortCache("reverse:" + address.toLowerCase(), async () => {
     const storedName = await xdcClient.readContract({
       address: addresses.reverseResolver,

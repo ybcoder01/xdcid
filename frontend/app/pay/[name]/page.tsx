@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { isHex, zeroAddress, type Hex } from "viem";
+import { isHex, keccak256, stringToHex, zeroAddress, type Hex } from "viem";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   useAccount,
@@ -11,18 +11,22 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import {
+  activeRegistryAddress,
+  activeResolverSuiteAvailable,
+  activeXnsChainId,
   addresses,
-  contractsConfigured,
   multichainResolverAbi,
-  registrarAbi,
   registryAbi,
   resolverAbi
 } from "../../../config/contracts";
 import { getPaymentNetwork } from "../../../config/paymentNetworks";
 
+const XDC_CHAIN_ID = activeXnsChainId;
+
 const explorerUrls: Record<number, string> = {
   1: "https://etherscan.io",
   50: "https://xdcscan.com",
+  51: "https://testnet.xdcscan.com",
   137: "https://polygonscan.com",
   8453: "https://basescan.org",
   42161: "https://arbiscan.io"
@@ -197,7 +201,7 @@ export default function PayRequestPage() {
   const crossChain = route.sourceChainId !== route.destinationChainId;
 
   const { address, isConnected, chainId } = useAccount();
-  const verificationClient = usePublicClient({ chainId: 50 });
+  const verificationClient = usePublicClient({ chainId: XDC_CHAIN_ID });
   const accountClient = usePublicClient({ chainId: route.sourceChainId });
   const [signatureVerification, setSignatureVerification] = useState<PaymentRequestSignatureVerification>();
   const [signatureChecking, setSignatureChecking] = useState(false);
@@ -207,50 +211,46 @@ export default function PayRequestPage() {
   const transactionHash = nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
 
-  const enabled = contractsConfigured && parsedName.isValid;
-  const node = useReadContract({
-    chainId: 50,
-    address: addresses.registrar,
-    abi: registrarAbi,
-    functionName: "nodeFor",
-    args: [parsedName.name],
-    query: { enabled },
-  });
+  const enabled = parsedName.isValid;
+  const node = useMemo(
+    () => (enabled ? keccak256(stringToHex(parsedName.name)) : undefined),
+    [enabled, parsedName.name],
+  );
   const owner = useReadContract({
-    chainId: 50,
-    address: addresses.registry,
+    chainId: XDC_CHAIN_ID,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "ownerOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data },
+    args: node ? [node] : undefined,
+    query: { enabled: !!node },
   });
   const xdcidRegistered =
     owner.data === undefined ? undefined : owner.data !== zeroAddress;
-  const registry = useRegistryStatus(parsedName.name, xdcidRegistered, !!node.data);
+  const registry = useRegistryStatus(parsedName.name, xdcidRegistered, !!node, XDC_CHAIN_ID);
 
   const expiry = useReadContract({
-    chainId: 50,
-    address: addresses.registry,
+    chainId: XDC_CHAIN_ID,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "expiryOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data },
+    args: node ? [node] : undefined,
+    query: { enabled: !!node },
   });
   const resolvedAddress = useReadContract({
-    chainId: 50,
+    chainId: XDC_CHAIN_ID,
     address: addresses.resolver,
     abi: resolverAbi,
     functionName: "addresses",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data },
+    args: node ? [node] : undefined,
+    query: { enabled: !!node && activeResolverSuiteAvailable },
   });
   const multichainAddress = useReadContract({
-    chainId: 50,
+    chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
     abi: multichainResolverAbi,
     functionName: "addressFor",
-    args: node.data ? [node.data, BigInt(route.destinationChainId)] : undefined,
-    query: { enabled: !!node.data },
+    args: node ? [node, BigInt(route.destinationChainId)] : undefined,
+    query: { enabled: !!node && activeResolverSuiteAvailable },
   });
 
   useEffect(() => {
@@ -306,23 +306,28 @@ export default function PayRequestPage() {
   const paymentDestination = useMemo(() => selectPaymentDestination({
     destinationChainId: route.destinationChainId,
     multichainAddress: typeof multichainAddress.data === "string" ? multichainAddress.data : undefined,
-    defaultEvmAddress: typeof resolvedAddress.data === "string" ? resolvedAddress.data : undefined,
-  }), [route.destinationChainId, multichainAddress.data, resolvedAddress.data]);
+    defaultEvmAddress:
+      activeResolverSuiteAvailable && typeof resolvedAddress.data === "string"
+        ? resolvedAddress.data
+        : typeof owner.data === "string"
+          ? owner.data
+          : undefined,
+  }), [route.destinationChainId, multichainAddress.data, owner.data, resolvedAddress.data]);
   const paymentAddress = paymentDestination?.address;
   const resolving =
-    node.isLoading || owner.isLoading || expiry.isLoading || resolvedAddress.isLoading ||
+    owner.isLoading || expiry.isLoading || resolvedAddress.isLoading ||
     multichainAddress.isLoading || registry.isChecking;
   const resolutionFailed =
-    node.isError || owner.isError || expiry.isError || resolvedAddress.isError ||
+    owner.isError || expiry.isError || resolvedAddress.isError ||
     multichainAddress.isError || registry.isError;
   const signaturePending = Boolean(
     signedRequest && signedPayload.signature && !signatureError &&
     (!owner.data || !verificationClient || signatureChecking || !signatureVerification),
   );
   const payerAllowed = signedRequest ? isDesignatedPayer(signedRequest, address) : true;
-  const nativeXdcPayment = token === "XDC" && route.sourceChainId === 50 && route.destinationChainId === 50;
+  const nativeXdcPayment = token === "XDC" && route.sourceChainId === XDC_CHAIN_ID && route.destinationChainId === XDC_CHAIN_ID;
   const pending = nativePayment.isPending || receipt.isLoading;
-  const wrongNetwork = isConnected && nativeXdcPayment && chainId !== 50;
+  const wrongNetwork = isConnected && nativeXdcPayment && chainId !== XDC_CHAIN_ID;
   const cancellationAllowsPayment = legacyRequest || cancellationStatus === "active";
   const signedRequestValid = legacyRequest || Boolean(
     signedRequest && signatureVerification?.valid && !signatureError && payerAllowed &&
@@ -437,10 +442,8 @@ export default function PayRequestPage() {
         <div className="mt-7 rounded-2xl border border-slate-200 p-5">
           <p className="text-sm font-semibold text-slate-700">Resolved recipient</p>
           <p className="mt-2 break-all text-sm text-slate-600">
-            {!contractsConfigured
-              ? "Contracts are not configured."
-              : resolving
-                ? "Resolving the XNS ID on-chain..."
+            {resolving
+              ? "Resolving the XNS ID on-chain..."
                 : resolutionFailed
                   ? "The registry status could not be verified."
                   : registry.status?.state === "legacy"

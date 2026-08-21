@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getAddress, isAddress, parseEther, parseUnits, zeroAddress } from "viem";
+import { getAddress, isAddress, keccak256, parseEther, parseUnits, stringToHex, zeroAddress } from "viem";
 import {
   useAccount,
   usePublicClient,
@@ -10,10 +10,10 @@ import {
 } from "wagmi";
 import { MultichainUsdcExecutor } from "../../components/MultichainUsdcExecutor";
 import {
+  activeRegistryAddress,
+  activeResolverSuiteAvailable,
   addresses,
-  contractsConfigured,
   multichainResolverAbi,
-  registrarAbi,
   registryAbi,
   resolverAbi
 } from "../../config/contracts";
@@ -93,7 +93,7 @@ export default function SendPage() {
     [directRecipient, recipient]
   );
   const { label, name, isValid, error: validationError } = parsedName;
-  const enabled = contractsConfigured && !directRecipient && isValid;
+  const enabled = !directRecipient && isValid;
   const units = useMemo(() => paymentUnits(amount, token), [amount, token]);
   const sourceNetwork = getPaymentNetwork(sourceChainId);
 
@@ -114,35 +114,31 @@ export default function SendPage() {
     }
   }, [sourceChainId, destinationChainId, token]);
 
-  const node = useReadContract({
-    chainId: XDC_CHAIN_ID,
-    address: addresses.registrar,
-    abi: registrarAbi,
-    functionName: "nodeFor",
-    args: [name],
-    query: { enabled }
-  });
+  const node = useMemo(
+    () => (enabled ? keccak256(stringToHex(name)) : undefined),
+    [enabled, name]
+  );
 
   const owner = useReadContract({
     chainId: XDC_CHAIN_ID,
-    address: addresses.registry,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "ownerOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data }
+    args: node ? [node] : undefined,
+    query: { enabled: !!node }
   });
 
   const xdcidRegistered =
     owner.data === undefined ? undefined : owner.data !== zeroAddress;
-  const registry = useRegistryStatus(name, xdcidRegistered, !!node.data);
+  const registry = useRegistryStatus(name, xdcidRegistered, !!node, XDC_CHAIN_ID);
 
   const expiry = useReadContract({
     chainId: XDC_CHAIN_ID,
-    address: addresses.registry,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "expiryOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data }
+    args: node ? [node] : undefined,
+    query: { enabled: !!node }
   });
 
   const xdcDefaultAddress = useReadContract({
@@ -150,8 +146,8 @@ export default function SendPage() {
     address: addresses.resolver,
     abi: resolverAbi,
     functionName: "addresses",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data }
+    args: node ? [node] : undefined,
+    query: { enabled: !!node && activeResolverSuiteAvailable }
   });
 
   const multichainAddress = useReadContract({
@@ -159,8 +155,8 @@ export default function SendPage() {
     address: addresses.multichainResolver,
     abi: multichainResolverAbi,
     functionName: "addressFor",
-    args: node.data ? [node.data, BigInt(destinationChainId)] : undefined,
-    query: { enabled: !!node.data }
+    args: node ? [node, BigInt(destinationChainId)] : undefined,
+    query: { enabled: !!node && activeResolverSuiteAvailable }
   });
 
   const expired = expiry.data
@@ -180,27 +176,28 @@ export default function SendPage() {
                 ? multichainAddress.data
                 : undefined,
             defaultEvmAddress:
-              typeof xdcDefaultAddress.data === "string"
+              activeResolverSuiteAvailable && typeof xdcDefaultAddress.data === "string"
                 ? xdcDefaultAddress.data
-                : undefined
+                : typeof owner.data === "string"
+                  ? owner.data
+                  : undefined
           }),
     [
       destinationChainId,
       directRecipient,
       multichainAddress.data,
-      xdcDefaultAddress.data
+      xdcDefaultAddress.data,
+      owner.data
     ]
   );
 
   const readsLoading =
-    node.isLoading ||
     owner.isLoading ||
     expiry.isLoading ||
     xdcDefaultAddress.isLoading ||
     multichainAddress.isLoading ||
     registry.isChecking;
   const readsFailed =
-    node.isError ||
     owner.isError ||
     expiry.isError ||
     xdcDefaultAddress.isError ||
@@ -260,8 +257,6 @@ export default function SendPage() {
     ? "Direct wallet address. XNS resolution is not required."
     : !isValid
       ? validationError
-      : !contractsConfigured
-      ? "Contracts not configured"
       : readsLoading
         ? "Resolving the name and destination-chain address..."
         : readsFailed

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getAddress, isAddress, toHex, zeroAddress } from "viem";
+import { getAddress, isAddress, keccak256, stringToHex, toHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useSignTypedData } from "wagmi";
-import { addresses, contractsConfigured, registrarAbi, registryAbi } from "../../config/contracts";
+import { activeRegistryAddress, activeXnsChainId, registryAbi } from "../../config/contracts";
 import { PAYMENT_NETWORKS } from "../../config/paymentNetworks";
 import { parseXnsName } from "../../lib/names";
 import { useRegistryStatus } from "../../lib/useRegistryStatus";
@@ -29,8 +29,8 @@ export default function PayLinksPage() {
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
   const [token, setToken] = useState<PayToken>("USDC");
-  const [sourceChainId, setSourceChainId] = useState(50);
-  const [destinationChainId, setDestinationChainId] = useState(50);
+  const [sourceChainId, setSourceChainId] = useState(activeXnsChainId);
+  const [destinationChainId, setDestinationChainId] = useState(activeXnsChainId);
   const [transferMode, setTransferMode] =
     useState<PaymentTransferMode>("direct");
   const [reference, setReference] = useState("");
@@ -70,31 +70,30 @@ export default function PayLinksPage() {
     return Number.isFinite(milliseconds) ? Math.floor(milliseconds / 1000) : -1;
   }, [expiresAt]);
 
-  const enabled = contractsConfigured && parsedName.isValid;
-  const node = useReadContract({
-    address: addresses.registrar,
-    abi: registrarAbi,
-    functionName: "nodeFor",
-    args: [parsedName.name],
-    query: { enabled },
-  });
+  const enabled = parsedName.isValid;
+  const node = useMemo(
+    () => (enabled ? keccak256(stringToHex(parsedName.name)) : undefined),
+    [enabled, parsedName.name],
+  );
   const owner = useReadContract({
-    address: addresses.registry,
+    chainId: activeXnsChainId,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "ownerOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data },
+    args: node ? [node] : undefined,
+    query: { enabled: !!node },
   });
   const xdcidRegistered =
     owner.data === undefined ? undefined : owner.data !== zeroAddress;
-  const registry = useRegistryStatus(parsedName.name, xdcidRegistered, !!node.data);
+  const registry = useRegistryStatus(parsedName.name, xdcidRegistered, !!node, activeXnsChainId);
 
   const nameExpiry = useReadContract({
-    address: addresses.registry,
+    chainId: activeXnsChainId,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "expiryOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: !!node.data },
+    args: node ? [node] : undefined,
+    query: { enabled: !!node },
   });
 
   const nameError = recipient && !parsedName.isValid ? parsedName.error : undefined;
@@ -118,7 +117,7 @@ export default function PayLinksPage() {
     address && owner.data && getAddress(address) === getAddress(owner.data),
   );
   const resolving =
-    node.isLoading || owner.isLoading || nameExpiry.isLoading || registry.isChecking;
+    owner.isLoading || nameExpiry.isLoading || registry.isChecking;
   const registrySafe = registry.status?.state === "xdcid";
   const wrongNetwork = isConnected && chainId !== PAYMENT_REQUEST_CHAIN_ID;
   const canCreate = Boolean(
