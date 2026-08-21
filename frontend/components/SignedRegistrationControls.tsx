@@ -15,6 +15,7 @@ import {
   useChainId,
   usePublicClient,
   useReadContract,
+  useSwitchChain,
   useWriteContract,
 } from "wagmi";
 import {
@@ -67,7 +68,8 @@ export function SignedRegistrationControls(props: {
 }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const client = usePublicClient();
+  const client = usePublicClient({ chainId: props.expectedChainId ?? 50 });
+  const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const [termYears, setTermYears] = useState<Term>(1);
   const [currency, setCurrency] = useState<Currency>("XDC");
@@ -114,11 +116,20 @@ export function SignedRegistrationControls(props: {
     if (!props.enabled || !isConnected || !address || !client) return;
     if (chainId !== expectedChainId) {
       setStatus(
-        "Switch your wallet to " +
+        "Requesting a switch to " +
           (expectedChainId === 51 ? "XDC Apothem" : "XDC Network") +
-          " before requesting a quote.",
+          "…",
       );
-      return;
+      try {
+        await switchChainAsync({ chainId: expectedChainId });
+      } catch {
+        setStatus(
+          "Switch your wallet to " +
+            (expectedChainId === 51 ? "XDC Apothem" : "XDC Network") +
+            " to continue.",
+        );
+        return;
+      }
     }
 
     setBusy(true);
