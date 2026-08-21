@@ -25,6 +25,7 @@ import {
   signedRegistrarAbi,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
+import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -180,11 +181,17 @@ export function SignedRegistrationControls(props: {
             formatUnits(quote.paymentAmount, 6) +
             " USDC in your wallet…",
         );
+        const approvalGas = await xdcWriteOverrides(
+          client,
+          expectedChainId,
+          XDC_WRITE_GAS_LIMITS.erc20Approval,
+        );
         const approvalHash = await writeContractAsync({
           address: quote.paymentToken,
           abi: erc20ApprovalAbi,
           functionName: "approve",
           args: [registrarAddress, quote.paymentAmount],
+          ...approvalGas,
         });
         const approvalReceipt = await client.waitForTransactionReceipt({
           hash: approvalHash,
@@ -203,12 +210,18 @@ export function SignedRegistrationControls(props: {
               "…"
           : "Confirm the registration payment…",
       );
+      const registrationGas = await xdcWriteOverrides(
+        client,
+        expectedChainId,
+        XDC_WRITE_GAS_LIMITS.registration,
+      );
       const transactionHash = await writeContractAsync({
         address: registrarAddress,
         abi: signedRegistrarAbi,
         functionName: "registerWithQuote",
         args: [props.name, quote, payload.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+        ...registrationGas,
       });
       const receipt = await client.waitForTransactionReceipt({
         hash: transactionHash,
