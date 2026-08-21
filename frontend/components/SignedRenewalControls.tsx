@@ -20,6 +20,7 @@ import {
   erc20ApprovalAbi,
   signedRegistrarAbi,
 } from "../config/contracts";
+import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -108,11 +109,17 @@ export function SignedRenewalControls({ name }: { name: string }) {
 
       if (quote.paymentToken !== zeroAddress) {
         setStatus("Approve exactly " + formatUnits(quote.paymentAmount, 6) + " USDC…");
+        const approvalGas = await xdcWriteOverrides(
+          client,
+          50,
+          XDC_WRITE_GAS_LIMITS.erc20Approval,
+        );
         const approval = await writeContractAsync({
           address: quote.paymentToken,
           abi: erc20ApprovalAbi,
           functionName: "approve",
           args: [addresses.registrar, quote.paymentAmount],
+          ...approvalGas,
         });
         const approvalReceipt = await client.waitForTransactionReceipt({ hash: approval });
         if (approvalReceipt.status !== "success") throw new Error("USDC approval failed");
@@ -123,12 +130,18 @@ export function SignedRenewalControls({ name }: { name: string }) {
           ? "Confirm payment of " + formatEther(quote.paymentAmount) + " XDC…"
           : "Confirm the renewal payment…",
       );
+      const renewalGas = await xdcWriteOverrides(
+        client,
+        50,
+        XDC_WRITE_GAS_LIMITS.renewal,
+      );
       const hash = await writeContractAsync({
         address: addresses.registrar,
         abi: signedRegistrarAbi,
         functionName: "renewWithQuote",
         args: [name, quote, body.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+        ...renewalGas,
       });
       const receipt = await client.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("Renewal transaction failed");
