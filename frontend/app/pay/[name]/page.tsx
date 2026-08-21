@@ -442,10 +442,8 @@ export default function PayRequestPage() {
         <div className="mt-7 rounded-2xl border border-slate-200 p-5">
           <p className="text-sm font-semibold text-slate-700">Resolved recipient</p>
           <p className="mt-2 break-all text-sm text-slate-600">
-            {!contractsConfigured
-              ? "Contracts are not configured."
-              : resolving
-                ? "Resolving the XNS ID on-chain..."
+            {resolving
+              ? "Resolving the XNS ID on-chain..."
                 : resolutionFailed
                   ? "The registry status could not be verified."
                   : registry.status?.state === "legacy"
