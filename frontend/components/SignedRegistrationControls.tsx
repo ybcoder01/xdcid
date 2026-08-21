@@ -81,8 +81,7 @@ export function SignedRegistrationControls(props: {
   const labelLength = props.name.endsWith(".xdc")
     ? props.name.slice(0, -4).length
     : props.name.length;
-  const pricingEnabled =
-    signedRegistrarEnabled && pricingPolicyAddress !== zeroAddress;
+  const pricingEnabled = pricingPolicyAddress !== zeroAddress;
   const annualPrice = useReadContract({
     address: pricingPolicyAddress,
     chainId: expectedChainId,
