@@ -7,11 +7,12 @@ import {
 } from "viem";
 import {
   encodePaymentRequest,
+  PAYMENT_REQUEST_CHAIN_ID,
   type PaymentRequest,
 } from "./paymentRequests";
 
 export const PAYMENT_CANCELLATION_VERSION = 1 as const;
-export const PAYMENT_CANCELLATION_CHAIN_ID = 50 as const;
+export const PAYMENT_CANCELLATION_CHAIN_ID = PAYMENT_REQUEST_CHAIN_ID;
 export const PAYMENT_CANCELLATION_MAX_AGE_SECONDS = 10 * 60;
 
 export type PaymentRequestCancellation = {
@@ -59,7 +60,7 @@ export function paymentCancellationTypedData(
     domain: {
       name: "XDCID Pay Link Cancellation",
       version: String(PAYMENT_CANCELLATION_VERSION),
-      chainId: PAYMENT_CANCELLATION_CHAIN_ID,
+      chainId: cancellation.chainId,
     },
     types: cancellationTypes,
     primaryType: "PaymentRequestCancellation" as const,
@@ -79,7 +80,10 @@ export function validatePaymentRequestCancellation(
   if (cancellation.version !== PAYMENT_CANCELLATION_VERSION) {
     return "Unsupported payment cancellation version.";
   }
-  if (cancellation.chainId !== PAYMENT_CANCELLATION_CHAIN_ID) {
+  if (
+    cancellation.chainId !== PAYMENT_CANCELLATION_CHAIN_ID ||
+    cancellation.chainId !== request.chainId
+  ) {
     return "Payment cancellation authorization is for the wrong network.";
   }
   if (!isHex(cancellation.requestId, { strict: true }) || cancellation.requestId.length !== 66) {
