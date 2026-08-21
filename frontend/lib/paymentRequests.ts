@@ -7,13 +7,13 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { getPaymentNetwork } from "../config/paymentNetworks";
+import { getPaymentNetwork, PAYMENT_NETWORK_ENV } from "../config/paymentNetworks";
 import { parseXnsName } from "./names";
 import { validatePayAmount, type PayToken } from "./paylinks";
 
 export const LEGACY_PAYMENT_REQUEST_VERSION = 1 as const;
 export const PAYMENT_REQUEST_VERSION = 2 as const;
-export const PAYMENT_REQUEST_CHAIN_ID = 50 as const;
+export const PAYMENT_REQUEST_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 export const MAX_PAYMENT_REFERENCE_LENGTH = 48;
 export const MAX_PAYMENT_DESCRIPTION_LENGTH = 120;
 
@@ -175,7 +175,7 @@ export function validatePaymentRequest(
     if (crossChain && request.token !== "USDC") {
       return "Cross-chain payment requests support USDC only.";
     }
-    if (request.token === "XDC" && source.chainId !== 50) {
+    if (request.token === "XDC" && source.chainId !== PAYMENT_REQUEST_CHAIN_ID) {
       return "XDC payments must originate on XDC Network.";
     }
     const expectedModes: readonly PaymentTransferMode[] = crossChain
