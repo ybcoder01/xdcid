@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAddress, isAddress, parseEther, parseUnits, zeroAddress } from "viem";
 import {
   useAccount,
@@ -68,9 +68,21 @@ export default function SendPage() {
     sendTransactionAsync,
     isPending,
     data: hash,
-    error
+    error,
+    reset: resetNativeTransaction
   } = useSendTransaction();
   const sourceClient = usePublicClient({ chainId: sourceChainId });
+
+  useEffect(() => {
+    resetNativeTransaction();
+  }, [
+    amount,
+    destinationChainId,
+    recipient,
+    resetNativeTransaction,
+    sourceChainId,
+    token
+  ]);
 
   const directRecipient = useMemo(() => {
     const value = recipient.trim();
@@ -454,9 +466,9 @@ export default function SendPage() {
                 </p>
               ) : null}
 
-              {hash ? (
+              {token === "NATIVE" && hash ? (
                 <p className="mt-3 break-all text-xs text-neutral-500">
-                  Transaction sent:{" "}
+                  Native transfer:{" "}
                   {sourceNetwork?.explorerUrl ? (
                     <a
                       className="text-teal-700 underline"
