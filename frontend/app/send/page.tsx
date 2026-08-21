@@ -456,7 +456,19 @@ export default function SendPage() {
 
               {hash ? (
                 <p className="mt-3 break-all text-xs text-neutral-500">
-                  Transaction sent: {hash}
+                  Transaction sent:{" "}
+                  {sourceNetwork?.explorerUrl ? (
+                    <a
+                      className="text-teal-700 underline"
+                      href={sourceNetwork.explorerUrl + "/tx/" + hash}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {hash}
+                    </a>
+                  ) : (
+                    hash
+                  )}
                 </p>
               ) : null}
               {error ? <p className="mt-3 text-xs text-red-600">{error.message}</p> : null}
