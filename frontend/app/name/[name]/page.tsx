@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { isAddress, zeroAddress } from "viem";
+import { isAddress, keccak256, stringToHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
-import { addresses, registrarAbi, registryAbi, resolverAbi, reverseResolverAbi } from "../../../config/contracts";
+import { activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, registryAbi, resolverAbi, reverseResolverAbi } from "../../../config/contracts";
 import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
@@ -20,28 +20,26 @@ export default function NamePage() {
   const [newOwner, setNewOwner] = useState("");
   const [records, setRecords] = useState<Record<string, string>>({});
 
-  const node = useReadContract({
-    address: addresses.registrar,
-    abi: registrarAbi,
-    functionName: "nodeFor",
-    args: [name],
-    query: { enabled: isValid }
-  });
+  const node = useMemo(
+    () => (isValid ? keccak256(stringToHex(name)) : undefined),
+    [isValid, name]
+  );
 
   const owner = useReadContract({
-    address: addresses.registry,
+    chainId: activeXnsChainId,
+    address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "ownerOf",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: isValid && !!node.data }
+    args: node ? [node] : undefined,
+    query: { enabled: isValid && !!node }
   });
 
   const resolvedAddress = useReadContract({
     address: addresses.resolver,
     abi: resolverAbi,
     functionName: "addresses",
-    args: node.data ? [node.data] : undefined,
-    query: { enabled: isValid && !!node.data }
+    args: node ? [node] : undefined,
+    query: { enabled: isValid && !!node && activeResolverSuiteAvailable }
   });
 
   const primaryName = useReadContract({
@@ -49,19 +47,19 @@ export default function NamePage() {
     abi: reverseResolverAbi,
     functionName: "primaryNames",
     args: address ? [address] : undefined,
-    query: { enabled: !!address }
+    query: { enabled: !!address && activeResolverSuiteAvailable }
   });
 
   const textReads = useReadContracts({
-    contracts: node.data
+    contracts: node && activeResolverSuiteAvailable
       ? textKeys.map((key) => ({
           address: addresses.resolver,
           abi: resolverAbi,
           functionName: "text",
-          args: [node.data, key]
+          args: [node, key]
         }))
       : [],
-    query: { enabled: isValid && !!node.data }
+    query: { enabled: isValid && !!node && activeResolverSuiteAvailable }
   });
 
   const isOwner = useMemo(
@@ -70,42 +68,43 @@ export default function NamePage() {
   );
 
   function saveAddress() {
-    if (!node.data || !isAddress(addr)) return;
+    if (!node || !isAddress(addr)) return;
     writeContract({
       address: addresses.resolver,
       abi: resolverAbi,
       functionName: "setAddress",
-      args: [node.data, addr]
+      args: [node, addr]
     });
   }
 
   function saveText(key: string) {
-    if (!node.data) return;
+    if (!node) return;
     writeContract({
       address: addresses.resolver,
       abi: resolverAbi,
       functionName: "setText",
-      args: [node.data, key, records[key] || ""]
+      args: [node, key, records[key] || ""]
     });
   }
 
   function setPrimaryName() {
-    if (!node.data) return;
+    if (!node) return;
     writeContract({
       address: addresses.reverseResolver,
       abi: reverseResolverAbi,
       functionName: "setPrimaryName",
-      args: [name, node.data]
+      args: [name, node]
     });
   }
 
   function transferName() {
-    if (!node.data || !isAddress(newOwner)) return;
+    if (!node || !isAddress(newOwner)) return;
     writeContract({
-      address: addresses.registry,
+      chainId: activeXnsChainId,
+      address: activeRegistryAddress,
       abi: registryAbi,
       functionName: "transferName",
-      args: [node.data, newOwner]
+      args: [node, newOwner]
     });
   }
 
@@ -129,7 +128,7 @@ export default function NamePage() {
         <p className="mt-4 break-all text-sm text-slate-300">
           Owner: {owner.data && owner.data !== zeroAddress ? owner.data : "Unregistered or expired"}
         </p>
-        <p className="mt-1 break-all text-sm text-slate-300">Address: {resolvedAddress.data || "Not set"}</p>
+        <p className="mt-1 break-all text-sm text-slate-300">Address: {resolvedAddress.data || owner.data || "Not set"}</p>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -141,11 +140,11 @@ export default function NamePage() {
         ))}
       </div>
 
-      {isOwner && node.data && (
-        <MultichainAddressManager name={name} node={node.data} />
+      {isOwner && node && activeResolverSuiteAvailable && (
+        <MultichainAddressManager name={name} node={node} />
       )}
 
-      {isOwner && (
+      {isOwner && activeResolverSuiteAvailable && (
         <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Edit records</h2>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-neutral-50 p-3">
