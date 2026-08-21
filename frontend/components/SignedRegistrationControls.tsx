@@ -22,7 +22,6 @@ import {
   erc20ApprovalAbi,
   pricingPolicyAbi,
   signedRegistrarAbi,
-  signedRegistrarEnabled,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 
