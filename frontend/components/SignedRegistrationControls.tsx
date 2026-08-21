@@ -61,6 +61,10 @@ type QuoteResponse = {
 export function SignedRegistrationControls(props: {
   name: string;
   enabled: boolean;
+  expectedChainId?: number;
+  registrarAddress?: Address;
+  pricingPolicyAddress?: Address;
+  nativeCurrencyLabel?: string;
 }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -70,20 +74,26 @@ export function SignedRegistrationControls(props: {
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const expectedChainId = props.expectedChainId ?? 50;
+  const registrarAddress = props.registrarAddress ?? addresses.registrar;
+  const pricingPolicyAddress = props.pricingPolicyAddress ?? addresses.pricingPolicy;
+  const nativeCurrencyLabel = props.nativeCurrencyLabel ?? "XDC";
   const labelLength = props.name.endsWith(".xdc")
     ? props.name.slice(0, -4).length
     : props.name.length;
   const pricingEnabled =
-    signedRegistrarEnabled && addresses.pricingPolicy !== zeroAddress;
+    signedRegistrarEnabled && pricingPolicyAddress !== zeroAddress;
   const annualPrice = useReadContract({
-    address: addresses.pricingPolicy,
+    address: pricingPolicyAddress,
+    chainId: expectedChainId,
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
     args: [0, BigInt(labelLength), 1n],
     query: { enabled: pricingEnabled },
   });
   const discountedPrice = useReadContract({
-    address: addresses.pricingPolicy,
+    address: pricingPolicyAddress,
+    chainId: expectedChainId,
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
     args: [0, BigInt(labelLength), BigInt(termYears)],
@@ -104,8 +114,12 @@ export function SignedRegistrationControls(props: {
 
   async function register() {
     if (!props.enabled || !isConnected || !address || !client) return;
-    if (chainId !== 50) {
-      setStatus("Switch your wallet to XDC Network before requesting a quote.");
+    if (chainId !== expectedChainId) {
+      setStatus(
+        "Switch your wallet to " +
+          (expectedChainId === 51 ? "XDC Apothem" : "XDC Network") +
+          " before requesting a quote.",
+      );
       return;
     }
 
@@ -131,8 +145,8 @@ export function SignedRegistrationControls(props: {
         );
       }
       if (
-        payload.data.chainId !== 50 ||
-        getAddress(payload.data.registrar) !== getAddress(addresses.registrar)
+        payload.data.chainId !== expectedChainId ||
+        getAddress(payload.data.registrar) !== getAddress(registrarAddress)
       ) {
         throw new Error("The quote does not match the active XDCID registrar");
       }
@@ -161,7 +175,7 @@ export function SignedRegistrationControls(props: {
           address: quote.paymentToken,
           abi: erc20ApprovalAbi,
           functionName: "approve",
-          args: [addresses.registrar, quote.paymentAmount],
+          args: [registrarAddress, quote.paymentAmount],
         });
         const approvalReceipt = await client.waitForTransactionReceipt({
           hash: approvalHash,
@@ -173,11 +187,15 @@ export function SignedRegistrationControls(props: {
 
       setStatus(
         currency === "XDC"
-          ? "Confirm payment of " + formatEther(quote.paymentAmount) + " XDC…"
+          ? "Confirm payment of " +
+              formatEther(quote.paymentAmount) +
+              " " +
+              nativeCurrencyLabel +
+              "…"
           : "Confirm the registration payment…",
       );
       const transactionHash = await writeContractAsync({
-        address: addresses.registrar,
+        address: registrarAddress,
         abi: signedRegistrarAbi,
         functionName: "registerWithQuote",
         args: [props.name, quote, payload.data.signature],
@@ -224,7 +242,7 @@ export function SignedRegistrationControls(props: {
             value={currency}
             onChange={(event) => setCurrency(event.target.value as Currency)}
           >
-            <option value="XDC">XDC</option>
+            <option value="XDC">{nativeCurrencyLabel}</option>
             <option value="USDC">USDC</option>
           </select>
         </label>
