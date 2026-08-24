@@ -21,12 +21,10 @@ function encryptionKey(): Uint8Array {
 export function encryptPaymentContext(value: unknown): EncryptedPaymentContext {
   const iv = Uint8Array.from(randomBytes(12));
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(JSON.stringify(value), "utf8"),
-    cipher.final()
-  ]);
+  const ciphertext =
+    cipher.update(JSON.stringify(value), "utf8", "hex") + cipher.final("hex");
   return {
-    ciphertext: ciphertext.toString("base64"),
+    ciphertext,
     iv: iv.toString("base64"),
     tag: cipher.getAuthTag().toString("base64")
   };
@@ -39,9 +37,7 @@ export function decryptPaymentContext<T>(value: EncryptedPaymentContext): T {
     Uint8Array.from(Buffer.from(value.iv, "base64"))
   );
   decipher.setAuthTag(Uint8Array.from(Buffer.from(value.tag, "base64")));
-  const plaintext = Buffer.concat([
-    decipher.update(Buffer.from(value.ciphertext, "base64")),
-    decipher.final()
-  ]);
-  return JSON.parse(plaintext.toString("utf8")) as T;
+  const plaintext =
+    decipher.update(value.ciphertext, "hex", "utf8") + decipher.final("utf8");
+  return JSON.parse(plaintext) as T;
 }
