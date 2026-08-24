@@ -491,13 +491,17 @@ export function MultichainUsdcExecutor({
         throw new Error("Connect the wallet that submitted the fee transaction");
       }
       if (response.status === "used") {
-        if (!isCctpTransactionHash(response.burnTransactionHash)) {
+        const restoredBurnHash = response.burnTransactionHash;
+        if (
+          typeof restoredBurnHash !== "string" ||
+          !isCctpTransactionHash(restoredBurnHash)
+        ) {
           throw new Error(
             "The fee was used, but its burn hash could not be restored"
           );
         }
         setFeeHash(recoveryFeeHash);
-        setBurnHash(response.burnTransactionHash);
+        setBurnHash(restoredBurnHash);
         setRecoveryReady(false);
         setRecoveryStatus("ready");
         setRecoveryMessage(
