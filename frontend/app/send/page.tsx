@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getAddress, isAddress, keccak256, parseEther, parseUnits, stringToHex, zeroAddress } from "viem";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getAddress, isAddress, keccak256, parseEther, parseUnits, stringToHex, zeroAddress, type Hash } from "viem";
 import {
   useAccount,
   usePublicClient,
   useReadContract,
-  useSendTransaction
+  useSendTransaction,
+  useWaitForTransactionReceipt
 } from "wagmi";
 import { MultichainUsdcExecutor } from "../../components/MultichainUsdcExecutor";
 import {
@@ -64,6 +65,8 @@ export default function SendPage() {
   const [destinationChainId, setDestinationChainId] = useState(XDC_CHAIN_ID);
   const [token, setToken] = useState<PaymentToken>("USDC");
   const [paymentReference, setPaymentReference] = useState("");
+  const [historyStatus, setHistoryStatus] = useState("");
+  const recordingHashes = useRef(new Set<string>());
   const { chainId: connectedChainId, isConnected } = useAccount();
   const {
     sendTransactionAsync,
@@ -73,6 +76,10 @@ export default function SendPage() {
     reset: resetNativeTransaction
   } = useSendTransaction();
   const sourceClient = usePublicClient({ chainId: sourceChainId });
+  const nativeReceipt = useWaitForTransactionReceipt({
+    chainId: sourceChainId,
+    hash
+  });
 
   useEffect(() => {
     resetNativeTransaction();
@@ -222,6 +229,48 @@ export default function SendPage() {
     token === "NATIVE" &&
     sourceChainId === destinationChainId &&
     !isPending;
+
+  const recordSettlement = useCallback(async (
+    sourceTransactionHash: Hash,
+    destinationTransactionHash?: Hash
+  ) => {
+    if (!destination || units <= 0n) return;
+    const key = sourceTransactionHash + ":" + (destinationTransactionHash || "");
+    if (recordingHashes.current.has(key)) return;
+    recordingHashes.current.add(key);
+    setHistoryStatus("Verifying payment for private history...");
+    try {
+      const response = await fetch("/api/payment-history/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: directRecipient || name,
+          sourceChainId,
+          destinationChainId,
+          token,
+          amountAtomic: units.toString(),
+          recipient: destination.address,
+          sourceTransactionHash,
+          destinationTransactionHash,
+          reference: paymentReference.trim()
+        })
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Payment history could not be recorded");
+      setHistoryStatus("Payment added to private history.");
+    } catch (cause) {
+      recordingHashes.current.delete(key);
+      setHistoryStatus(
+        cause instanceof Error
+          ? "Payment succeeded, but private history needs retry: " + cause.message
+          : "Payment succeeded, but private history could not be recorded."
+      );
+    }
+  }, [destination, destinationChainId, directRecipient, name, paymentReference, sourceChainId, token, units]);
+
+  useEffect(() => {
+    if (nativeReceipt.isSuccess && hash) void recordSettlement(hash);
+  }, [hash, nativeReceipt.isSuccess, recordSettlement]);
 
   async function sendNative() {
     if (!canSendNative || !destination || !sourceClient) return;
@@ -467,6 +516,7 @@ export default function SendPage() {
                   recipient={destination.address}
                   ready={routeReady}
                   paymentReference={paymentReference.trim()}
+                  onCompleted={recordSettlement}
                 />
               ) : null}
 
@@ -496,6 +546,7 @@ export default function SendPage() {
                   )}
                 </p>
               ) : null}
+              {historyStatus ? <p className="mt-3 text-xs text-neutral-600">{historyStatus}</p> : null}
               {error ? <p className="mt-3 text-xs text-red-600">{error.message}</p> : null}
             </div>
           ) : (
