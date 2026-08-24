@@ -38,6 +38,7 @@ import {
   CCTP_TOKEN_MESSENGER_V2,
   getPaymentNetwork
 } from "../../../../config/paymentNetworks";
+import { getPaymentRpcUrls } from "../../../../lib/paymentRpcConfig";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,13 +57,33 @@ export async function GET(request: Request) {
   if (!feeTransactionHash) {
     try {
       await checkForwardingRecoveryStore();
-      return Response.json(
-        { configured: true },
-        { headers: noStoreHeaders() }
-      );
     } catch {
       return storageUnavailable();
     }
+
+    const sourceChainIdText = requestUrl.searchParams.get("sourceChainId");
+    if (sourceChainIdText !== null) {
+      const sourceChainId = Number(sourceChainIdText);
+      if (!Number.isSafeInteger(sourceChainId) || !getPaymentNetwork(sourceChainId)) {
+        return Response.json(
+          { error: "Payment source network is unavailable" },
+          { status: 400, headers: noStoreHeaders() }
+        );
+      }
+      try {
+        await getPaymentClient(sourceChainId).getBlockNumber();
+      } catch {
+        return Response.json(
+          { error: "Payment source RPC is temporarily unavailable" },
+          { status: 503, headers: noStoreHeaders() }
+        );
+      }
+    }
+
+    return Response.json(
+      { configured: true },
+      { headers: noStoreHeaders() }
+    );
   }
   if (!isCctpTransactionHash(feeTransactionHash)) {
     return Response.json(
@@ -355,39 +376,9 @@ async function verifyForwardedBurn(
   }
 }
 
-const PAYMENT_RPC_CONFIG: Record<
-  number,
-  { environment: string; fallbackUrls: string }
-> = {
-  1: {
-    environment: "ETHEREUM_RPC_URLS",
-    fallbackUrls: "https://ethereum-rpc.publicnode.com"
-  },
-  50: {
-    environment: "XDC_RPC_URLS",
-    fallbackUrls: "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
-  },
-  137: {
-    environment: "POLYGON_RPC_URLS",
-    fallbackUrls: "https://polygon-bor-rpc.publicnode.com"
-  },
-  8453: {
-    environment: "BASE_RPC_URLS",
-    fallbackUrls: "https://base-rpc.publicnode.com"
-  },
-  42161: {
-    environment: "ARBITRUM_RPC_URLS",
-    fallbackUrls: "https://arbitrum-one-rpc.publicnode.com"
-  }
-};
-
 function getPaymentClient(chainId: number) {
-  const config = PAYMENT_RPC_CONFIG[chainId];
-  if (!config) throw new Error("Payment source RPC is unavailable");
-  const urls = (process.env[config.environment] || config.fallbackUrls)
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const urls = getPaymentRpcUrls(chainId);
+  if (urls.length === 0) throw new Error("Payment source RPC is unavailable");
   const timeout = Number(process.env.PAYMENT_RPC_TIMEOUT_MS || 3_500);
   return createPublicClient({
     transport: fallback(
