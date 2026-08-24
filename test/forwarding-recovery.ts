@@ -17,8 +17,8 @@ import {
   type Erc20TransactionLog
 } from "../frontend/lib/forwardingFeeVerification";
 import {
-  CCTP_TOKEN_MESSENGER_V2,
-  getPaymentNetwork
+  MAINNET_PAYMENT_NETWORKS,
+  TESTNET_PAYMENT_NETWORKS
 } from "../frontend/config/paymentNetworks";
 import {
   CCTP_FORWARDING_HOOK_DATA,
@@ -164,24 +164,22 @@ describe("forwarding fee event verification", function () {
   const feeRecipient =
     "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A" as Address;
   const feeAmount = 100_000n;
-  const supportedChainIds = [
-    1, 50, 137, 8453, 42161,
-    11155111, 51, 80002, 84532, 421614
+  const supportedNetworks = [
+    ...MAINNET_PAYMENT_NETWORKS,
+    ...TESTNET_PAYMENT_NETWORKS
   ];
 
   it("accepts an exact direct USDC fee transfer on every supported network", function () {
-    for (const chainId of supportedChainIds) {
-      const network = getPaymentNetwork(chainId);
-      expect(network, `missing payment network ${chainId}`).to.not.equal(undefined);
+    for (const network of supportedNetworks) {
       const log = transferLog(
-        network!.usdcAddress,
+        network.usdcAddress,
         payer,
         feeRecipient,
         feeAmount
       );
       expect(
         findExactUsdcTransferPayer([log], {
-          usdcAddress: network!.usdcAddress,
+          usdcAddress: network.usdcAddress,
           feeRecipient,
           feeAmount
         })
@@ -190,7 +188,9 @@ describe("forwarding fee event verification", function () {
   });
 
   it("accepts a delegated wallet transaction by reading its canonical USDC event", function () {
-    const network = getPaymentNetwork(84532)!;
+    const network = TESTNET_PAYMENT_NETWORKS.find(
+      (candidate) => candidate.chainId === 84532
+    )!;
     const helperLog: Erc20TransactionLog = {
       address: "0xdb9b1e94b5b69df7e401ddbede43491141047db3",
       topics: [(`0x${"44".repeat(32)}`) as Hex],
@@ -213,7 +213,9 @@ describe("forwarding fee event verification", function () {
   });
 
   it("rejects the wrong token, recipient, amount, and ambiguous duplicate events", function () {
-    const network = getPaymentNetwork(84532)!;
+    const network = TESTNET_PAYMENT_NETWORKS.find(
+      (candidate) => candidate.chainId === 84532
+    )!;
     const exact = transferLog(
       network.usdcAddress,
       payer,
@@ -272,34 +274,36 @@ describe("forwarding burn event verification", function () {
     "0x031d01283963d2fA43fe386825A056491C10994f" as Address;
   const recipientAmount = 1_000_000n;
   const maxFee = 1_733_550n;
-  const supportedChainIds = [
-    1, 50, 137, 8453, 42161,
-    11155111, 51, 80002, 84532, 421614
+  const environments = [
+    {
+      networks: MAINNET_PAYMENT_NETWORKS,
+      tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d" as Address
+    },
+    {
+      networks: TESTNET_PAYMENT_NETWORKS,
+      tokenMessenger: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA" as Address
+    }
   ];
 
   it("accepts Circle forwarding events on every supported source network", function () {
-    const environments = [
-      supportedChainIds.slice(0, 5),
-      supportedChainIds.slice(5)
-    ];
     for (const environment of environments) {
-      for (let index = 0; index < environment.length; index += 1) {
-        const source = getPaymentNetwork(environment[index])!;
-        const destination = getPaymentNetwork(
-          environment[(index + 1) % environment.length]
-        )!;
+      for (let index = 0; index < environment.networks.length; index += 1) {
+        const source = environment.networks[index];
+        const destination =
+          environment.networks[(index + 1) % environment.networks.length];
         const log = depositForBurnLog({
           burnToken: source.usdcAddress,
           depositor: payer,
           totalAmount: recipientAmount + maxFee,
           destinationDomain: destination.circleDomain,
           mintRecipient: addressToBytes32(recipient),
-          maxFee
+          maxFee,
+          tokenMessenger: environment.tokenMessenger
         });
 
         expect(
           hasExactCctpForwardingBurn([log], {
-            tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+            tokenMessenger: environment.tokenMessenger,
             burnToken: source.usdcAddress,
             depositor: payer,
             recipientAmount,
@@ -315,15 +319,21 @@ describe("forwarding burn event verification", function () {
   });
 
   it("accepts delegated execution receipts and rejects mismatched or duplicate burns", function () {
-    const source = getPaymentNetwork(84532)!;
-    const destination = getPaymentNetwork(51)!;
+    const testnet = environments[1];
+    const source = testnet.networks.find(
+      (candidate) => candidate.chainId === 84532
+    )!;
+    const destination = testnet.networks.find(
+      (candidate) => candidate.chainId === 51
+    )!;
     const exact = depositForBurnLog({
       burnToken: source.usdcAddress,
       depositor: payer,
       totalAmount: recipientAmount + maxFee,
       destinationDomain: destination.circleDomain,
       mintRecipient: addressToBytes32(recipient),
-      maxFee
+      maxFee,
+      tokenMessenger: testnet.tokenMessenger
     });
     const helperLog: CctpTransactionLog = {
       address: "0xdb9b1e94b5b69df7e401ddbede43491141047db3",
@@ -331,7 +341,7 @@ describe("forwarding burn event verification", function () {
       data: "0x"
     };
     const input = {
-      tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+      tokenMessenger: testnet.tokenMessenger,
       burnToken: source.usdcAddress,
       depositor: payer,
       recipientAmount,
@@ -372,9 +382,10 @@ function depositForBurnLog(input: {
   destinationDomain: number;
   mintRecipient: Hex;
   maxFee: bigint;
+  tokenMessenger: Address;
 }): CctpTransactionLog {
   return {
-    address: CCTP_TOKEN_MESSENGER_V2,
+    address: input.tokenMessenger,
     topics: encodeEventTopics({
       abi: cctpDepositForBurnEventAbi,
       eventName: "DepositForBurn",
