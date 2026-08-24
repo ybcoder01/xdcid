@@ -1,12 +1,9 @@
 import {
   createPublicClient,
-  decodeFunctionData,
   fallback,
-  getAddress,
   http,
   type Address,
-  type Hash,
-  type Hex
+  type Hash
 } from "viem";
 import {
   CCTP_FORWARDING_HOOK_DATA,
@@ -15,8 +12,7 @@ import {
   XDCID_FEE_RECIPIENT,
   addressToBytes32,
   calculateXdcidConvenienceFee,
-  isCctpTransactionHash,
-  mainnetTokenMessengerV2Abi
+  isCctpTransactionHash
 } from "../../../../lib/cctpMainnet";
 import {
   FORWARDING_RECOVERY_TTL_SECONDS,
@@ -39,6 +35,7 @@ import {
 } from "../../../../config/paymentNetworks";
 import { getPaymentRpcUrls } from "../../../../lib/paymentRpcConfig";
 import { findExactUsdcTransferPayer } from "../../../../lib/forwardingFeeVerification";
+import { hasExactCctpForwardingBurn } from "../../../../lib/forwardingBurnVerification";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -319,53 +316,28 @@ async function verifyForwardedBurn(
     throw new Error("Recovery route is no longer supported");
   }
 
-  const client = getPaymentClient(record.sourceChainId);
-  const [transaction, receipt] = await Promise.all([
-    client.getTransaction({ hash: burnTransactionHash }),
-    client.getTransactionReceipt({ hash: burnTransactionHash })
-  ]);
-  if (
-    receipt.status !== "success" ||
-    !transaction.to ||
-    getAddress(transaction.to) !== getAddress(CCTP_TOKEN_MESSENGER_V2) ||
-    getAddress(transaction.from) !== getAddress(record.payer)
-  ) {
-    throw new Error("Burn transaction does not match the recovery payer");
+  const receipt = await getPaymentClient(
+    record.sourceChainId
+  ).getTransactionReceipt({ hash: burnTransactionHash });
+  if (receipt.status !== "success") {
+    throw new Error("Burn transaction was not successful");
   }
 
-  const decoded = decodeFunctionData({
-    abi: mainnetTokenMessengerV2Abi,
-    data: transaction.input
+  const matches = hasExactCctpForwardingBurn(receipt.logs, {
+    tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+    burnToken: source.usdcAddress,
+    depositor: record.payer,
+    recipientAmount: BigInt(record.recipientAmount),
+    destinationDomain: destination.circleDomain,
+    mintRecipient: addressToBytes32(record.recipient),
+    destinationCaller: CCTP_ZERO_BYTES32,
+    minimumFinalityThreshold: CCTP_STANDARD_FINALITY_THRESHOLD,
+    hookData: CCTP_FORWARDING_HOOK_DATA
   });
-  if (decoded.functionName !== "depositForBurnWithHook") {
-    throw new Error("Recovery burn must use Circle forwarding");
-  }
-  const args = decoded.args as readonly unknown[];
-  const [
-    totalBurnAmount,
-    destinationDomain,
-    mintRecipient,
-    burnToken,
-    destinationCaller,
-    maxFee,
-    minimumFinalityThreshold,
-    hookData
-  ] = args;
-  const recipientAmount = BigInt(record.recipientAmount);
-  if (
-    typeof totalBurnAmount !== "bigint" ||
-    typeof maxFee !== "bigint" ||
-    totalBurnAmount <= maxFee ||
-    totalBurnAmount - maxFee !== recipientAmount ||
-    Number(destinationDomain) !== destination.circleDomain ||
-    mintRecipient !== addressToBytes32(record.recipient) ||
-    typeof burnToken !== "string" ||
-    getAddress(burnToken) !== getAddress(source.usdcAddress) ||
-    destinationCaller !== CCTP_ZERO_BYTES32 ||
-    Number(minimumFinalityThreshold) !== CCTP_STANDARD_FINALITY_THRESHOLD ||
-    hookData !== CCTP_FORWARDING_HOOK_DATA
-  ) {
-    throw new Error("Burn transaction does not match the recovery details");
+  if (!matches) {
+    throw new Error(
+      "Burn transaction does not contain one exact Circle forwarding event"
+    );
   }
 }
 
