@@ -143,7 +143,8 @@ export function MultichainUsdcExecutor({
   );
   const forwardingAvailable =
     routeCapability.automaticForwarding === "mainnet-enabled" ||
-    routeCapability.automaticForwarding === "mainnet-preview";
+    routeCapability.automaticForwarding === "mainnet-preview" ||
+    routeCapability.automaticForwarding === "testnet-enabled";
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
   const transferModeLocked = requestedTransferMode !== "payer-choice";
