@@ -25,7 +25,7 @@ export function encryptPaymentContext(value: unknown): EncryptedPaymentContext {
     cipher.update(JSON.stringify(value), "utf8", "hex") + cipher.final("hex");
   return {
     ciphertext,
-    iv: iv.toString("base64"),
+    iv: Buffer.from(iv).toString("base64"),
     tag: cipher.getAuthTag().toString("base64")
   };
 }
