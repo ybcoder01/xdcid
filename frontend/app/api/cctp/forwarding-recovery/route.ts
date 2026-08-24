@@ -16,8 +16,7 @@ import {
   addressToBytes32,
   calculateXdcidConvenienceFee,
   isCctpTransactionHash,
-  mainnetTokenMessengerV2Abi,
-  mainnetUsdcAbi
+  mainnetTokenMessengerV2Abi
 } from "../../../../lib/cctpMainnet";
 import {
   FORWARDING_RECOVERY_TTL_SECONDS,
@@ -39,6 +38,7 @@ import {
   getPaymentNetwork
 } from "../../../../config/paymentNetworks";
 import { getPaymentRpcUrls } from "../../../../lib/paymentRpcConfig";
+import { findExactUsdcTransferPayer } from "../../../../lib/forwardingFeeVerification";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -286,34 +286,27 @@ async function verifyFeeTransaction(
 ): Promise<Address> {
   const network = getPaymentNetwork(input.sourceChainId);
   if (!network) throw new Error("Payment source network is unavailable");
-  const client = getPaymentClient(input.sourceChainId);
-  const [transaction, receipt] = await Promise.all([
-    client.getTransaction({ hash: input.feeTransactionHash }),
-    client.getTransactionReceipt({ hash: input.feeTransactionHash })
-  ]);
-  if (
-    receipt.status !== "success" ||
-    !transaction.to ||
-    getAddress(transaction.to) !== getAddress(network.usdcAddress)
-  ) {
-    throw new Error("Fee transaction is not a successful source-network USDC transfer");
+
+  const receipt = await getPaymentClient(
+    input.sourceChainId
+  ).getTransactionReceipt({ hash: input.feeTransactionHash });
+  if (receipt.status !== "success") {
+    throw new Error(
+      "Fee transaction is not a successful source-network USDC transfer"
+    );
   }
 
-  const decoded = decodeFunctionData({
-    abi: mainnetUsdcAbi,
-    data: transaction.input
+  const payer = findExactUsdcTransferPayer(receipt.logs, {
+    usdcAddress: network.usdcAddress,
+    feeRecipient: XDCID_FEE_RECIPIENT,
+    feeAmount: calculateXdcidConvenienceFee(input.recipientAmount)
   });
-  const args = decoded.args as readonly unknown[];
-  if (
-    decoded.functionName !== "transfer" ||
-    typeof args[0] !== "string" ||
-    typeof args[1] !== "bigint" ||
-    getAddress(args[0]) !== getAddress(XDCID_FEE_RECIPIENT) ||
-    args[1] !== calculateXdcidConvenienceFee(input.recipientAmount)
-  ) {
-    throw new Error("Fee transaction does not match the XDCID convenience fee");
+  if (!payer) {
+    throw new Error(
+      "Fee transaction does not contain one exact XDCID convenience-fee transfer"
+    );
   }
-  return getAddress(transaction.from);
+  return payer;
 }
 
 async function verifyForwardedBurn(
