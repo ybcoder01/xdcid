@@ -147,10 +147,10 @@ function parseFilters(value: ExportRequest["filters"]): PaymentHistoryFilters {
   if (typeof value.token === "string" && /^[A-Za-z0-9]{1,32}$/.test(value.token)) {
     filters.token = value.token;
   }
-  if (Number.isInteger(value.sourceChainId) && Number(value.sourceChainId) > 0) {
+  if (typeof value.sourceChainId === "number" && Number.isInteger(value.sourceChainId) && value.sourceChainId > 0) {
     filters.sourceChainId = Number(value.sourceChainId);
   }
-  if (Number.isInteger(value.destinationChainId) && Number(value.destinationChainId) > 0) {
+  if (typeof value.destinationChainId === "number" && Number.isInteger(value.destinationChainId) && value.destinationChainId > 0) {
     filters.destinationChainId = Number(value.destinationChainId);
   }
   if (typeof value.name === "string" && value.name.trim()) {
