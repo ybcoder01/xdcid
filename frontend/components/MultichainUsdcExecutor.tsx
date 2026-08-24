@@ -65,6 +65,7 @@ type MultichainUsdcExecutorProps = {
   amount: string;
   recipient: Address;
   ready: boolean;
+  paymentReference?: string;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
 };
 
@@ -88,6 +89,7 @@ export function MultichainUsdcExecutor({
   amount,
   recipient,
   ready,
+  paymentReference = "",
   requestedTransferMode = "payer-choice"
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -673,6 +675,12 @@ export function MultichainUsdcExecutor({
           hash={receiveHash}
           explorerUrl={destination?.explorerUrl}
         />
+      ) : null}
+
+      {phase === "complete" && paymentReference ? (
+        <p className="mt-3 rounded-md border border-teal-200 bg-white p-3 text-xs text-neutral-700">
+          Private reference: <strong>{paymentReference}</strong>
+        </p>
       ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
