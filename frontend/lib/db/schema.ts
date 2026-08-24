@@ -186,7 +186,6 @@ export const paymentAccessChallenges = pgTable(
   {
     id: varchar("id", { length: 40 }).primaryKey(),
     paymentRecordId: varchar("payment_record_id", { length: 40 })
-      .notNull()
       .references(() => paymentRecords.id, { onDelete: "cascade" }),
     address: varchar("address", { length: 42 }).notNull(),
     message: text("message").notNull(),
