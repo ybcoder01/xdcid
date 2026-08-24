@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, lte, or, type SQL } from "drizzle-orm";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { getDatabase, isDatabaseConfigured } from "./db/client";
 import { paymentAccessChallenges, paymentRecords } from "./db/schema";
@@ -14,6 +14,17 @@ const ACCESS_TTL_MS = 5 * 60 * 1000;
 export type PrivatePaymentContext = {
   reference?: string;
   description?: string;
+};
+
+export type PaymentHistoryFilters = {
+  from?: Date;
+  to?: Date;
+  token?: string;
+  sourceChainId?: number;
+  destinationChainId?: number;
+  name?: string;
+  counterparty?: string;
+  limit?: number | null;
 };
 
 export type CompletedPaymentInput = {
@@ -171,7 +182,8 @@ export async function createPaymentHistoryChallenge(rawAddress: string) {
 
 export async function readAuthorizedPaymentHistory(
   challengeId: string,
-  signature: Hex
+  signature: Hex,
+  filters?: PaymentHistoryFilters
 ) {
   await ensurePaymentHistorySchema();
   const now = new Date();
@@ -194,10 +206,43 @@ export async function readAuthorizedPaymentHistory(
     .set({ usedAt: now })
     .where(eq(paymentAccessChallenges.id, challengeId));
 
-  const records = await getDatabase().select().from(paymentRecords)
-    .where(or(eq(paymentRecords.creator, recovered), eq(paymentRecords.payer, recovered)))
-    .orderBy(desc(paymentRecords.completedAt))
-    .limit(100);
+  const participant = or(
+    eq(paymentRecords.creator, recovered),
+    eq(paymentRecords.payer, recovered)
+  );
+  if (!participant) return [];
+
+  const conditions: SQL[] = [participant];
+  if (filters?.from) conditions.push(gte(paymentRecords.completedAt, filters.from));
+  if (filters?.to) conditions.push(lte(paymentRecords.completedAt, filters.to));
+  if (filters?.token) conditions.push(eq(paymentRecords.token, filters.token.toUpperCase()));
+  if (filters?.sourceChainId) {
+    conditions.push(eq(paymentRecords.sourceChainId, filters.sourceChainId));
+  }
+  if (filters?.destinationChainId) {
+    conditions.push(eq(paymentRecords.destinationChainId, filters.destinationChainId));
+  }
+  if (filters?.name) {
+    conditions.push(eq(paymentRecords.name, filters.name.toLowerCase()));
+  }
+  if (filters?.counterparty) {
+    const counterparty = getAddress(filters.counterparty).toLowerCase();
+    const counterpartyMatch = or(
+      eq(paymentRecords.creator, counterparty),
+      eq(paymentRecords.payer, counterparty)
+    );
+    if (counterpartyMatch) conditions.push(counterpartyMatch);
+  }
+
+  const query = getDatabase().select().from(paymentRecords)
+    .where(and(...conditions))
+    .orderBy(desc(paymentRecords.completedAt));
+  const requestedLimit = filters?.limit === null
+    ? null
+    : Math.min(Math.max(filters?.limit ?? 100, 1), 500);
+  const records = requestedLimit === null
+    ? await query
+    : await query.limit(requestedLimit);
 
   return records.map((record) => {
     let privateContext: PrivatePaymentContext | undefined;
