@@ -63,6 +63,7 @@ export default function SendPage() {
   const [sourceChainId, setSourceChainId] = useState(DEFAULT_SOURCE_CHAIN_ID);
   const [destinationChainId, setDestinationChainId] = useState(XDC_CHAIN_ID);
   const [token, setToken] = useState<PaymentToken>("USDC");
+  const [paymentReference, setPaymentReference] = useState("");
   const { chainId: connectedChainId, isConnected } = useAccount();
   const {
     sendTransactionAsync,
@@ -79,6 +80,7 @@ export default function SendPage() {
     amount,
     destinationChainId,
     recipient,
+    paymentReference,
     resetNativeTransaction,
     sourceChainId,
     token
@@ -377,6 +379,20 @@ export default function SendPage() {
               </label>
             </div>
 
+            <label className="grid gap-2 text-sm">
+              <span className="font-semibold text-slate-950">Private payment reference (optional)</span>
+              <input
+                className="rounded-md border border-black/10 bg-white px-4 py-3"
+                value={paymentReference}
+                onChange={(event) => setPaymentReference(event.target.value)}
+                maxLength={48}
+                placeholder="Invoice, order or internal reference"
+              />
+              <span className="text-xs text-neutral-500">
+                Stored only in encrypted XDCID history. It is not included in transaction calldata.
+              </span>
+            </label>
+
             {routeState.error ? (
               <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {routeState.error}
@@ -442,13 +458,15 @@ export default function SendPage() {
                     sourceChainId,
                     destinationChainId,
                     amount,
-                    destination.address
+                    destination.address,
+                    paymentReference
                   ].join(":")}
                   sourceChainId={sourceChainId}
                   destinationChainId={destinationChainId}
                   amount={amount}
                   recipient={destination.address}
                   ready={routeReady}
+                  paymentReference={paymentReference.trim()}
                 />
               ) : null}
 
