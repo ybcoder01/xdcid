@@ -2,5 +2,11 @@
   "framework": "nextjs",
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm build",
-  "outputDirectory": "frontend/.next"
+  "outputDirectory": "frontend/.next",
+  "crons": [
+    {
+      "path": "/api/cron/payment-retention",
+      "schedule": "17 3 * * *"
+    }
+  ]
 }
