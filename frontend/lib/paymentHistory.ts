@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { neon } from "@neondatabase/serverless";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { getDatabase, isDatabaseConfigured } from "./db/client";
 import { paymentAccessChallenges, paymentRecords } from "./db/schema";
 import {
   decryptPaymentContext,
-  encryptPaymentContext,
-  type EncryptedPaymentContext
+  encryptPaymentContext
 } from "./paymentRecordCrypto";
 
 const ACCESS_TTL_MS = 5 * 60 * 1000;
@@ -39,8 +39,10 @@ export function isPaymentHistoryConfigured(): boolean {
 }
 
 export async function ensurePaymentHistorySchema(): Promise<void> {
-  const db = getDatabase();
-  await db.execute(sql.raw(`
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error("Payment history storage is not configured");
+  const client = neon(connectionString);
+  await client`
     CREATE TABLE IF NOT EXISTS payment_records (
       id varchar(40) PRIMARY KEY,
       request_id varchar(66) NOT NULL,
@@ -60,10 +62,12 @@ export async function ensurePaymentHistorySchema(): Promise<void> {
       completed_at timestamptz NOT NULL,
       expires_at timestamptz NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS payment_records_creator_idx ON payment_records (creator);
-    CREATE INDEX IF NOT EXISTS payment_records_payer_idx ON payment_records (payer);
-    CREATE INDEX IF NOT EXISTS payment_records_expires_at_idx ON payment_records (expires_at);
+    )
+  `;
+  await client`CREATE INDEX IF NOT EXISTS payment_records_creator_idx ON payment_records (creator)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_records_payer_idx ON payment_records (payer)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_records_expires_at_idx ON payment_records (expires_at)`;
+  await client`
     CREATE TABLE IF NOT EXISTS payment_access_challenges (
       id varchar(40) PRIMARY KEY,
       payment_record_id varchar(40) NOT NULL REFERENCES payment_records(id) ON DELETE CASCADE,
@@ -72,10 +76,10 @@ export async function ensurePaymentHistorySchema(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now(),
       expires_at timestamptz NOT NULL,
       used_at timestamptz
-    );
-    CREATE INDEX IF NOT EXISTS payment_access_challenges_record_idx ON payment_access_challenges (payment_record_id);
-    CREATE INDEX IF NOT EXISTS payment_access_challenges_expires_idx ON payment_access_challenges (expires_at);
-  `));
+    )
+  `;
+  await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_record_idx ON payment_access_challenges (payment_record_id)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_expires_idx ON payment_access_challenges (expires_at)`;
 }
 
 function retentionDate(completedAt: Date): Date {
