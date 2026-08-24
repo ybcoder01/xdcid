@@ -19,6 +19,7 @@ type CompletionBody = {
   sourceTransactionHash?: unknown;
   destinationTransactionHash?: unknown;
   reference?: unknown;
+  description?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -63,9 +64,18 @@ export async function POST(request: Request) {
       destinationChainId: body.destinationChainId as number,
       sourceTransactionHash: verified.sourceTransactionHash,
       destinationTransactionHash: verified.destinationTransactionHash,
-      privateContext: typeof body.reference === "string" && body.reference.trim()
-        ? { reference: body.reference.trim() }
-        : undefined
+      privateContext:
+        (typeof body.reference === "string" && body.reference.trim()) ||
+        (typeof body.description === "string" && body.description.trim())
+          ? {
+              ...(typeof body.reference === "string" && body.reference.trim()
+                ? { reference: body.reference.trim() }
+                : {}),
+              ...(typeof body.description === "string" && body.description.trim()
+                ? { description: body.description.trim() }
+                : {})
+            }
+          : undefined
     });
     return json({ id, status: "recorded" }, 201);
   } catch (cause) {
@@ -103,6 +113,9 @@ function validate(body: CompletionBody): string | undefined {
   }
   if (body.reference !== undefined && (typeof body.reference !== "string" || body.reference.length > 48)) {
     return "Private payment reference is too long";
+  }
+  if (body.description !== undefined && (typeof body.description !== "string" || body.description.length > 120)) {
+    return "Private payment description is too long";
   }
   return undefined;
 }
