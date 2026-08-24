@@ -12,8 +12,11 @@ export async function GET(request: Request) {
   if (!isPaymentHistoryConfigured()) {
     return Response.json({ error: "Payment history is not configured" }, { status: 503 });
   }
-  const deleted = await removeExpiredPaymentData();
-  return Response.json({ deleted, retentionMonths: 15 }, {
+  const deletedChallenges = await removeExpiredPaymentData();
+  return Response.json({
+    deletedChallenges,
+    completedPaymentRetention: "indefinite"
+  }, {
     headers: { "cache-control": "no-store" }
   });
 }
