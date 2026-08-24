@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   formatUnits,
   type Address,
@@ -66,6 +66,7 @@ type MultichainUsdcExecutorProps = {
   recipient: Address;
   ready: boolean;
   paymentReference?: string;
+  onCompleted?: (sourceHash: Hash, destinationHash?: Hash) => void | Promise<void>;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
 };
 
@@ -90,9 +91,11 @@ export function MultichainUsdcExecutor({
   recipient,
   ready,
   paymentReference = "",
+  onCompleted,
   requestedTransferMode = "payer-choice"
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
+  const reportedSettlement = useRef("");
   const [burnHash, setBurnHash] = useState("");
   const [receiveHash, setReceiveHash] = useState<Hash | "">("");
   const [attestation, setAttestation] = useState<Attestation | null>(null);
@@ -120,6 +123,19 @@ export function MultichainUsdcExecutor({
   const source = getPaymentNetwork(sourceChainId);
   const destination = getPaymentNetwork(destinationChainId);
   const crossChain = sourceChainId !== destinationChainId;
+
+  useEffect(() => {
+    if (phase !== "complete" || !onCompleted || !receiveHash) return;
+    const sourceHash = crossChain ? burnHash : receiveHash;
+    if (!isCctpTransactionHash(sourceHash)) return;
+    const key = sourceHash + ":" + receiveHash;
+    if (reportedSettlement.current === key) return;
+    reportedSettlement.current = key;
+    void onCompleted(
+      sourceHash as Hash,
+      crossChain ? receiveHash as Hash : undefined
+    );
+  }, [burnHash, crossChain, onCompleted, phase, receiveHash]);
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
     destinationChainId,
