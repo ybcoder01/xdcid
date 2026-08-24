@@ -150,3 +150,52 @@ export const adminAuthChallenges = pgTable(
     index("admin_auth_challenges_expires_at_idx").on(table.expiresAt)
   ]
 );
+
+
+export const paymentRecords = pgTable(
+  "payment_records",
+  {
+    id: varchar("id", { length: 40 }).primaryKey(),
+    requestId: varchar("request_id", { length: 66 }).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    creator: varchar("creator", { length: 42 }).notNull(),
+    payer: varchar("payer", { length: 42 }).notNull(),
+    amountAtomic: varchar("amount_atomic", { length: 80 }).notNull(),
+    token: varchar("token", { length: 32 }).notNull(),
+    tokenDecimals: integer("token_decimals").notNull(),
+    sourceChainId: integer("source_chain_id").notNull(),
+    destinationChainId: integer("destination_chain_id").notNull(),
+    sourceTransactionHash: varchar("source_transaction_hash", { length: 66 }).notNull(),
+    destinationTransactionHash: varchar("destination_transaction_hash", { length: 66 }),
+    privateCiphertext: text("private_ciphertext"),
+    privateIv: varchar("private_iv", { length: 64 }),
+    privateTag: varchar("private_tag", { length: 64 }),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [
+    uniqueIndex("payment_records_source_tx_uidx").on(table.sourceTransactionHash),
+    index("payment_records_creator_idx").on(table.creator),
+    index("payment_records_payer_idx").on(table.payer)
+  ]
+);
+
+export const paymentAccessChallenges = pgTable(
+  "payment_access_challenges",
+  {
+    id: varchar("id", { length: 40 }).primaryKey(),
+    paymentRecordId: varchar("payment_record_id", { length: 40 })
+      .notNull()
+      .references(() => paymentRecords.id, { onDelete: "cascade" }),
+    address: varchar("address", { length: 42 }).notNull(),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" })
+  },
+  (table) => [
+    index("payment_access_challenges_record_idx").on(table.paymentRecordId),
+    index("payment_access_challenges_expires_idx").on(table.expiresAt)
+  ]
+);
