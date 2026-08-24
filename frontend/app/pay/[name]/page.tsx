@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { isHex, keccak256, stringToHex, zeroAddress, type Hex } from "viem";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isHex, keccak256, stringToHex, zeroAddress, type Hash, type Hex } from "viem";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   useAccount,
@@ -207,6 +207,8 @@ export default function PayRequestPage() {
   const [signatureChecking, setSignatureChecking] = useState(false);
   const [signatureError, setSignatureError] = useState("");
   const [accountDeployment, setAccountDeployment] = useState<AccountDeploymentState>("unknown");
+  const [historyStatus, setHistoryStatus] = useState("");
+  const recordingHashes = useRef(new Set<string>());
   const nativePayment = useSendTransaction();
   const transactionHash = nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
@@ -343,6 +345,58 @@ export default function PayRequestPage() {
   const paymentError = nativePayment.error;
   const receiptActors = paymentReceiptActors(address, receipt.data?.from);
 
+  const recordSettlement = useCallback(async (
+    sourceTransactionHash: Hash,
+    destinationTransactionHash?: Hash
+  ) => {
+    if (!paymentAddress || value <= 0n) return;
+    const key = sourceTransactionHash + ":" + (destinationTransactionHash || "");
+    if (recordingHashes.current.has(key)) return;
+    recordingHashes.current.add(key);
+    setHistoryStatus("Verifying payment for private history...");
+    try {
+      const response = await fetch("/api/payment-history/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: parsedName.name,
+          sourceChainId: route.sourceChainId,
+          destinationChainId: route.destinationChainId,
+          token: token === "USDC" ? "USDC" : "NATIVE",
+          amountAtomic: value.toString(),
+          recipient: paymentAddress,
+          sourceTransactionHash,
+          destinationTransactionHash,
+          reference: reference.trim(),
+          description: memo.trim()
+        })
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Payment history could not be recorded");
+      setHistoryStatus("Payment added to private history.");
+    } catch (cause) {
+      recordingHashes.current.delete(key);
+      setHistoryStatus(
+        cause instanceof Error
+          ? "Payment succeeded, but private history needs retry: " + cause.message
+          : "Payment succeeded, but private history could not be recorded."
+      );
+    }
+  }, [
+    memo,
+    parsedName.name,
+    paymentAddress,
+    reference,
+    route.destinationChainId,
+    route.sourceChainId,
+    token,
+    value
+  ]);
+
+  useEffect(() => {
+    if (receipt.isSuccess && transactionHash) void recordSettlement(transactionHash);
+  }, [receipt.isSuccess, recordSettlement, transactionHash]);
+
   function pay() {
     if (!paymentAddress || !canPay || !nativeXdcPayment) return;
     nativePayment.sendTransaction({ to: paymentAddress, value });
@@ -471,6 +525,8 @@ export default function PayRequestPage() {
               amount={amount}
               recipient={paymentAddress}
               ready={routeReady}
+              paymentReference={reference.trim()}
+              onCompleted={recordSettlement}
               requestedTransferMode={
                 route.transferMode === "automatic"
                   ? "automatic"
@@ -494,6 +550,7 @@ export default function PayRequestPage() {
           </a>
         )}
         {paymentError && <p className="mt-4 text-sm text-red-600">{paymentError.message}</p>}
+        {historyStatus && <p className="mt-4 text-sm text-slate-600">{historyStatus}</p>}
 
         {receipt.isSuccess && transactionHash && (
           <section className="mt-8 border-t border-slate-200 pt-8" aria-label="Payment confirmation receipt">
