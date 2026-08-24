@@ -13,7 +13,7 @@ export type PaymentRouteCapability = {
 const MAINNET_PAYMENT_CHAIN_IDS = [1, 50, 137, 8453, 42161] as const;
 const TESTNET_PAYMENT_CHAIN_IDS = [11155111, 51, 80002, 84532, 421614] as const;
 
-const SUPPORTED_PAYMENT_CHAIN_IDS = new Set([
+const SUPPORTED_PAYMENT_CHAIN_IDS = new Set<number>([
   ...MAINNET_PAYMENT_CHAIN_IDS,
   ...TESTNET_PAYMENT_CHAIN_IDS
 ]);
