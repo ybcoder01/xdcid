@@ -10,7 +10,6 @@ import {
 } from "./paymentRecordCrypto";
 
 const ACCESS_TTL_MS = 5 * 60 * 1000;
-export const PAYMENT_RECORD_RETENTION_MONTHS = 15;
 
 export type PrivatePaymentContext = {
   reference?: string;
@@ -60,13 +59,13 @@ export async function ensurePaymentHistorySchema(): Promise<void> {
       private_iv varchar(64),
       private_tag varchar(64),
       completed_at timestamptz NOT NULL,
-      expires_at timestamptz NOT NULL,
+      expires_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     )
   `;
+  await client`ALTER TABLE payment_records ALTER COLUMN expires_at DROP NOT NULL`;
   await client`CREATE INDEX IF NOT EXISTS payment_records_creator_idx ON payment_records (creator)`;
   await client`CREATE INDEX IF NOT EXISTS payment_records_payer_idx ON payment_records (payer)`;
-  await client`CREATE INDEX IF NOT EXISTS payment_records_expires_at_idx ON payment_records (expires_at)`;
   await client`
     CREATE TABLE IF NOT EXISTS payment_access_challenges (
       id varchar(40) PRIMARY KEY,
@@ -80,12 +79,6 @@ export async function ensurePaymentHistorySchema(): Promise<void> {
   `;
   await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_record_idx ON payment_access_challenges (payment_record_id)`;
   await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_expires_idx ON payment_access_challenges (expires_at)`;
-}
-
-function retentionDate(completedAt: Date): Date {
-  const expiresAt = new Date(completedAt);
-  expiresAt.setUTCMonth(expiresAt.getUTCMonth() + PAYMENT_RECORD_RETENTION_MONTHS);
-  return expiresAt;
 }
 
 export async function saveCompletedPayment(input: CompletedPaymentInput): Promise<void> {
@@ -111,7 +104,7 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     privateIv: encrypted?.iv,
     privateTag: encrypted?.tag,
     completedAt,
-    expiresAt: retentionDate(completedAt)
+    expiresAt: null
   }).onConflictDoNothing();
 }
 
@@ -120,10 +113,9 @@ export async function createPaymentAccessChallenge(recordId: string, rawAddress:
   const address = getAddress(rawAddress).toLowerCase();
   const [record] = await getDatabase().select({
     creator: paymentRecords.creator,
-    payer: paymentRecords.payer,
-    expiresAt: paymentRecords.expiresAt
+    payer: paymentRecords.payer
   }).from(paymentRecords).where(eq(paymentRecords.id, recordId)).limit(1);
-  if (!record || record.expiresAt <= new Date()) return undefined;
+  if (!record) return undefined;
   if (address !== record.creator && address !== record.payer) return undefined;
 
   const id = randomBytes(18).toString("base64url");
@@ -178,7 +170,7 @@ export async function readAuthorizedPayment(
       )
     )
   ).limit(1);
-  if (!record || record.expiresAt <= now) return undefined;
+  if (!record) return undefined;
 
   await getDatabase().update(paymentAccessChallenges)
     .set({ usedAt: now })
@@ -197,11 +189,8 @@ export async function readAuthorizedPayment(
 
 export async function removeExpiredPaymentData(now = new Date()): Promise<number> {
   await ensurePaymentHistorySchema();
-  await getDatabase().delete(paymentAccessChallenges).where(
-    lt(paymentAccessChallenges.expiresAt, now)
-  );
-  const deleted = await getDatabase().delete(paymentRecords)
-    .where(lt(paymentRecords.expiresAt, now))
-    .returning({ id: paymentRecords.id });
+  const deleted = await getDatabase().delete(paymentAccessChallenges)
+    .where(lt(paymentAccessChallenges.expiresAt, now))
+    .returning({ id: paymentAccessChallenges.id });
   return deleted.length;
 }
