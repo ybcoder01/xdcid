@@ -1,5 +1,10 @@
 import { expect } from "chai";
-import type { Address, Hex } from "viem";
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  type Address,
+  type Hex
+} from "viem";
 import {
   FORWARDING_RECOVERY_TTL_SECONDS,
   parseForwardingRecoveryInput,
@@ -11,7 +16,21 @@ import {
   findExactUsdcTransferPayer,
   type Erc20TransactionLog
 } from "../frontend/lib/forwardingFeeVerification";
-import { getPaymentNetwork } from "../frontend/config/paymentNetworks";
+import {
+  CCTP_TOKEN_MESSENGER_V2,
+  getPaymentNetwork
+} from "../frontend/config/paymentNetworks";
+import {
+  CCTP_FORWARDING_HOOK_DATA,
+  CCTP_STANDARD_FINALITY_THRESHOLD,
+  CCTP_ZERO_BYTES32,
+  addressToBytes32
+} from "../frontend/lib/cctpMainnet";
+import {
+  cctpDepositForBurnEventAbi,
+  hasExactCctpForwardingBurn,
+  type CctpTransactionLog
+} from "../frontend/lib/forwardingBurnVerification";
 import {
   PAYMENT_RPC_CONFIG,
   getPaymentRpcUrls
@@ -244,4 +263,146 @@ function transferLog(
 
 function addressTopic(address: Address): Hex {
   return (`0x${address.slice(2).toLowerCase().padStart(64, "0")}`) as Hex;
+}
+
+
+describe("forwarding burn event verification", function () {
+  const payer = "0x9c67d6cfE6A73497e7348b6b852495CA6236C29a" as Address;
+  const recipient =
+    "0x031d01283963d2fA43fe386825A056491C10994f" as Address;
+  const recipientAmount = 1_000_000n;
+  const maxFee = 1_733_550n;
+  const supportedChainIds = [
+    1, 50, 137, 8453, 42161,
+    11155111, 51, 80002, 84532, 421614
+  ];
+
+  it("accepts Circle forwarding events on every supported source network", function () {
+    const environments = [
+      supportedChainIds.slice(0, 5),
+      supportedChainIds.slice(5)
+    ];
+    for (const environment of environments) {
+      for (let index = 0; index < environment.length; index += 1) {
+        const source = getPaymentNetwork(environment[index])!;
+        const destination = getPaymentNetwork(
+          environment[(index + 1) % environment.length]
+        )!;
+        const log = depositForBurnLog({
+          burnToken: source.usdcAddress,
+          depositor: payer,
+          totalAmount: recipientAmount + maxFee,
+          destinationDomain: destination.circleDomain,
+          mintRecipient: addressToBytes32(recipient),
+          maxFee
+        });
+
+        expect(
+          hasExactCctpForwardingBurn([log], {
+            tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+            burnToken: source.usdcAddress,
+            depositor: payer,
+            recipientAmount,
+            destinationDomain: destination.circleDomain,
+            mintRecipient: addressToBytes32(recipient),
+            destinationCaller: CCTP_ZERO_BYTES32,
+            minimumFinalityThreshold: CCTP_STANDARD_FINALITY_THRESHOLD,
+            hookData: CCTP_FORWARDING_HOOK_DATA
+          })
+        ).to.equal(true);
+      }
+    }
+  });
+
+  it("accepts delegated execution receipts and rejects mismatched or duplicate burns", function () {
+    const source = getPaymentNetwork(84532)!;
+    const destination = getPaymentNetwork(51)!;
+    const exact = depositForBurnLog({
+      burnToken: source.usdcAddress,
+      depositor: payer,
+      totalAmount: recipientAmount + maxFee,
+      destinationDomain: destination.circleDomain,
+      mintRecipient: addressToBytes32(recipient),
+      maxFee
+    });
+    const helperLog: CctpTransactionLog = {
+      address: "0xdb9b1e94b5b69df7e401ddbede43491141047db3",
+      topics: [(`0x${"44".repeat(32)}`) as Hex],
+      data: "0x"
+    };
+    const input = {
+      tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+      burnToken: source.usdcAddress,
+      depositor: payer,
+      recipientAmount,
+      destinationDomain: destination.circleDomain,
+      mintRecipient: addressToBytes32(recipient),
+      destinationCaller: CCTP_ZERO_BYTES32,
+      minimumFinalityThreshold: CCTP_STANDARD_FINALITY_THRESHOLD,
+      hookData: CCTP_FORWARDING_HOOK_DATA
+    };
+
+    expect(hasExactCctpForwardingBurn([helperLog, exact], input)).to.equal(true);
+    expect(
+      hasExactCctpForwardingBurn([exact], {
+        ...input,
+        depositor: recipient
+      })
+    ).to.equal(false);
+    expect(
+      hasExactCctpForwardingBurn([exact], {
+        ...input,
+        recipientAmount: recipientAmount + 1n
+      })
+    ).to.equal(false);
+    expect(
+      hasExactCctpForwardingBurn([exact], {
+        ...input,
+        destinationDomain: destination.circleDomain + 1
+      })
+    ).to.equal(false);
+    expect(hasExactCctpForwardingBurn([exact, exact], input)).to.equal(false);
+  });
+});
+
+function depositForBurnLog(input: {
+  burnToken: Address;
+  depositor: Address;
+  totalAmount: bigint;
+  destinationDomain: number;
+  mintRecipient: Hex;
+  maxFee: bigint;
+}): CctpTransactionLog {
+  return {
+    address: CCTP_TOKEN_MESSENGER_V2,
+    topics: encodeEventTopics({
+      abi: cctpDepositForBurnEventAbi,
+      eventName: "DepositForBurn",
+      args: {
+        burnToken: input.burnToken,
+        depositor: input.depositor,
+        minFinalityThreshold: CCTP_STANDARD_FINALITY_THRESHOLD
+      }
+    }),
+    data: encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "bytes32" },
+        { type: "uint32" },
+        { type: "bytes32" },
+        { type: "bytes32" },
+        { type: "uint256" },
+        { type: "bytes" }
+      ],
+      [
+        input.totalAmount,
+        input.mintRecipient,
+        input.destinationDomain,
+        ("0x" + "11".repeat(32)) as Hex,
+        CCTP_ZERO_BYTES32,
+        input.maxFee,
+        CCTP_FORWARDING_HOOK_DATA
+      ]
+    )
+  };
 }
