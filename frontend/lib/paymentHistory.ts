@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { getDatabase, isDatabaseConfigured } from "./db/client";
 import { paymentAccessChallenges, paymentRecords } from "./db/schema";
@@ -69,7 +69,7 @@ export async function ensurePaymentHistorySchema(): Promise<void> {
   await client`
     CREATE TABLE IF NOT EXISTS payment_access_challenges (
       id varchar(40) PRIMARY KEY,
-      payment_record_id varchar(40) NOT NULL REFERENCES payment_records(id) ON DELETE CASCADE,
+      payment_record_id varchar(40) REFERENCES payment_records(id) ON DELETE CASCADE,
       address varchar(42) NOT NULL,
       message text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
@@ -77,6 +77,7 @@ export async function ensurePaymentHistorySchema(): Promise<void> {
       used_at timestamptz
     )
   `;
+  await client`ALTER TABLE payment_access_challenges ALTER COLUMN payment_record_id DROP NOT NULL`;
   await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_record_idx ON payment_access_challenges (payment_record_id)`;
   await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_expires_idx ON payment_access_challenges (expires_at)`;
 }
@@ -137,6 +138,78 @@ export async function createPaymentAccessChallenge(recordId: string, rawAddress:
     expiresAt
   });
   return { challengeId: id, message, expiresAt };
+}
+
+export async function createPaymentHistoryChallenge(rawAddress: string) {
+  await ensurePaymentHistorySchema();
+  const address = getAddress(rawAddress).toLowerCase();
+  const [record] = await getDatabase().select({ id: paymentRecords.id })
+    .from(paymentRecords)
+    .where(or(eq(paymentRecords.creator, address), eq(paymentRecords.payer, address)))
+    .limit(1);
+  if (!record) return undefined;
+
+  const id = randomBytes(18).toString("base64url");
+  const expiresAt = new Date(Date.now() + ACCESS_TTL_MS);
+  const message = [
+    "XDCID private payment history access",
+    "Wallet: " + getAddress(address),
+    "Challenge: " + id,
+    "Expires: " + expiresAt.toISOString(),
+    "",
+    "This signature is gasless and does not authorize a transaction."
+  ].join("\n");
+  await getDatabase().insert(paymentAccessChallenges).values({
+    id,
+    paymentRecordId: null,
+    address,
+    message,
+    expiresAt
+  });
+  return { challengeId: id, message, expiresAt };
+}
+
+export async function readAuthorizedPaymentHistory(
+  challengeId: string,
+  signature: Hex
+) {
+  await ensurePaymentHistorySchema();
+  const now = new Date();
+  const [challenge] = await getDatabase().select().from(paymentAccessChallenges).where(
+    and(
+      eq(paymentAccessChallenges.id, challengeId),
+      isNull(paymentAccessChallenges.paymentRecordId),
+      isNull(paymentAccessChallenges.usedAt)
+    )
+  ).limit(1);
+  if (!challenge || challenge.expiresAt <= now) return undefined;
+
+  const recovered = (await recoverMessageAddress({
+    message: challenge.message,
+    signature
+  })).toLowerCase();
+  if (recovered !== challenge.address) return undefined;
+
+  await getDatabase().update(paymentAccessChallenges)
+    .set({ usedAt: now })
+    .where(eq(paymentAccessChallenges.id, challengeId));
+
+  const records = await getDatabase().select().from(paymentRecords)
+    .where(or(eq(paymentRecords.creator, recovered), eq(paymentRecords.payer, recovered)))
+    .orderBy(desc(paymentRecords.completedAt))
+    .limit(100);
+
+  return records.map((record) => {
+    let privateContext: PrivatePaymentContext | undefined;
+    if (record.privateCiphertext && record.privateIv && record.privateTag) {
+      privateContext = decryptPaymentContext<PrivatePaymentContext>({
+        ciphertext: record.privateCiphertext,
+        iv: record.privateIv,
+        tag: record.privateTag
+      });
+    }
+    return { ...record, privateContext };
+  });
 }
 
 export async function readAuthorizedPayment(
