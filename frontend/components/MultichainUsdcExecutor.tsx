@@ -245,7 +245,7 @@ export function MultichainUsdcExecutor({
         throw new Error("Wait for the live Circle forwarding quote");
       }
       if (automaticForwarding && !recoveryReady) {
-        await ensureForwardingRecoveryAvailable();
+        await ensureForwardingRecoveryAvailable(sourceChainId);
       }
       if (
         automaticForwarding &&
@@ -768,10 +768,16 @@ type RecoveryApiResponse = {
   error?: string;
 };
 
-async function ensureForwardingRecoveryAvailable(): Promise<void> {
-  const response = await fetch("/api/cctp/forwarding-recovery", {
-    cache: "no-store"
+async function ensureForwardingRecoveryAvailable(
+  sourceChainId: number
+): Promise<void> {
+  const query = new URLSearchParams({
+    sourceChainId: String(sourceChainId)
   });
+  const response = await fetch(
+    "/api/cctp/forwarding-recovery?" + query.toString(),
+    { cache: "no-store" }
+  );
   if (!response.ok) {
     throw new Error(
       "Automatic forwarding recovery is unavailable. Select Standard transfer or try again."
