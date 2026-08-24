@@ -111,6 +111,7 @@ export function MultichainUsdcExecutor({
   const [feeHash, setFeeHash] = useState<Hash | "">("");
   const [recoveryFeeHash, setRecoveryFeeHash] = useState("");
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
   const [recoveryStatus, setRecoveryStatus] = useState<
     "idle" | "checking" | "ready" | "error"
   >("idle");
@@ -173,6 +174,7 @@ export function MultichainUsdcExecutor({
 
   useEffect(() => {
     setRecoveryReady(false);
+    setRecoveryMessage("");
     setRecoveryStatus("idle");
     setFeeHash("");
   }, [amount, sourceChainId, destinationChainId, recipient]);
@@ -385,6 +387,10 @@ export function MultichainUsdcExecutor({
             destinationChainId
           });
           setRecoveryReady(false);
+          setRecoveryStatus("ready");
+          setRecoveryMessage(
+            "Burn hash saved. It can be restored later using the XDCID fee hash."
+          );
         } catch {
           setError(
             "The burn succeeded, but recovery cleanup is pending. Do not reuse the fee transaction hash."
@@ -456,6 +462,7 @@ export function MultichainUsdcExecutor({
 
   async function recoverPaidForwardingFee() {
     setError("");
+    setRecoveryMessage("");
     setRecoveryStatus("checking");
     if (!isConnected || !address) {
       setRecoveryStatus("error");
@@ -478,7 +485,19 @@ export function MultichainUsdcExecutor({
         destinationChainId
       });
       if (response.status === "used") {
-        throw new Error("This fee transaction was already used for a burn");
+        if (!isCctpTransactionHash(response.burnTransactionHash)) {
+          throw new Error(
+            "The fee was used, but its burn hash could not be restored"
+          );
+        }
+        setFeeHash(recoveryFeeHash);
+        setBurnHash(response.burnTransactionHash);
+        setRecoveryReady(false);
+        setRecoveryStatus("ready");
+        setRecoveryMessage(
+          "Burn hash restored from the fee record. Continue with attestation lookup."
+        );
+        return;
       }
       if (
         !response.record?.payer ||
@@ -489,6 +508,9 @@ export function MultichainUsdcExecutor({
       setFeeHash(recoveryFeeHash);
       setRecoveryReady(true);
       setRecoveryStatus("ready");
+      setRecoveryMessage(
+        "Fee verified. The retry will not charge it again."
+      );
     } catch (cause) {
       setRecoveryReady(false);
       setRecoveryStatus("error");
@@ -614,6 +636,7 @@ export function MultichainUsdcExecutor({
               onChange={(event) => {
                 setRecoveryFeeHash(event.target.value.trim());
                 setRecoveryReady(false);
+                setRecoveryMessage("");
                 setRecoveryStatus("idle");
               }}
               placeholder="0x XDCID fee transaction hash"
@@ -627,9 +650,9 @@ export function MultichainUsdcExecutor({
               {recoveryStatus === "checking" ? "Verifying..." : "Verify paid fee"}
             </button>
           </div>
-          {recoveryReady ? (
+          {recoveryStatus === "ready" && recoveryMessage ? (
             <p className="mt-2 text-xs font-semibold text-teal-700">
-              Fee verified. The retry will not charge it again.
+              {recoveryMessage}
             </p>
           ) : null}
         </div>
