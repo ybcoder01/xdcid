@@ -5,8 +5,31 @@ import {
   recoveryRecordMatches,
   type ForwardingRecoveryRecord
 } from "../frontend/lib/forwardingRecovery";
+import {
+  PAYMENT_RPC_CONFIG,
+  getPaymentRpcUrls
+} from "../frontend/lib/paymentRpcConfig";
 
 describe("forwarding failure recovery", function () {
+  it("configures recovery verification RPCs for every supported environment", function () {
+    const mainnetChainIds = [1, 50, 137, 8453, 42161];
+    const testnetChainIds = [11155111, 51, 80002, 84532, 421614];
+
+    for (const chainId of [...mainnetChainIds, ...testnetChainIds]) {
+      expect(PAYMENT_RPC_CONFIG[chainId]).to.not.equal(undefined);
+      expect(getPaymentRpcUrls(chainId, {})).to.have.length.greaterThan(0);
+    }
+    expect(getPaymentRpcUrls(10, {})).to.deep.equal([]);
+  });
+
+  it("prefers environment RPCs and keeps comma-separated fallbacks", function () {
+    expect(
+      getPaymentRpcUrls(51, {
+        XDC_APOTHEM_RPC_URLS: " https://first.example , https://second.example "
+      })
+    ).to.deep.equal(["https://first.example", "https://second.example"]);
+  });
+
   const feeTransactionHash = `0x${"12".repeat(32)}`;
   const recipient = "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A";
 
