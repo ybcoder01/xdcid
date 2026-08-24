@@ -484,6 +484,12 @@ export function MultichainUsdcExecutor({
         recipient,
         destinationChainId
       });
+      if (
+        !response.record?.payer ||
+        response.record.payer.toLowerCase() !== address.toLowerCase()
+      ) {
+        throw new Error("Connect the wallet that submitted the fee transaction");
+      }
       if (response.status === "used") {
         if (!isCctpTransactionHash(response.burnTransactionHash)) {
           throw new Error(
@@ -498,12 +504,6 @@ export function MultichainUsdcExecutor({
           "Burn hash restored from the fee record. Continue with attestation lookup."
         );
         return;
-      }
-      if (
-        !response.record?.payer ||
-        response.record.payer.toLowerCase() !== address.toLowerCase()
-      ) {
-        throw new Error("Connect the wallet that submitted the fee transaction");
       }
       setFeeHash(recoveryFeeHash);
       setRecoveryReady(true);
