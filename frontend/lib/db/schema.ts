@@ -171,14 +171,13 @@ export const paymentRecords = pgTable(
     privateIv: varchar("private_iv", { length: 64 }),
     privateTag: varchar("private_tag", { length: 64 }),
     completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }).notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
   },
   (table) => [
     uniqueIndex("payment_records_source_tx_uidx").on(table.sourceTransactionHash),
     index("payment_records_creator_idx").on(table.creator),
-    index("payment_records_payer_idx").on(table.payer),
-    index("payment_records_expires_at_idx").on(table.expiresAt)
+    index("payment_records_payer_idx").on(table.payer)
   ]
 );
 
