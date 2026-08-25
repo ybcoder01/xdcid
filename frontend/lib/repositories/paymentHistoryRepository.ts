@@ -26,6 +26,7 @@ export type PaymentRecord = {
   id: string;
   requestId: string;
   name: string;
+  nameFingerprint: string | null;
   creator: string;
   payer: string;
   amountAtomic: string;
@@ -74,7 +75,6 @@ export type PaymentParticipantAccessWrite = Omit<
 
 export type PaymentHistoryQuery = {
   participantFingerprint: string;
-  participantAddress: string;
   direction?: PaymentDirection;
   transactionType?: PaymentTransactionType;
   completionMethod?: PaymentCompletionMethod;
@@ -83,8 +83,8 @@ export type PaymentHistoryQuery = {
   token?: string;
   sourceChainId?: number;
   destinationChainId?: number;
-  name?: string;
-  counterparty?: string;
+  nameFingerprint?: string;
+  counterpartyFingerprint?: string;
   limit?: number | null;
 };
 
