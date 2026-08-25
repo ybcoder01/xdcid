@@ -14,6 +14,7 @@ import {
 import { addresses, ownableAbi, registrarAbi, signedRegistrarEnabled, zeroAddress } from "../../config/contracts";
 import { AdminOperations } from "../../components/AdminOperations";
 import { AdminRoleManagement } from "../../components/AdminRoleManagement";
+import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPolicy";
 
 type AdminSession = {
   authenticated: boolean;
@@ -337,6 +338,8 @@ export default function AdminPage() {
       </section>
 
       <AdminRoleManagement />
+
+      <AdminHistoryAccessPolicy />
 
       <AdminOperations />
     </main>
