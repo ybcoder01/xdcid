@@ -73,7 +73,7 @@ describe("forwarding failure recovery", function () {
     expect(parsed.recipientAmount).to.equal(10_000_000n);
     expect(parsed.recipient).to.equal(recipient);
     expect(parsed.destinationChainId).to.equal(42161);
-    expect(FORWARDING_RECOVERY_TTL_SECONDS).to.equal(2_592_000);
+    expect(FORWARDING_RECOVERY_TTL_SECONDS).to.equal(604_800);
 
     const reverse = parseForwardingRecoveryInput({
       feeTransactionHash,
