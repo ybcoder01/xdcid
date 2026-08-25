@@ -6,6 +6,7 @@ import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryR
 import type {
   PaymentChannel,
   PaymentCompletionMethod,
+  PaymentDirection,
   PaymentRecord,
   PaymentTransactionType
 } from "./repositories/paymentHistoryRepository";
@@ -25,6 +26,9 @@ export type PaymentHistoryFilters = {
   destinationChainId?: number;
   name?: string;
   counterparty?: string;
+  direction?: PaymentDirection;
+  transactionType?: PaymentTransactionType;
+  completionMethod?: PaymentCompletionMethod;
   limit?: number | null;
 };
 
@@ -175,6 +179,7 @@ export async function readAuthorizedPaymentHistory(
     : undefined;
   const records = await paymentHistoryRepository.listParticipantPayments({
     participantFingerprint: paymentParticipantFingerprint(challenge.address),
+    participantAddress: challenge.address,
     from: filters?.from,
     to: filters?.to,
     token: filters?.token,
@@ -182,9 +187,15 @@ export async function readAuthorizedPaymentHistory(
     destinationChainId: filters?.destinationChainId,
     name: filters?.name,
     counterparty,
+    direction: filters?.direction,
+    transactionType: filters?.transactionType,
+    completionMethod: filters?.completionMethod,
     limit: filters?.limit
   });
-  return records.map(withPrivateContext);
+  return records.map((record) => ({
+    ...withPrivateContext(record),
+    direction: (record.payer === challenge.address ? "outgoing" : "incoming") as PaymentDirection
+  }));
 }
 
 export async function readAuthorizedPayment(
