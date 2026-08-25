@@ -59,6 +59,12 @@ type ForwardingQuote = {
   quotedAt: number;
 };
 
+export type PaymentCompletionMetadata = {
+  completionMethod: "standard" | "automatic" | "recovered";
+  xdcidFeeAtomic?: string;
+  circleFeeAtomic?: string;
+};
+
 type MultichainUsdcExecutorProps = {
   sourceChainId: number;
   destinationChainId: number;
@@ -66,7 +72,11 @@ type MultichainUsdcExecutorProps = {
   recipient: Address;
   ready: boolean;
   paymentReference?: string;
-  onCompleted?: (sourceHash: Hash, destinationHash?: Hash) => void | Promise<void>;
+  onCompleted?: (
+    sourceHash: Hash,
+    destinationHash?: Hash,
+    metadata?: PaymentCompletionMetadata
+  ) => void | Promise<void>;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
 };
 
@@ -111,6 +121,7 @@ export function MultichainUsdcExecutor({
   const [feeHash, setFeeHash] = useState<Hash | "">("");
   const [recoveryFeeHash, setRecoveryFeeHash] = useState("");
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveredMode, setRecoveredMode] = useState(false);
   const [recoveryMessage, setRecoveryMessage] = useState("");
   const [recoveryStatus, setRecoveryStatus] = useState<
     "idle" | "checking" | "ready" | "error"
@@ -125,18 +136,6 @@ export function MultichainUsdcExecutor({
   const destination = getPaymentNetwork(destinationChainId);
   const crossChain = sourceChainId !== destinationChainId;
 
-  useEffect(() => {
-    if (phase !== "complete" || !onCompleted || !receiveHash) return;
-    const sourceHash = crossChain ? burnHash : receiveHash;
-    if (!isCctpTransactionHash(sourceHash)) return;
-    const key = sourceHash + ":" + receiveHash;
-    if (reportedSettlement.current === key) return;
-    reportedSettlement.current = key;
-    void onCompleted(
-      sourceHash as Hash,
-      crossChain ? receiveHash as Hash : undefined
-    );
-  }, [burnHash, crossChain, onCompleted, phase, receiveHash]);
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
     destinationChainId,
@@ -149,6 +148,44 @@ export function MultichainUsdcExecutor({
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
   const transferModeLocked = requestedTransferMode !== "payer-choice";
+
+  useEffect(() => {
+    if (phase !== "complete" || !onCompleted || !receiveHash) return;
+    const sourceHash = crossChain ? burnHash : receiveHash;
+    if (!isCctpTransactionHash(sourceHash)) return;
+    const key = sourceHash + ":" + receiveHash;
+    if (reportedSettlement.current === key) return;
+    reportedSettlement.current = key;
+    let metadata: PaymentCompletionMetadata = {
+      completionMethod: recoveredMode ? "recovered" : "standard"
+    };
+    if (automaticForwarding && forwardingQuote) {
+      const recipientAmount = parseMainnetUsdcAmount(amount);
+      metadata = {
+        completionMethod: recoveredMode ? "recovered" : "automatic",
+        xdcidFeeAtomic: calculateXdcidConvenienceFee(recipientAmount).toString(),
+        circleFeeAtomic: (
+          forwardingQuote.forwardFee +
+          calculateCctpProtocolFee(recipientAmount, forwardingQuote.minimumFeeBps)
+        ).toString()
+      };
+    }
+    void onCompleted(
+      sourceHash as Hash,
+      crossChain ? receiveHash as Hash : undefined,
+      metadata
+    );
+  }, [
+    amount,
+    automaticForwarding,
+    burnHash,
+    crossChain,
+    forwardingQuote,
+    onCompleted,
+    phase,
+    receiveHash,
+    recoveredMode
+  ]);
 
   async function writeWithAdaptiveFees(
     request: Record<string, unknown>,
@@ -174,6 +211,7 @@ export function MultichainUsdcExecutor({
 
   useEffect(() => {
     setRecoveryReady(false);
+    setRecoveredMode(false);
     setRecoveryMessage("");
     setRecoveryStatus("idle");
     setFeeHash("");
@@ -490,6 +528,7 @@ export function MultichainUsdcExecutor({
       ) {
         throw new Error("Connect the wallet that submitted the fee transaction");
       }
+      setRecoveredMode(true);
       if (response.status === "used") {
         const restoredBurnHash = response.burnTransactionHash;
         if (

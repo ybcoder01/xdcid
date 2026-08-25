@@ -162,7 +162,14 @@ export const paymentRecords = pgTable(
     payer: varchar("payer", { length: 42 }).notNull(),
     amountAtomic: varchar("amount_atomic", { length: 80 }).notNull(),
     token: varchar("token", { length: 32 }).notNull(),
+    tokenAddress: varchar("token_address", { length: 42 }),
     tokenDecimals: integer("token_decimals").notNull(),
+    transactionType: varchar("transaction_type", { length: 32 }).notNull().default("legacy"),
+    completionMethod: varchar("completion_method", { length: 32 }).notNull().default("wallet"),
+    paymentChannel: varchar("payment_channel", { length: 32 }).notNull().default("send"),
+    xdcidFeeAtomic: varchar("xdcid_fee_atomic", { length: 80 }),
+    circleFeeAtomic: varchar("circle_fee_atomic", { length: 80 }),
+    schemaVersion: integer("schema_version").notNull().default(2),
     sourceChainId: integer("source_chain_id").notNull(),
     destinationChainId: integer("destination_chain_id").notNull(),
     sourceTransactionHash: varchar("source_transaction_hash", { length: 66 }).notNull(),
@@ -172,13 +179,50 @@ export const paymentRecords = pgTable(
     privateTag: varchar("private_tag", { length: 64 }),
     completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
   },
   (table) => [
     uniqueIndex("payment_records_source_tx_uidx").on(table.sourceTransactionHash),
     index("payment_records_creator_idx").on(table.creator),
     index("payment_records_payer_idx").on(table.payer)
   ]
+);
+
+export const paymentPrivateContexts = pgTable(
+  "payment_private_contexts",
+  {
+    paymentRecordId: varchar("payment_record_id", { length: 40 })
+      .primaryKey()
+      .references(() => paymentRecords.id, { onDelete: "cascade" }),
+    ciphertext: text("ciphertext").notNull(),
+    iv: varchar("iv", { length: 64 }).notNull(),
+    tag: varchar("tag", { length: 64 }).notNull(),
+    keyVersion: integer("key_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull()
+  }
+);
+
+export const paymentRecordsRelations = relations(paymentRecords, ({ one }) => ({
+  privateContext: one(paymentPrivateContexts, {
+    fields: [paymentRecords.id],
+    references: [paymentPrivateContexts.paymentRecordId]
+  })
+}));
+
+export const paymentPrivateContextsRelations = relations(
+  paymentPrivateContexts,
+  ({ one }) => ({
+    payment: one(paymentRecords, {
+      fields: [paymentPrivateContexts.paymentRecordId],
+      references: [paymentRecords.id]
+    })
+  })
 );
 
 export const paymentAccessChallenges = pgTable(

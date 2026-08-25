@@ -12,6 +12,7 @@ import {
   type Log
 } from "viem";
 import {
+  findUniqueCctpDeposit,
   findUniqueCctpDepositor,
   findUniqueUsdcTransferPayer
 } from "../frontend/lib/paymentSettlementVerification";
@@ -58,6 +59,26 @@ describe("payment settlement event verification", function () {
         destinationDomain: 6
       }
     )).to.equal(getAddress(payer));
+  });
+
+  it("returns the verified CCTP burn amount for canonical fee recording", function () {
+    const deposit = findUniqueCctpDeposit(
+      [depositLog({
+        amount: 1_200_000n,
+        maxFee: 200_000n,
+        destinationDomain: 6
+      })],
+      {
+        tokenMessenger: messenger,
+        burnToken: token,
+        recipient,
+        recipientAmount: 1_000_000n,
+        destinationDomain: 6
+      }
+    );
+    expect(deposit?.depositor).to.equal(getAddress(payer));
+    expect(deposit?.amount).to.equal(1_200_000n);
+    expect(deposit?.maxFee).to.equal(200_000n);
   });
 
   it("rejects a CCTP deposit for a different destination", function () {

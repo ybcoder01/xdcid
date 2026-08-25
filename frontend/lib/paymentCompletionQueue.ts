@@ -15,6 +15,10 @@ export type PaymentCompletionPayload = {
   destinationTransactionHash?: Hash;
   reference?: string;
   description?: string;
+  paymentChannel: "send" | "pay_link";
+  completionMethod?: "direct" | "standard" | "automatic" | "recovered";
+  xdcidFeeAtomic?: string;
+  circleFeeAtomic?: string;
 };
 
 type QueuedCompletion = {
@@ -83,7 +87,11 @@ function rememberCompletion(payload: PaymentCompletionPayload): void {
     amountAtomic: payload.amountAtomic,
     recipient: payload.recipient,
     sourceTransactionHash: payload.sourceTransactionHash,
-    destinationTransactionHash: payload.destinationTransactionHash
+    destinationTransactionHash: payload.destinationTransactionHash,
+    paymentChannel: payload.paymentChannel,
+    completionMethod: payload.completionMethod,
+    xdcidFeeAtomic: payload.xdcidFeeAtomic,
+    circleFeeAtomic: payload.circleFeeAtomic
   };
   const next = readQueue().filter((item) => item.key !== key);
   next.push({ key, queuedAt: Date.now(), payload: safePayload });

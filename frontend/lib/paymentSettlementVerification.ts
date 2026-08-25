@@ -50,6 +50,7 @@ export type VerifiedSettlement = {
   payer: Address;
   sourceTransactionHash: Hash;
   destinationTransactionHash?: Hash;
+  circleFeeAtomic: bigint;
 };
 
 export async function verifySettlement(
@@ -79,7 +80,11 @@ export async function verifySettlement(
     ) {
       throw new Error("Native transfer does not match the payment");
     }
-    return { payer, sourceTransactionHash: input.sourceTransactionHash };
+    return {
+      payer,
+      sourceTransactionHash: input.sourceTransactionHash,
+      circleFeeAtomic: 0n
+    };
   }
 
   if (input.token !== "USDC") throw new Error("Unsupported settlement token");
@@ -92,17 +97,21 @@ export async function verifySettlement(
       input.amountAtomic
     );
     if (!payer) throw new Error("USDC transfer does not match the payment");
-    return { payer, sourceTransactionHash: input.sourceTransactionHash };
+    return {
+      payer,
+      sourceTransactionHash: input.sourceTransactionHash,
+      circleFeeAtomic: 0n
+    };
   }
 
-  const payer = findUniqueCctpDepositor(sourceReceipt.logs, {
+  const deposit = findUniqueCctpDeposit(sourceReceipt.logs, {
     tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
     burnToken: source.usdcAddress,
     recipient,
     recipientAmount: input.amountAtomic,
     destinationDomain: destination.circleDomain
   });
-  if (!payer) throw new Error("Source transaction is not a matching CCTP burn");
+  if (!deposit) throw new Error("Source transaction is not a matching CCTP burn");
   if (!input.destinationTransactionHash) {
     throw new Error("Completed cross-chain settlement requires a destination transaction");
   }
@@ -117,9 +126,10 @@ export async function verifySettlement(
     throw new Error("Destination USDC mint does not match the payment");
   }
   return {
-    payer,
+    payer: deposit.depositor,
     sourceTransactionHash: input.sourceTransactionHash,
-    destinationTransactionHash: input.destinationTransactionHash
+    destinationTransactionHash: input.destinationTransactionHash,
+    circleFeeAtomic: deposit.amount - input.amountAtomic
   };
 }
 
@@ -145,8 +155,21 @@ export function findUniqueCctpDepositor(
     destinationDomain: number;
   }
 ): Address | undefined {
+  return findUniqueCctpDeposit(logs, input)?.depositor;
+}
+
+export function findUniqueCctpDeposit(
+  logs: readonly Log[],
+  input: {
+    tokenMessenger: Address;
+    burnToken: Address;
+    recipient: Address;
+    recipientAmount: bigint;
+    destinationDomain: number;
+  }
+): { depositor: Address; amount: bigint; maxFee: bigint } | undefined {
   const expectedRecipient = padHex(input.recipient, { size: 32 }).toLowerCase();
-  const depositors: Address[] = [];
+  const deposits: Array<{ depositor: Address; amount: bigint; maxFee: bigint }> = [];
   for (const log of logs) {
     if (
       getAddress(log.address) !== getAddress(input.tokenMessenger) ||
@@ -167,12 +190,18 @@ export function findUniqueCctpDepositor(
         args.mintRecipient.toLowerCase() !== expectedRecipient
       ) continue;
       const depositor = getAddress(args.depositor);
-      if (depositor !== zeroAddress) depositors.push(depositor);
+      if (depositor !== zeroAddress) {
+        deposits.push({
+          depositor,
+          amount: args.amount,
+          maxFee: args.maxFee
+        });
+      }
     } catch {
       continue;
     }
   }
-  return depositors.length === 1 ? depositors[0] : undefined;
+  return deposits.length === 1 ? deposits[0] : undefined;
 }
 
 function requiredNetwork(chainId: number): PaymentNetwork {

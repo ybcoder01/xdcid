@@ -31,7 +31,10 @@ const explorerUrls: Record<number, string> = {
   8453: "https://basescan.org",
   42161: "https://arbiscan.io"
 };
-import { MultichainUsdcExecutor } from "../../../components/MultichainUsdcExecutor";
+import {
+  MultichainUsdcExecutor,
+  type PaymentCompletionMetadata
+} from "../../../components/MultichainUsdcExecutor";
 import { parseXnsName } from "../../../lib/names";
 import { paymentRequestId } from "../../../lib/paymentCancellation";
 import { selectPaymentDestination } from "../../../lib/paymentPreparation";
@@ -353,7 +356,8 @@ export default function PayRequestPage() {
 
   const recordSettlement = useCallback(async (
     sourceTransactionHash: Hash,
-    destinationTransactionHash?: Hash
+    destinationTransactionHash?: Hash,
+    metadata?: PaymentCompletionMetadata
   ) => {
     if (!paymentAddress || value <= 0n) return;
     const key = sourceTransactionHash + ":" + (destinationTransactionHash || "");
@@ -371,7 +375,12 @@ export default function PayRequestPage() {
           sourceTransactionHash,
           destinationTransactionHash,
           reference: reference.trim(),
-          description: memo.trim()
+          description: memo.trim(),
+          paymentChannel: "pay_link",
+          completionMethod: metadata?.completionMethod ||
+            (route.sourceChainId === route.destinationChainId ? "direct" : "standard"),
+          xdcidFeeAtomic: metadata?.xdcidFeeAtomic,
+          circleFeeAtomic: metadata?.circleFeeAtomic
       });
       setHistoryStatus("Payment added to private history.");
     } catch (cause) {

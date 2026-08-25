@@ -1,7 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import { and, desc, eq, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "../db/client";
-import { paymentAccessChallenges, paymentRecords } from "../db/schema";
+import {
+  paymentAccessChallenges,
+  paymentPrivateContexts,
+  paymentRecords
+} from "../db/schema";
 import type {
   PaymentAccessChallenge,
   PaymentAccessChallengeWrite,
@@ -42,8 +46,49 @@ async function createSchema(): Promise<void> {
     )
   `;
   await client`ALTER TABLE payment_records ALTER COLUMN expires_at DROP NOT NULL`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS token_address varchar(42)`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS transaction_type varchar(32) NOT NULL DEFAULT 'legacy'`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS completion_method varchar(32) NOT NULL DEFAULT 'wallet'`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS payment_channel varchar(32) NOT NULL DEFAULT 'send'`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS xdcid_fee_atomic varchar(80)`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS circle_fee_atomic varchar(80)`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS schema_version integer NOT NULL DEFAULT 2`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()`;
+  await client`
+    UPDATE payment_records
+    SET transaction_type = CASE
+      WHEN source_chain_id <> destination_chain_id THEN 'cross_chain_usdc'
+      WHEN upper(token) = 'USDC' THEN 'same_chain_usdc'
+      ELSE 'native'
+    END
+    WHERE transaction_type = 'legacy'
+  `;
   await client`CREATE INDEX IF NOT EXISTS payment_records_creator_idx ON payment_records (creator)`;
   await client`CREATE INDEX IF NOT EXISTS payment_records_payer_idx ON payment_records (payer)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_records_completed_at_idx ON payment_records (completed_at)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_records_type_idx ON payment_records (transaction_type)`;
+  await client`
+    CREATE TABLE IF NOT EXISTS payment_private_contexts (
+      payment_record_id varchar(40) PRIMARY KEY REFERENCES payment_records(id) ON DELETE CASCADE,
+      ciphertext text NOT NULL,
+      iv varchar(64) NOT NULL,
+      tag varchar(64) NOT NULL,
+      key_version integer NOT NULL DEFAULT 1,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await client`
+    INSERT INTO payment_private_contexts (
+      payment_record_id, ciphertext, iv, tag, key_version
+    )
+    SELECT id, private_ciphertext, private_iv, private_tag, 1
+    FROM payment_records
+    WHERE private_ciphertext IS NOT NULL
+      AND private_iv IS NOT NULL
+      AND private_tag IS NOT NULL
+    ON CONFLICT (payment_record_id) DO NOTHING
+  `;
   await client`
     CREATE TABLE IF NOT EXISTS payment_access_challenges (
       id varchar(40) PRIMARY KEY,
@@ -78,16 +123,28 @@ implements PaymentHistoryRepository {
 
   async saveCompletedPayment(record: PaymentRecordWrite): Promise<void> {
     await this.ensureSchema();
+    const {
+      privateCiphertext,
+      privateIv,
+      privateTag,
+      ...canonicalRecord
+    } = record;
     const saved = await getDatabase()
       .insert(paymentRecords)
-      .values(record)
+      .values({
+        ...canonicalRecord,
+        privateCiphertext: null,
+        privateIv: null,
+        privateTag: null
+      })
       .onConflictDoUpdate({
         target: paymentRecords.sourceTransactionHash,
         set: {
           destinationTransactionHash: sql`COALESCE(${paymentRecords.destinationTransactionHash}, excluded.destination_transaction_hash)`,
-          privateCiphertext: sql`COALESCE(${paymentRecords.privateCiphertext}, excluded.private_ciphertext)`,
-          privateIv: sql`COALESCE(${paymentRecords.privateIv}, excluded.private_iv)`,
-          privateTag: sql`COALESCE(${paymentRecords.privateTag}, excluded.private_tag)`
+          tokenAddress: sql`COALESCE(${paymentRecords.tokenAddress}, excluded.token_address)`,
+          xdcidFeeAtomic: sql`COALESCE(${paymentRecords.xdcidFeeAtomic}, excluded.xdcid_fee_atomic)`,
+          circleFeeAtomic: sql`COALESCE(${paymentRecords.circleFeeAtomic}, excluded.circle_fee_atomic)`,
+          updatedAt: new Date()
         },
         setWhere: sql`
           ${paymentRecords.creator} = excluded.creator AND
@@ -102,6 +159,18 @@ implements PaymentHistoryRepository {
       .returning({ id: paymentRecords.id });
     if (saved.length !== 1) {
       throw new Error("Transaction hash is already assigned to a different payment");
+    }
+    if (privateCiphertext && privateIv && privateTag) {
+      await getDatabase()
+        .insert(paymentPrivateContexts)
+        .values({
+          paymentRecordId: saved[0].id,
+          ciphertext: privateCiphertext,
+          iv: privateIv,
+          tag: privateTag,
+          keyVersion: 1
+        })
+        .onConflictDoNothing();
     }
   }
 
@@ -186,16 +255,24 @@ implements PaymentHistoryRepository {
     }
 
     const databaseQuery = getDatabase()
-      .select()
+      .select({
+        payment: paymentRecords,
+        privateContext: paymentPrivateContexts
+      })
       .from(paymentRecords)
+      .leftJoin(
+        paymentPrivateContexts,
+        eq(paymentPrivateContexts.paymentRecordId, paymentRecords.id)
+      )
       .where(and(...conditions))
       .orderBy(desc(paymentRecords.completedAt));
     const requestedLimit = query.limit === null
       ? null
       : Math.min(Math.max(query.limit ?? 100, 1), 500);
-    return requestedLimit === null
-      ? databaseQuery
-      : databaseQuery.limit(requestedLimit);
+    const rows = requestedLimit === null
+      ? await databaseQuery
+      : await databaseQuery.limit(requestedLimit);
+    return rows.map(toPaymentRecord);
   }
 
   async findParticipantPayment(
@@ -204,8 +281,15 @@ implements PaymentHistoryRepository {
   ): Promise<PaymentRecord | undefined> {
     await this.ensureSchema();
     const [record] = await getDatabase()
-      .select()
+      .select({
+        payment: paymentRecords,
+        privateContext: paymentPrivateContexts
+      })
       .from(paymentRecords)
+      .leftJoin(
+        paymentPrivateContexts,
+        eq(paymentPrivateContexts.paymentRecordId, paymentRecords.id)
+      )
       .where(and(
         eq(paymentRecords.id, recordId),
         or(
@@ -214,7 +298,7 @@ implements PaymentHistoryRepository {
         )
       ))
       .limit(1);
-    return record;
+    return record ? toPaymentRecord(record) : undefined;
   }
 
   async deleteExpiredChallenges(now: Date): Promise<number> {
@@ -229,3 +313,19 @@ implements PaymentHistoryRepository {
 
 export const paymentHistoryRepository: PaymentHistoryRepository =
   new PostgresPaymentHistoryRepository();
+
+
+function toPaymentRecord(row: {
+  payment: typeof paymentRecords.$inferSelect;
+  privateContext: typeof paymentPrivateContexts.$inferSelect | null;
+}): PaymentRecord {
+  return {
+    ...row.payment,
+    transactionType: row.payment.transactionType as PaymentRecord["transactionType"],
+    completionMethod: row.payment.completionMethod as PaymentRecord["completionMethod"],
+    paymentChannel: row.payment.paymentChannel as PaymentRecord["paymentChannel"],
+    privateCiphertext: row.privateContext?.ciphertext ?? row.payment.privateCiphertext,
+    privateIv: row.privateContext?.iv ?? row.payment.privateIv,
+    privateTag: row.privateContext?.tag ?? row.payment.privateTag
+  };
+}
