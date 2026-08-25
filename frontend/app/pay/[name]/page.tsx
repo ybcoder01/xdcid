@@ -378,7 +378,7 @@ export default function PayRequestPage() {
           description: memo.trim(),
           paymentChannel: "pay_link",
           completionMethod: metadata?.completionMethod ||
-            (sourceChainId === destinationChainId ? "direct" : "standard"),
+            (route.sourceChainId === route.destinationChainId ? "direct" : "standard"),
           xdcidFeeAtomic: metadata?.xdcidFeeAtomic,
           circleFeeAtomic: metadata?.circleFeeAtomic
       });
