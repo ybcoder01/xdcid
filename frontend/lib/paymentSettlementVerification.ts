@@ -44,13 +44,13 @@ export type SettlementVerificationInput = {
   recipient: Address;
   sourceTransactionHash: Hash;
   destinationTransactionHash?: Hash;
-  circleFeeAtomic: bigint;
 };
 
 export type VerifiedSettlement = {
   payer: Address;
   sourceTransactionHash: Hash;
   destinationTransactionHash?: Hash;
+  circleFeeAtomic: bigint;
 };
 
 export async function verifySettlement(
