@@ -3,11 +3,20 @@ import { getAddress } from "viem";
 
 const FINGERPRINT_DOMAIN = "xdcid:payment-participant:v1";
 
+function fingerprintSecret(): string {
+  const dedicatedSecret = process.env.PAYMENT_PARTICIPANT_FINGERPRINT_KEY?.trim();
+  if (dedicatedSecret) return dedicatedSecret;
+
+  const legacySecret = process.env.PAYMENT_RECORD_ENCRYPTION_KEY?.trim();
+  if (!legacySecret) {
+    throw new Error("Payment participant fingerprinting is not configured");
+  }
+  return legacySecret;
+}
+
 export function paymentParticipantFingerprint(rawAddress: string): string {
-  const secret = process.env.PAYMENT_RECORD_ENCRYPTION_KEY;
-  if (!secret) throw new Error("Payment record encryption is not configured");
   const address = getAddress(rawAddress).toLowerCase();
-  return createHmac("sha256", secret)
+  return createHmac("sha256", fingerprintSecret())
     .update(FINGERPRINT_DOMAIN)
     .update("\0")
     .update(address)
