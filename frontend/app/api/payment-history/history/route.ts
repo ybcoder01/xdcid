@@ -3,6 +3,7 @@ import {
   isPaymentHistoryConfigured,
   readAuthorizedPaymentHistory
 } from "../../../../lib/paymentHistory";
+import { parsePaymentHistoryFilters } from "../../../../lib/paymentHistoryFilters";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
     const body = await request.json() as {
       challengeId?: unknown;
       signature?: unknown;
+      filters?: unknown;
     };
     if (
       typeof body.challengeId !== "string" ||
@@ -25,7 +27,8 @@ export async function POST(request: Request) {
     }
     const records = await readAuthorizedPaymentHistory(
       body.challengeId,
-      body.signature
+      body.signature,
+      parsePaymentHistoryFilters(body.filters)
     );
     if (!records) return json({ error: "Payment history access was denied" }, 403);
     return json({ records });
