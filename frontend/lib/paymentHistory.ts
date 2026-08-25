@@ -2,7 +2,12 @@ import { randomBytes } from "node:crypto";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { decryptPaymentContext, encryptPaymentContext } from "./paymentRecordCrypto";
 import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryRepository";
-import type { PaymentRecord } from "./repositories/paymentHistoryRepository";
+import type {
+  PaymentChannel,
+  PaymentCompletionMethod,
+  PaymentRecord,
+  PaymentTransactionType
+} from "./repositories/paymentHistoryRepository";
 
 const ACCESS_TTL_MS = 5 * 60 * 1000;
 
@@ -30,7 +35,13 @@ export type CompletedPaymentInput = {
   payer: Address;
   amountAtomic: string;
   token: string;
+  tokenAddress?: Address;
   tokenDecimals: number;
+  transactionType: PaymentTransactionType;
+  completionMethod: PaymentCompletionMethod;
+  paymentChannel: PaymentChannel;
+  xdcidFeeAtomic?: string;
+  circleFeeAtomic?: string;
   sourceChainId: number;
   destinationChainId: number;
   sourceTransactionHash: Hex;
@@ -60,7 +71,14 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     payer: getAddress(input.payer).toLowerCase(),
     amountAtomic: input.amountAtomic,
     token: input.token,
+    tokenAddress: input.tokenAddress?.toLowerCase() ?? null,
     tokenDecimals: input.tokenDecimals,
+    transactionType: input.transactionType,
+    completionMethod: input.completionMethod,
+    paymentChannel: input.paymentChannel,
+    xdcidFeeAtomic: input.xdcidFeeAtomic ?? null,
+    circleFeeAtomic: input.circleFeeAtomic ?? null,
+    schemaVersion: 2,
     sourceChainId: input.sourceChainId,
     destinationChainId: input.destinationChainId,
     sourceTransactionHash: input.sourceTransactionHash.toLowerCase(),
