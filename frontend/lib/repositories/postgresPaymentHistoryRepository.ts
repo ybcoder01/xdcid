@@ -377,7 +377,7 @@ implements PaymentHistoryRepository {
           eq(paymentParticipantAccess.participantFingerprint, query.participantFingerprint),
           eq(paymentParticipantAccess.role, query.direction === "outgoing" ? "sender" : "receiver")
         ))
-      );
+      ));
     }
     if (query.transactionType) {
       conditions.push(eq(paymentRecords.transactionType, query.transactionType));
