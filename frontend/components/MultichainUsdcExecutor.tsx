@@ -121,6 +121,7 @@ export function MultichainUsdcExecutor({
   const [feeHash, setFeeHash] = useState<Hash | "">("");
   const [recoveryFeeHash, setRecoveryFeeHash] = useState("");
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveredMode, setRecoveredMode] = useState(false);
   const [recoveryMessage, setRecoveryMessage] = useState("");
   const [recoveryStatus, setRecoveryStatus] = useState<
     "idle" | "checking" | "ready" | "error"
@@ -143,12 +144,12 @@ export function MultichainUsdcExecutor({
     if (reportedSettlement.current === key) return;
     reportedSettlement.current = key;
     let metadata: PaymentCompletionMetadata = {
-      completionMethod: recoveryFeeHash ? "recovered" : "standard"
+      completionMethod: recoveredMode ? "recovered" : "standard"
     };
     if (automaticForwarding && forwardingQuote) {
       const recipientAmount = parseMainnetUsdcAmount(amount);
       metadata = {
-        completionMethod: recoveryFeeHash ? "recovered" : "automatic",
+        completionMethod: recoveredMode ? "recovered" : "automatic",
         xdcidFeeAtomic: calculateXdcidConvenienceFee(recipientAmount).toString(),
         circleFeeAtomic: (
           forwardingQuote.forwardFee +
@@ -170,7 +171,7 @@ export function MultichainUsdcExecutor({
     onCompleted,
     phase,
     receiveHash,
-    recoveryFeeHash
+    recoveredMode
   ]);
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
@@ -209,6 +210,7 @@ export function MultichainUsdcExecutor({
 
   useEffect(() => {
     setRecoveryReady(false);
+    setRecoveredMode(false);
     setRecoveryMessage("");
     setRecoveryStatus("idle");
     setFeeHash("");
@@ -525,6 +527,7 @@ export function MultichainUsdcExecutor({
       ) {
         throw new Error("Connect the wallet that submitted the fee transaction");
       }
+      setRecoveredMode(true);
       if (response.status === "used") {
         const restoredBurnHash = response.burnTransactionHash;
         if (
