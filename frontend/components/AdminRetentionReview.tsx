@@ -60,6 +60,16 @@ export function AdminRetentionReview() {
 
   async function review(action: "held" | "approved") {
     if (!preview) return;
+    if (
+      action === "approved" &&
+      !window.confirm(
+        "Approve deletion of exactly " + preview.counts.eligible +
+        " completed payment record(s) after the next authenticated retention run?\\n\\n" +
+        "Manifest: " + preview.manifestHash
+      )
+    ) {
+      return;
+    }
     setUpdating(action);
     setError("");
     try {
