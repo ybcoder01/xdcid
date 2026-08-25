@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, gte, isNull, lt, lte, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "../db/client";
 import { paymentAccessChallenges, paymentRecords } from "../db/schema";
 import type {
@@ -78,7 +78,31 @@ implements PaymentHistoryRepository {
 
   async saveCompletedPayment(record: PaymentRecordWrite): Promise<void> {
     await this.ensureSchema();
-    await getDatabase().insert(paymentRecords).values(record).onConflictDoNothing();
+    const saved = await getDatabase()
+      .insert(paymentRecords)
+      .values(record)
+      .onConflictDoUpdate({
+        target: paymentRecords.sourceTransactionHash,
+        set: {
+          destinationTransactionHash: sql`COALESCE(${paymentRecords.destinationTransactionHash}, excluded.destination_transaction_hash)`,
+          privateCiphertext: sql`COALESCE(${paymentRecords.privateCiphertext}, excluded.private_ciphertext)`,
+          privateIv: sql`COALESCE(${paymentRecords.privateIv}, excluded.private_iv)`,
+          privateTag: sql`COALESCE(${paymentRecords.privateTag}, excluded.private_tag)`
+        },
+        setWhere: sql`
+          ${paymentRecords.creator} = excluded.creator AND
+          ${paymentRecords.payer} = excluded.payer AND
+          ${paymentRecords.amountAtomic} = excluded.amount_atomic AND
+          ${paymentRecords.token} = excluded.token AND
+          ${paymentRecords.tokenDecimals} = excluded.token_decimals AND
+          ${paymentRecords.sourceChainId} = excluded.source_chain_id AND
+          ${paymentRecords.destinationChainId} = excluded.destination_chain_id
+        `
+      })
+      .returning({ id: paymentRecords.id });
+    if (saved.length !== 1) {
+      throw new Error("Transaction hash is already assigned to a different payment");
+    }
   }
 
   async findParticipants(recordId: string) {

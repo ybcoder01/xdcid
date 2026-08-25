@@ -35,6 +35,10 @@ import { MultichainUsdcExecutor } from "../../../components/MultichainUsdcExecut
 import { parseXnsName } from "../../../lib/names";
 import { paymentRequestId } from "../../../lib/paymentCancellation";
 import { selectPaymentDestination } from "../../../lib/paymentPreparation";
+import {
+  installPaymentCompletionRetry,
+  submitPaymentCompletion
+} from "../../../lib/paymentCompletionQueue";
 import { useRegistryStatus } from "../../../lib/useRegistryStatus";
 import {
   inspectAccountDeployment,
@@ -209,6 +213,8 @@ export default function PayRequestPage() {
   const [accountDeployment, setAccountDeployment] = useState<AccountDeploymentState>("unknown");
   const [historyStatus, setHistoryStatus] = useState("");
   const recordingHashes = useRef(new Set<string>());
+
+  useEffect(() => installPaymentCompletionRetry(), []);
   const nativePayment = useSendTransaction();
   const transactionHash = nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
@@ -355,10 +361,7 @@ export default function PayRequestPage() {
     recordingHashes.current.add(key);
     setHistoryStatus("Verifying payment for private history...");
     try {
-      const response = await fetch("/api/payment-history/complete", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      await submitPaymentCompletion({
           name: parsedName.name,
           sourceChainId: route.sourceChainId,
           destinationChainId: route.destinationChainId,
@@ -369,10 +372,7 @@ export default function PayRequestPage() {
           destinationTransactionHash,
           reference: reference.trim(),
           description: memo.trim()
-        })
       });
-      const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Payment history could not be recorded");
       setHistoryStatus("Payment added to private history.");
     } catch (cause) {
       recordingHashes.current.delete(key);
