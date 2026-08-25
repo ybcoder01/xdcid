@@ -125,4 +125,5 @@ export interface PaymentHistoryRepository {
     participantFingerprint: string
   ): Promise<PaymentRecord | undefined>;
   deleteExpiredChallenges(now: Date): Promise<number>;
+  deletePaymentRecordsByIds(ids: string[]): Promise<number>;
 }
