@@ -158,9 +158,10 @@ export const paymentRecords = pgTable(
   {
     id: varchar("id", { length: 40 }).primaryKey(),
     requestId: varchar("request_id", { length: 66 }).notNull(),
-    name: varchar("name", { length: 255 }).notNull(),
-    creator: varchar("creator", { length: 42 }).notNull(),
-    payer: varchar("payer", { length: 42 }).notNull(),
+    name: text("name").notNull(),
+    nameFingerprint: varchar("name_fingerprint", { length: 64 }),
+    creator: text("creator").notNull(),
+    payer: text("payer").notNull(),
     amountAtomic: varchar("amount_atomic", { length: 80 }).notNull(),
     token: varchar("token", { length: 32 }).notNull(),
     tokenAddress: varchar("token_address", { length: 42 }),
@@ -185,8 +186,7 @@ export const paymentRecords = pgTable(
   },
   (table) => [
     uniqueIndex("payment_records_source_tx_uidx").on(table.sourceTransactionHash),
-    index("payment_records_creator_idx").on(table.creator),
-    index("payment_records_payer_idx").on(table.payer)
+    index("payment_records_name_fingerprint_idx").on(table.nameFingerprint)
   ]
 );
 
