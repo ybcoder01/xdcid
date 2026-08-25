@@ -670,7 +670,7 @@ export function MultichainUsdcExecutor({
           </p>
           <p className="mt-1 text-xs text-neutral-600">
             Verify the public XDCID fee transaction and retry without paying
-            the convenience fee again. Recovery records expire after 30 days.
+            the convenience fee again. Recovery records expire after 7 days.
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
             <input
