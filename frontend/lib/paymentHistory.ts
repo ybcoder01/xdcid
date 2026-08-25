@@ -1,13 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, gte, isNull, lt, lte, or, type SQL } from "drizzle-orm";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
-import { getDatabase, isDatabaseConfigured } from "./db/client";
-import { paymentAccessChallenges, paymentRecords } from "./db/schema";
-import {
-  decryptPaymentContext,
-  encryptPaymentContext
-} from "./paymentRecordCrypto";
+import { decryptPaymentContext, encryptPaymentContext } from "./paymentRecordCrypto";
+import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryRepository";
+import type { PaymentRecord } from "./repositories/paymentHistoryRepository";
 
 const ACCESS_TTL_MS = 5 * 60 * 1000;
 
@@ -45,61 +40,19 @@ export type CompletedPaymentInput = {
 };
 
 export function isPaymentHistoryConfigured(): boolean {
-  return isDatabaseConfigured() && Boolean(process.env.PAYMENT_RECORD_ENCRYPTION_KEY);
+  return paymentHistoryRepository.isConfigured()
+    && Boolean(process.env.PAYMENT_RECORD_ENCRYPTION_KEY);
 }
 
 export async function ensurePaymentHistorySchema(): Promise<void> {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("Payment history storage is not configured");
-  const client = neon(connectionString);
-  await client`
-    CREATE TABLE IF NOT EXISTS payment_records (
-      id varchar(40) PRIMARY KEY,
-      request_id varchar(66) NOT NULL,
-      name varchar(255) NOT NULL,
-      creator varchar(42) NOT NULL,
-      payer varchar(42) NOT NULL,
-      amount_atomic varchar(80) NOT NULL,
-      token varchar(32) NOT NULL,
-      token_decimals integer NOT NULL,
-      source_chain_id integer NOT NULL,
-      destination_chain_id integer NOT NULL,
-      source_transaction_hash varchar(66) NOT NULL UNIQUE,
-      destination_transaction_hash varchar(66),
-      private_ciphertext text,
-      private_iv varchar(64),
-      private_tag varchar(64),
-      completed_at timestamptz NOT NULL,
-      expires_at timestamptz,
-      created_at timestamptz NOT NULL DEFAULT now()
-    )
-  `;
-  await client`ALTER TABLE payment_records ALTER COLUMN expires_at DROP NOT NULL`;
-  await client`CREATE INDEX IF NOT EXISTS payment_records_creator_idx ON payment_records (creator)`;
-  await client`CREATE INDEX IF NOT EXISTS payment_records_payer_idx ON payment_records (payer)`;
-  await client`
-    CREATE TABLE IF NOT EXISTS payment_access_challenges (
-      id varchar(40) PRIMARY KEY,
-      payment_record_id varchar(40) REFERENCES payment_records(id) ON DELETE CASCADE,
-      address varchar(42) NOT NULL,
-      message text NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      expires_at timestamptz NOT NULL,
-      used_at timestamptz
-    )
-  `;
-  await client`ALTER TABLE payment_access_challenges ALTER COLUMN payment_record_id DROP NOT NULL`;
-  await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_record_idx ON payment_access_challenges (payment_record_id)`;
-  await client`CREATE INDEX IF NOT EXISTS payment_access_challenges_expires_idx ON payment_access_challenges (expires_at)`;
+  await paymentHistoryRepository.ensureSchema();
 }
 
 export async function saveCompletedPayment(input: CompletedPaymentInput): Promise<void> {
-  await ensurePaymentHistorySchema();
-  const completedAt = input.completedAt || new Date();
   const encrypted = input.privateContext
     ? encryptPaymentContext(input.privateContext)
     : undefined;
-  await getDatabase().insert(paymentRecords).values({
+  await paymentHistoryRepository.saveCompletedPayment({
     id: input.id,
     requestId: input.requestId,
     name: input.name,
@@ -111,68 +64,55 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     sourceChainId: input.sourceChainId,
     destinationChainId: input.destinationChainId,
     sourceTransactionHash: input.sourceTransactionHash.toLowerCase(),
-    destinationTransactionHash: input.destinationTransactionHash?.toLowerCase(),
-    privateCiphertext: encrypted?.ciphertext,
-    privateIv: encrypted?.iv,
-    privateTag: encrypted?.tag,
-    completedAt,
+    destinationTransactionHash: input.destinationTransactionHash?.toLowerCase() ?? null,
+    privateCiphertext: encrypted?.ciphertext ?? null,
+    privateIv: encrypted?.iv ?? null,
+    privateTag: encrypted?.tag ?? null,
+    completedAt: input.completedAt || new Date(),
     expiresAt: null
-  }).onConflictDoNothing();
+  });
 }
 
-export async function createPaymentAccessChallenge(recordId: string, rawAddress: string) {
-  await ensurePaymentHistorySchema();
+export async function createPaymentAccessChallenge(
+  recordId: string,
+  rawAddress: string
+) {
   const address = getAddress(rawAddress).toLowerCase();
-  const [record] = await getDatabase().select({
-    creator: paymentRecords.creator,
-    payer: paymentRecords.payer
-  }).from(paymentRecords).where(eq(paymentRecords.id, recordId)).limit(1);
-  if (!record) return undefined;
-  if (address !== record.creator && address !== record.payer) return undefined;
-
-  const id = randomBytes(18).toString("base64url");
-  const expiresAt = new Date(Date.now() + ACCESS_TTL_MS);
-  const message = [
-    "XDCID private payment receipt access",
-    "Record: " + recordId,
-    "Wallet: " + getAddress(address),
-    "Challenge: " + id,
-    "Expires: " + expiresAt.toISOString(),
-    "",
-    "This signature is gasless and does not authorize a transaction."
-  ].join("\n");
-  await getDatabase().insert(paymentAccessChallenges).values({
-    id,
-    paymentRecordId: recordId,
-    address,
-    message,
-    expiresAt
-  });
-  return { challengeId: id, message, expiresAt };
+  const record = await paymentHistoryRepository.findParticipants(recordId);
+  if (!record || (address !== record.creator && address !== record.payer)) {
+    return undefined;
+  }
+  return createChallenge(recordId, address, "receipt", recordId);
 }
 
 export async function createPaymentHistoryChallenge(rawAddress: string) {
-  await ensurePaymentHistorySchema();
   const address = getAddress(rawAddress).toLowerCase();
-  const [record] = await getDatabase().select({ id: paymentRecords.id })
-    .from(paymentRecords)
-    .where(or(eq(paymentRecords.creator, address), eq(paymentRecords.payer, address)))
-    .limit(1);
-  if (!record) return undefined;
+  if (!await paymentHistoryRepository.hasParticipantPayments(address)) {
+    return undefined;
+  }
+  return createChallenge(null, address, "history");
+}
 
+async function createChallenge(
+  paymentRecordId: string | null,
+  address: string,
+  scope: "receipt" | "history",
+  recordId?: string
+) {
   const id = randomBytes(18).toString("base64url");
   const expiresAt = new Date(Date.now() + ACCESS_TTL_MS);
   const message = [
-    "XDCID private payment history access",
+    `XDCID private payment ${scope} access`,
+    ...(recordId ? ["Record: " + recordId] : []),
     "Wallet: " + getAddress(address),
     "Challenge: " + id,
     "Expires: " + expiresAt.toISOString(),
     "",
     "This signature is gasless and does not authorize a transaction."
   ].join("\n");
-  await getDatabase().insert(paymentAccessChallenges).values({
+  await paymentHistoryRepository.createChallenge({
     id,
-    paymentRecordId: null,
+    paymentRecordId,
     address,
     message,
     expiresAt
@@ -185,76 +125,24 @@ export async function readAuthorizedPaymentHistory(
   signature: Hex,
   filters?: PaymentHistoryFilters
 ) {
-  await ensurePaymentHistorySchema();
-  const now = new Date();
-  const [challenge] = await getDatabase().select().from(paymentAccessChallenges).where(
-    and(
-      eq(paymentAccessChallenges.id, challengeId),
-      isNull(paymentAccessChallenges.paymentRecordId),
-      isNull(paymentAccessChallenges.usedAt)
-    )
-  ).limit(1);
-  if (!challenge || challenge.expiresAt <= now) return undefined;
+  const challenge = await authorizeChallenge(challengeId, null, signature);
+  if (!challenge) return undefined;
 
-  const recovered = (await recoverMessageAddress({
-    message: challenge.message,
-    signature
-  })).toLowerCase();
-  if (recovered !== challenge.address) return undefined;
-
-  await getDatabase().update(paymentAccessChallenges)
-    .set({ usedAt: now })
-    .where(eq(paymentAccessChallenges.id, challengeId));
-
-  const participant = or(
-    eq(paymentRecords.creator, recovered),
-    eq(paymentRecords.payer, recovered)
-  );
-  if (!participant) return [];
-
-  const conditions: SQL[] = [participant];
-  if (filters?.from) conditions.push(gte(paymentRecords.completedAt, filters.from));
-  if (filters?.to) conditions.push(lte(paymentRecords.completedAt, filters.to));
-  if (filters?.token) conditions.push(eq(paymentRecords.token, filters.token.toUpperCase()));
-  if (filters?.sourceChainId) {
-    conditions.push(eq(paymentRecords.sourceChainId, filters.sourceChainId));
-  }
-  if (filters?.destinationChainId) {
-    conditions.push(eq(paymentRecords.destinationChainId, filters.destinationChainId));
-  }
-  if (filters?.name) {
-    conditions.push(eq(paymentRecords.name, filters.name.toLowerCase()));
-  }
-  if (filters?.counterparty) {
-    const counterparty = getAddress(filters.counterparty).toLowerCase();
-    const counterpartyMatch = or(
-      eq(paymentRecords.creator, counterparty),
-      eq(paymentRecords.payer, counterparty)
-    );
-    if (counterpartyMatch) conditions.push(counterpartyMatch);
-  }
-
-  const query = getDatabase().select().from(paymentRecords)
-    .where(and(...conditions))
-    .orderBy(desc(paymentRecords.completedAt));
-  const requestedLimit = filters?.limit === null
-    ? null
-    : Math.min(Math.max(filters?.limit ?? 100, 1), 500);
-  const records = requestedLimit === null
-    ? await query
-    : await query.limit(requestedLimit);
-
-  return records.map((record) => {
-    let privateContext: PrivatePaymentContext | undefined;
-    if (record.privateCiphertext && record.privateIv && record.privateTag) {
-      privateContext = decryptPaymentContext<PrivatePaymentContext>({
-        ciphertext: record.privateCiphertext,
-        iv: record.privateIv,
-        tag: record.privateTag
-      });
-    }
-    return { ...record, privateContext };
+  const counterparty = filters?.counterparty
+    ? getAddress(filters.counterparty).toLowerCase()
+    : undefined;
+  const records = await paymentHistoryRepository.listParticipantPayments({
+    participant: challenge.address,
+    from: filters?.from,
+    to: filters?.to,
+    token: filters?.token,
+    sourceChainId: filters?.sourceChainId,
+    destinationChainId: filters?.destinationChainId,
+    name: filters?.name,
+    counterparty,
+    limit: filters?.limit
   });
+  return records.map(withPrivateContext);
 }
 
 export async function readAuthorizedPayment(
@@ -262,15 +150,26 @@ export async function readAuthorizedPayment(
   challengeId: string,
   signature: Hex
 ) {
-  await ensurePaymentHistorySchema();
+  const challenge = await authorizeChallenge(challengeId, recordId, signature);
+  if (!challenge) return undefined;
+
+  const record = await paymentHistoryRepository.findParticipantPayment(
+    recordId,
+    challenge.address
+  );
+  return record ? withPrivateContext(record) : undefined;
+}
+
+async function authorizeChallenge(
+  challengeId: string,
+  paymentRecordId: string | null,
+  signature: Hex
+) {
+  const challenge = await paymentHistoryRepository.findUnusedChallenge(
+    challengeId,
+    paymentRecordId
+  );
   const now = new Date();
-  const [challenge] = await getDatabase().select().from(paymentAccessChallenges).where(
-    and(
-      eq(paymentAccessChallenges.id, challengeId),
-      eq(paymentAccessChallenges.paymentRecordId, recordId),
-      isNull(paymentAccessChallenges.usedAt)
-    )
-  ).limit(1);
   if (!challenge || challenge.expiresAt <= now) return undefined;
 
   const recovered = (await recoverMessageAddress({
@@ -279,21 +178,11 @@ export async function readAuthorizedPayment(
   })).toLowerCase();
   if (recovered !== challenge.address) return undefined;
 
-  const [record] = await getDatabase().select().from(paymentRecords).where(
-    and(
-      eq(paymentRecords.id, recordId),
-      or(
-        eq(paymentRecords.creator, recovered),
-        eq(paymentRecords.payer, recovered)
-      )
-    )
-  ).limit(1);
-  if (!record) return undefined;
+  await paymentHistoryRepository.markChallengeUsed(challengeId, now);
+  return challenge;
+}
 
-  await getDatabase().update(paymentAccessChallenges)
-    .set({ usedAt: now })
-    .where(eq(paymentAccessChallenges.id, challengeId));
-
+function withPrivateContext(record: PaymentRecord) {
   let privateContext: PrivatePaymentContext | undefined;
   if (record.privateCiphertext && record.privateIv && record.privateTag) {
     privateContext = decryptPaymentContext<PrivatePaymentContext>({
@@ -306,9 +195,5 @@ export async function readAuthorizedPayment(
 }
 
 export async function removeExpiredPaymentData(now = new Date()): Promise<number> {
-  await ensurePaymentHistorySchema();
-  const deleted = await getDatabase().delete(paymentAccessChallenges)
-    .where(lt(paymentAccessChallenges.expiresAt, now))
-    .returning({ id: paymentAccessChallenges.id });
-  return deleted.length;
+  return paymentHistoryRepository.deleteExpiredChallenges(now);
 }
