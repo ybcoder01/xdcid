@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, exists, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, exists, gte, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "../db/client";
 import {
   paymentAccessChallenges,
@@ -13,8 +13,7 @@ import {
 } from "../paymentParticipantFingerprint";
 import {
   decryptPaymentIdentity,
-  encryptPaymentIdentity,
-  isEncryptedPaymentIdentity
+  encryptPaymentIdentity
 } from "../paymentRecordCrypto";
 import type {
   PaymentAccessChallenge,
@@ -144,11 +143,11 @@ async function createSchema(): Promise<void> {
     const archiveAccessExpiresAt = addUtcMonths(completedAt, 84);
     const participants = [
       {
-        fingerprint: paymentParticipantFingerprint(String(payment.payer)),
+        fingerprint: paymentParticipantFingerprint(decryptPaymentIdentity(String(payment.payer))),
         role: "sender"
       },
       {
-        fingerprint: paymentParticipantFingerprint(String(payment.creator)),
+        fingerprint: paymentParticipantFingerprint(decryptPaymentIdentity(String(payment.creator))),
         role: "receiver"
       }
     ] as const;
