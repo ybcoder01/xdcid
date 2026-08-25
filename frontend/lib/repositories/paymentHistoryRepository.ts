@@ -4,6 +4,21 @@ export type StoredPrivatePaymentContext = {
   tag: string;
 };
 
+export type PaymentTransactionType =
+  | "native"
+  | "same_chain_usdc"
+  | "cross_chain_usdc"
+  | "legacy";
+
+export type PaymentCompletionMethod =
+  | "direct"
+  | "standard"
+  | "automatic"
+  | "recovered"
+  | "wallet";
+
+export type PaymentChannel = "send" | "pay_link";
+
 export type PaymentRecord = {
   id: string;
   requestId: string;
@@ -12,7 +27,14 @@ export type PaymentRecord = {
   payer: string;
   amountAtomic: string;
   token: string;
+  tokenAddress: string | null;
   tokenDecimals: number;
+  transactionType: PaymentTransactionType;
+  completionMethod: PaymentCompletionMethod;
+  paymentChannel: PaymentChannel;
+  xdcidFeeAtomic: string | null;
+  circleFeeAtomic: string | null;
+  schemaVersion: number;
   sourceChainId: number;
   destinationChainId: number;
   sourceTransactionHash: string;
@@ -23,9 +45,10 @@ export type PaymentRecord = {
   completedAt: Date;
   expiresAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
 };
 
-export type PaymentRecordWrite = Omit<PaymentRecord, "createdAt">;
+export type PaymentRecordWrite = Omit<PaymentRecord, "createdAt" | "updatedAt">;
 
 export type PaymentHistoryQuery = {
   participant: string;
