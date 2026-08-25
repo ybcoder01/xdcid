@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, exists, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, exists, gte, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "../db/client";
 import {
   paymentAccessChallenges,
@@ -7,7 +7,14 @@ import {
   paymentPrivateContexts,
   paymentRecords
 } from "../db/schema";
-import { paymentParticipantFingerprint } from "../paymentParticipantFingerprint";
+import {
+  paymentNameFingerprint,
+  paymentParticipantFingerprint
+} from "../paymentParticipantFingerprint";
+import {
+  decryptPaymentIdentity,
+  encryptPaymentIdentity
+} from "../paymentRecordCrypto";
 import type {
   PaymentAccessChallenge,
   PaymentAccessChallengeWrite,
@@ -50,6 +57,10 @@ async function createSchema(): Promise<void> {
     )
   `;
   await client`ALTER TABLE payment_records ALTER COLUMN expires_at DROP NOT NULL`;
+  await client`ALTER TABLE payment_records ALTER COLUMN name TYPE text`;
+  await client`ALTER TABLE payment_records ALTER COLUMN creator TYPE text`;
+  await client`ALTER TABLE payment_records ALTER COLUMN payer TYPE text`;
+  await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS name_fingerprint varchar(64)`;
   await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS token_address varchar(42)`;
   await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS transaction_type varchar(32) NOT NULL DEFAULT 'legacy'`;
   await client`ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS completion_method varchar(32) NOT NULL DEFAULT 'wallet'`;
@@ -67,10 +78,16 @@ async function createSchema(): Promise<void> {
     END
     WHERE transaction_type = 'legacy'
   `;
-  await client`CREATE INDEX IF NOT EXISTS payment_records_creator_idx ON payment_records (creator)`;
-  await client`CREATE INDEX IF NOT EXISTS payment_records_payer_idx ON payment_records (payer)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_records_name_fingerprint_idx ON payment_records (name_fingerprint)`;
   await client`CREATE INDEX IF NOT EXISTS payment_records_completed_at_idx ON payment_records (completed_at)`;
   await client`CREATE INDEX IF NOT EXISTS payment_records_type_idx ON payment_records (transaction_type)`;
+  const plaintextIdentities = await client`SELECT id, name, creator, payer FROM payment_records WHERE name NOT LIKE 'xdcidenc:%' OR creator NOT LIKE 'xdcidenc:%' OR payer NOT LIKE 'xdcidenc:%'`;
+  for (const row of plaintextIdentities) {
+    const name = String(row.name);
+    const creator = String(row.creator);
+    const payer = String(row.payer);
+    await client`UPDATE payment_records SET name = ${encryptPaymentIdentity(name)}, name_fingerprint = ${paymentNameFingerprint(name)}, creator = ${encryptPaymentIdentity(creator)}, payer = ${encryptPaymentIdentity(payer)}, updated_at = now() WHERE id = ${String(row.id)}`;
+  }
   await client`
     CREATE TABLE IF NOT EXISTS payment_private_contexts (
       payment_record_id varchar(40) PRIMARY KEY REFERENCES payment_records(id) ON DELETE CASCADE,
@@ -126,11 +143,11 @@ async function createSchema(): Promise<void> {
     const archiveAccessExpiresAt = addUtcMonths(completedAt, 84);
     const participants = [
       {
-        fingerprint: paymentParticipantFingerprint(String(payment.payer)),
+        fingerprint: paymentParticipantFingerprint(decryptPaymentIdentity(String(payment.payer))),
         role: "sender"
       },
       {
-        fingerprint: paymentParticipantFingerprint(String(payment.creator)),
+        fingerprint: paymentParticipantFingerprint(decryptPaymentIdentity(String(payment.creator))),
         role: "receiver"
       }
     ] as const;
@@ -203,6 +220,9 @@ implements PaymentHistoryRepository {
       .insert(paymentRecords)
       .values({
         ...canonicalRecord,
+        name: encryptPaymentIdentity(canonicalRecord.name),
+        creator: encryptPaymentIdentity(canonicalRecord.creator),
+        payer: encryptPaymentIdentity(canonicalRecord.payer),
         privateCiphertext: null,
         privateIv: null,
         privateTag: null
@@ -217,8 +237,6 @@ implements PaymentHistoryRepository {
           updatedAt: new Date()
         },
         setWhere: sql`
-          ${paymentRecords.creator} = excluded.creator AND
-          ${paymentRecords.payer} = excluded.payer AND
           ${paymentRecords.amountAtomic} = excluded.amount_atomic AND
           ${paymentRecords.token} = excluded.token AND
           ${paymentRecords.tokenDecimals} = excluded.token_decimals AND
@@ -352,10 +370,14 @@ implements PaymentHistoryRepository {
     );
 
     const conditions: SQL[] = [participant];
-    if (query.direction === "outgoing") {
-      conditions.push(eq(paymentRecords.payer, query.participantAddress));
-    } else if (query.direction === "incoming") {
-      conditions.push(eq(paymentRecords.creator, query.participantAddress));
+    if (query.direction) {
+      conditions.push(exists(
+        getDatabase().select({ value: sql`1` }).from(paymentParticipantAccess).where(and(
+          eq(paymentParticipantAccess.paymentRecordId, paymentRecords.id),
+          eq(paymentParticipantAccess.participantFingerprint, query.participantFingerprint),
+          eq(paymentParticipantAccess.role, query.direction === "outgoing" ? "sender" : "receiver")
+        ))
+      ));
     }
     if (query.transactionType) {
       conditions.push(eq(paymentRecords.transactionType, query.transactionType));
@@ -372,13 +394,15 @@ implements PaymentHistoryRepository {
     if (query.destinationChainId) {
       conditions.push(eq(paymentRecords.destinationChainId, query.destinationChainId));
     }
-    if (query.name) conditions.push(eq(paymentRecords.name, query.name.toLowerCase()));
-    if (query.counterparty) {
-      const counterpartyMatch = or(
-        eq(paymentRecords.creator, query.counterparty),
-        eq(paymentRecords.payer, query.counterparty)
-      );
-      if (counterpartyMatch) conditions.push(counterpartyMatch);
+    if (query.nameFingerprint) conditions.push(eq(paymentRecords.nameFingerprint, query.nameFingerprint));
+    if (query.counterpartyFingerprint) {
+      conditions.push(exists(
+        getDatabase().select({ value: sql`1` }).from(paymentParticipantAccess).where(and(
+          eq(paymentParticipantAccess.paymentRecordId, paymentRecords.id),
+          eq(paymentParticipantAccess.participantFingerprint, query.counterpartyFingerprint),
+          isNull(paymentParticipantAccess.accessRevokedAt)
+        ))
+      ));
     }
 
     const databaseQuery = getDatabase()
@@ -471,6 +495,9 @@ function toPaymentRecord(row: {
 }): PaymentRecord {
   return {
     ...row.payment,
+    name: decryptPaymentIdentity(row.payment.name),
+    creator: decryptPaymentIdentity(row.payment.creator),
+    payer: decryptPaymentIdentity(row.payment.payer),
     transactionType: row.payment.transactionType as PaymentRecord["transactionType"],
     completionMethod: row.payment.completionMethod as PaymentRecord["completionMethod"],
     paymentChannel: row.payment.paymentChannel as PaymentRecord["paymentChannel"],

@@ -87,3 +87,33 @@ export function decryptPaymentContext<T>(value: EncryptedPaymentContext): T {
     decipher.update(value.ciphertext, "hex", "utf8") + decipher.final("utf8");
   return JSON.parse(plaintext) as T;
 }
+
+const ENCRYPTED_IDENTITY_PREFIX = "xdcidenc";
+
+export function isEncryptedPaymentIdentity(value: string): boolean {
+  return value.startsWith(ENCRYPTED_IDENTITY_PREFIX + ":");
+}
+
+export function encryptPaymentIdentity(value: string): string {
+  const encrypted = encryptPaymentContext(value);
+  return [
+    ENCRYPTED_IDENTITY_PREFIX,
+    encrypted.keyVersion,
+    Buffer.from(encrypted.iv, "base64").toString("base64url"),
+    Buffer.from(encrypted.tag, "base64").toString("base64url"),
+    Buffer.from(encrypted.ciphertext, "hex").toString("base64url")
+  ].join(":");
+}
+
+export function decryptPaymentIdentity(value: string): string {
+  if (!isEncryptedPaymentIdentity(value)) return value;
+  const parts = value.split(":");
+  if (parts.length !== 5) throw new Error("Encrypted payment identity is malformed");
+  const keyVersion = Number(parts[1]);
+  return decryptPaymentContext<string>({
+    keyVersion,
+    iv: Buffer.from(parts[2], "base64url").toString("base64"),
+    tag: Buffer.from(parts[3], "base64url").toString("base64"),
+    ciphertext: Buffer.from(parts[4], "base64url").toString("hex")
+  });
+}
