@@ -1,7 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { paymentParticipantFingerprint } from "./paymentParticipantFingerprint";
-import { getHistoryAccessPolicy, includedHistoryCutoff } from "./historyAccessPolicy";
+import { hasActiveArchiveEntitlement } from "./archiveEntitlements";
+import {
+  getHistoryAccessPolicy,
+  includedHistoryCutoff,
+  retainedHistoryCutoff
+} from "./historyAccessPolicy";
 import { decryptPaymentContext, encryptPaymentContext } from "./paymentRecordCrypto";
 import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryRepository";
 import type {
@@ -180,13 +185,20 @@ export async function readAuthorizedPaymentHistory(
     ? getAddress(filters.counterparty).toLowerCase()
     : undefined;
   const policy = await getHistoryAccessPolicy();
-  const policyCutoff = includedHistoryCutoff(policy);
+  const participantFingerprint = paymentParticipantFingerprint(challenge.address);
+  const hasArchiveAccess = policy.archiveAccessEnabled && await hasActiveArchiveEntitlement(
+    participantFingerprint,
+    policy.archiveGraceDays
+  );
+  const accessCutoff = hasArchiveAccess
+    ? retainedHistoryCutoff(policy)
+    : includedHistoryCutoff(policy);
   const requestedFrom = filters?.from;
-  const effectiveFrom = requestedFrom && requestedFrom > policyCutoff
+  const effectiveFrom = requestedFrom && requestedFrom > accessCutoff
     ? requestedFrom
-    : policyCutoff;
+    : accessCutoff;
   const records = await paymentHistoryRepository.listParticipantPayments({
-    participantFingerprint: paymentParticipantFingerprint(challenge.address),
+    participantFingerprint,
     participantAddress: challenge.address,
     from: effectiveFrom,
     to: filters?.to,
@@ -220,7 +232,15 @@ export async function readAuthorizedPayment(
   );
   if (!record) return undefined;
   const policy = await getHistoryAccessPolicy();
-  if (record.completedAt < includedHistoryCutoff(policy)) return undefined;
+  const participantFingerprint = paymentParticipantFingerprint(challenge.address);
+  const hasArchiveAccess = policy.archiveAccessEnabled && await hasActiveArchiveEntitlement(
+    participantFingerprint,
+    policy.archiveGraceDays
+  );
+  const accessCutoff = hasArchiveAccess
+    ? retainedHistoryCutoff(policy)
+    : includedHistoryCutoff(policy);
+  if (record.completedAt < accessCutoff) return undefined;
   return withPrivateContext(record);
 }
 
