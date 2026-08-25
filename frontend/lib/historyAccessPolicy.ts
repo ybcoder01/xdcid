@@ -69,6 +69,10 @@ export function includedHistoryCutoff(policy: HistoryAccessPolicy, now = new Dat
   return subtractCalendarMonths(now, policy.freeHistoryMonths);
 }
 
+export function retainedHistoryCutoff(policy: HistoryAccessPolicy, now = new Date()): Date {
+  return subtractCalendarMonths(now, policy.maximumRetentionMonths);
+}
+
 async function ensurePolicySchema() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error("History policy storage is not configured");
