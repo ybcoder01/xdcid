@@ -101,6 +101,7 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     privateCiphertext: encrypted?.ciphertext ?? null,
     privateIv: encrypted?.iv ?? null,
     privateTag: encrypted?.tag ?? null,
+    privateKeyVersion: encrypted?.keyVersion ?? null,
     completedAt,
     expiresAt: null
   }, [
@@ -272,7 +273,8 @@ function withPrivateContext(record: PaymentRecord) {
     privateContext = decryptPaymentContext<PrivatePaymentContext>({
       ciphertext: record.privateCiphertext,
       iv: record.privateIv,
-      tag: record.privateTag
+      tag: record.privateTag,
+      keyVersion: record.privateKeyVersion ?? 1
     });
   }
   return { ...record, privateContext };
