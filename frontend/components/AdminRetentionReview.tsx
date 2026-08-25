@@ -7,7 +7,7 @@ type RetentionPreview = {
   policy: {
     includedMonths: number;
     archiveMonths: number;
-    deletionExecutionEnabled: false;
+    deletionExecutionEnabled: true;
   };
   counts: {
     included: number;
@@ -26,6 +26,9 @@ type RetentionPreview = {
     approvedCandidateCount: number | null;
     reviewedBy: string | null;
     reviewedAt: string | null;
+    lastExecutionAt: string | null;
+    lastExecutionCount: number;
+    lastExecutionManifestHash: string | null;
     approvalMatchesCurrentManifest: boolean;
   };
 };
@@ -98,10 +101,11 @@ export function AdminRetentionReview() {
       </div>
 
       <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4">
-        <p className="font-semibold text-amber-950">Deletion execution is disabled</p>
+        <p className="font-semibold text-amber-950">Deletion is held unless you approve the exact manifest</p>
         <p className="mt-1 text-sm text-amber-900">
-          This control only records a hold or an approval. It cannot delete payment records.
-          A later deletion implementation must recompute the manifest and require the same approved hash.
+          The daily cleanup can delete only the records listed in a manifest whose SHA-256
+          and candidate count still match your recorded approval. New or changed candidates
+          make the approval stale, and the safeguard returns to hold after a successful run.
         </p>
       </div>
 
@@ -129,6 +133,11 @@ export function AdminRetentionReview() {
           <Data label="Latest eligible record" value={formatDate(preview?.eligibleRange.latestCompletedAt)} />
           <Data label="Last reviewed by" value={preview?.control.reviewedBy || "Not reviewed"} mono />
           <Data label="Last reviewed" value={formatDate(preview?.control.reviewedAt)} />
+          <Data label="Last cleanup execution" value={formatDate(preview?.control.lastExecutionAt)} />
+          <Data
+            label="Records deleted in last execution"
+            value={String(preview?.control.lastExecutionCount ?? 0)}
+          />
         </dl>
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
