@@ -26,15 +26,28 @@ export async function PUT(request: Request) {
       typeof body.freeHistoryMonths !== "number" ||
       typeof body.maximumRetentionMonths !== "number" ||
       typeof body.archiveAccessEnabled !== "boolean" ||
-      typeof body.archiveGraceDays !== "number"
+      typeof body.subscriptionSalesEnabled !== "boolean" ||
+      typeof body.archiveGraceDays !== "number" ||
+      body.archivePaymentCurrency !== "USDC" ||
+      !(
+        body.oneYearPriceUsdMicros === null ||
+        typeof body.oneYearPriceUsdMicros === "number"
+      ) ||
+      typeof body.threeYearDiscountBps !== "number" ||
+      typeof body.sevenYearDiscountBps !== "number"
     ) {
-      return json({ error: "A complete history policy is required" }, 400);
+      return json({ error: "A complete archive subscription policy is required" }, 400);
     }
     return json(await updateHistoryAccessPolicy({
       freeHistoryMonths: body.freeHistoryMonths,
       maximumRetentionMonths: body.maximumRetentionMonths,
       archiveAccessEnabled: body.archiveAccessEnabled,
+      subscriptionSalesEnabled: body.subscriptionSalesEnabled,
       archiveGraceDays: body.archiveGraceDays,
+      archivePaymentCurrency: body.archivePaymentCurrency,
+      oneYearPriceUsdMicros: body.oneYearPriceUsdMicros,
+      threeYearDiscountBps: body.threeYearDiscountBps,
+      sevenYearDiscountBps: body.sevenYearDiscountBps,
       updatedBy: session.address
     }));
   } catch (cause) {
