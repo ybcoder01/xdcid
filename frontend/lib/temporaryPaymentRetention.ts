@@ -9,7 +9,6 @@ export type TemporaryPaymentCleanupResult = {
   deletedPaymentAccessChallenges: number;
   deletedAdminAccessChallenges: number;
   deletedForwardingRecoveries: number;
-  deletedTemporaryBurnMappings: number;
 };
 
 export async function removeExpiredTemporaryPaymentData(
@@ -33,8 +32,6 @@ export async function removeExpiredTemporaryPaymentData(
   return {
     deletedPaymentAccessChallenges,
     deletedAdminAccessChallenges: deletedAdminRows.length,
-    deletedForwardingRecoveries,
-    // Burn mappings have ON DELETE CASCADE and are removed with their recovery.
-    deletedTemporaryBurnMappings: deletedForwardingRecoveries
+    deletedForwardingRecoveries
   };
 }
