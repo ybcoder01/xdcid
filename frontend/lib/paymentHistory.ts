@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { paymentParticipantFingerprint } from "./paymentParticipantFingerprint";
+import { getHistoryAccessPolicy, includedHistoryCutoff } from "./historyAccessPolicy";
 import { decryptPaymentContext, encryptPaymentContext } from "./paymentRecordCrypto";
 import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryRepository";
 import type {
@@ -69,8 +70,9 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     ? encryptPaymentContext(input.privateContext)
     : undefined;
   const completedAt = input.completedAt || new Date();
-  const includedAccessExpiresAt = addCalendarMonths(completedAt, 15);
-  const archiveAccessExpiresAt = addCalendarMonths(completedAt, 84);
+  const policy = await getHistoryAccessPolicy();
+  const includedAccessExpiresAt = addCalendarMonths(completedAt, policy.freeHistoryMonths);
+  const archiveAccessExpiresAt = addCalendarMonths(completedAt, policy.maximumRetentionMonths);
   await paymentHistoryRepository.saveCompletedPayment({
     id: input.id,
     requestId: input.requestId,
@@ -177,10 +179,16 @@ export async function readAuthorizedPaymentHistory(
   const counterparty = filters?.counterparty
     ? getAddress(filters.counterparty).toLowerCase()
     : undefined;
+  const policy = await getHistoryAccessPolicy();
+  const policyCutoff = includedHistoryCutoff(policy);
+  const requestedFrom = filters?.from;
+  const effectiveFrom = requestedFrom && requestedFrom > policyCutoff
+    ? requestedFrom
+    : policyCutoff;
   const records = await paymentHistoryRepository.listParticipantPayments({
     participantFingerprint: paymentParticipantFingerprint(challenge.address),
     participantAddress: challenge.address,
-    from: filters?.from,
+    from: effectiveFrom,
     to: filters?.to,
     token: filters?.token,
     sourceChainId: filters?.sourceChainId,
@@ -210,7 +218,10 @@ export async function readAuthorizedPayment(
     recordId,
     paymentParticipantFingerprint(challenge.address)
   );
-  return record ? withPrivateContext(record) : undefined;
+  if (!record) return undefined;
+  const policy = await getHistoryAccessPolicy();
+  if (record.completedAt < includedHistoryCutoff(policy)) return undefined;
+  return withPrivateContext(record);
 }
 
 async function authorizeChallenge(
