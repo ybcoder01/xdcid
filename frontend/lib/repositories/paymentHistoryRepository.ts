@@ -2,6 +2,7 @@ export type StoredPrivatePaymentContext = {
   ciphertext: string;
   iv: string;
   tag: string;
+  keyVersion: number;
 };
 
 export type PaymentTransactionType =
@@ -44,6 +45,7 @@ export type PaymentRecord = {
   privateCiphertext: string | null;
   privateIv: string | null;
   privateTag: string | null;
+  privateKeyVersion: number | null;
   completedAt: Date;
   expiresAt: Date | null;
   createdAt: Date;
