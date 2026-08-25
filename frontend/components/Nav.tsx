@@ -4,19 +4,29 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 import { useAccount, useReadContract } from "wagmi";
-import { addresses, registrarAbi } from "../config/contracts";
+import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
 import { WalletButton } from "./WalletButton";
 
 export function Nav() {
   const { address } = useAccount();
-  const owner = useReadContract({
-    address: addresses.registrar,
-    abi: registrarAbi,
+  const registryOwner = useReadContract({
+    address: addresses.registry,
+    abi: ownableAbi,
     functionName: "owner"
   });
+  const policyOwner = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: ownableAbi,
+    functionName: "owner",
+    query: { enabled: addresses.pricingPolicy !== zeroAddress }
+  });
   const canSeeAdmin = useMemo(
-    () => !!address && !!owner.data && owner.data.toLowerCase() === address.toLowerCase(),
-    [address, owner.data]
+    () =>
+      !!address &&
+      [registryOwner.data, policyOwner.data]
+        .filter((candidate): candidate is `0x${string}` => !!candidate)
+        .some((candidate) => candidate.toLowerCase() === address.toLowerCase()),
+    [address, policyOwner.data, registryOwner.data]
   );
 
   return (
