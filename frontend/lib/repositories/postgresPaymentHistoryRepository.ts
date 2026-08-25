@@ -114,11 +114,11 @@ async function createSchema(): Promise<void> {
   const missingParticipantAccess = await client`
     SELECT id, creator, payer, completed_at
     FROM payment_records payment
-    WHERE NOT EXISTS (
-      SELECT 1
+    WHERE (
+      SELECT count(*)
       FROM payment_participant_access access
       WHERE access.payment_record_id = payment.id
-    )
+    ) < 2
   `;
   for (const payment of missingParticipantAccess) {
     const completedAt = new Date(String(payment.completed_at));
@@ -437,7 +437,15 @@ implements PaymentHistoryRepository {
 
 function addUtcMonths(value: Date, months: number): Date {
   const result = new Date(value);
+  const day = result.getUTCDate();
+  result.setUTCDate(1);
   result.setUTCMonth(result.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(
+    result.getUTCFullYear(),
+    result.getUTCMonth() + 1,
+    0
+  )).getUTCDate();
+  result.setUTCDate(Math.min(day, lastDay));
   return result;
 }
 
