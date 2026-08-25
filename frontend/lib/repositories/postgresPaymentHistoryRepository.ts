@@ -196,6 +196,7 @@ implements PaymentHistoryRepository {
       privateCiphertext,
       privateIv,
       privateTag,
+      privateKeyVersion,
       ...canonicalRecord
     } = record;
     const saved = await getDatabase()
@@ -237,7 +238,7 @@ implements PaymentHistoryRepository {
           ciphertext: privateCiphertext,
           iv: privateIv,
           tag: privateTag,
-          keyVersion: 1
+          keyVersion: privateKeyVersion ?? 1
         })
         .onConflictDoNothing();
     }
@@ -475,6 +476,8 @@ function toPaymentRecord(row: {
     paymentChannel: row.payment.paymentChannel as PaymentRecord["paymentChannel"],
     privateCiphertext: row.privateContext?.ciphertext ?? row.payment.privateCiphertext,
     privateIv: row.privateContext?.iv ?? row.payment.privateIv,
-    privateTag: row.privateContext?.tag ?? row.payment.privateTag
+    privateTag: row.privateContext?.tag ?? row.payment.privateTag,
+    privateKeyVersion: row.privateContext?.keyVersion
+      ?? (row.payment.privateCiphertext ? 1 : null)
   };
 }
