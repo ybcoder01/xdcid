@@ -321,6 +321,9 @@ function toPaymentRecord(row: {
 }): PaymentRecord {
   return {
     ...row.payment,
+    transactionType: row.payment.transactionType as PaymentRecord["transactionType"],
+    completionMethod: row.payment.completionMethod as PaymentRecord["completionMethod"],
+    paymentChannel: row.payment.paymentChannel as PaymentRecord["paymentChannel"],
     privateCiphertext: row.privateContext?.ciphertext ?? row.payment.privateCiphertext,
     privateIv: row.privateContext?.iv ?? row.payment.privateIv,
     privateTag: row.privateContext?.tag ?? row.payment.privateTag
