@@ -9,7 +9,10 @@ import {
   useSendTransaction,
   useWaitForTransactionReceipt
 } from "wagmi";
-import { MultichainUsdcExecutor } from "../../components/MultichainUsdcExecutor";
+import {
+  MultichainUsdcExecutor,
+  type PaymentCompletionMetadata
+} from "../../components/MultichainUsdcExecutor";
 import {
   activeRegistryAddress,
   activeResolverSuiteAvailable,
@@ -238,7 +241,8 @@ export default function SendPage() {
 
   const recordSettlement = useCallback(async (
     sourceTransactionHash: Hash,
-    destinationTransactionHash?: Hash
+    destinationTransactionHash?: Hash,
+    metadata?: PaymentCompletionMetadata
   ) => {
     if (!destination || units <= 0n) return;
     const key = sourceTransactionHash + ":" + (destinationTransactionHash || "");
@@ -255,7 +259,12 @@ export default function SendPage() {
           recipient: destination.address,
           sourceTransactionHash,
           destinationTransactionHash,
-          reference: paymentReference.trim()
+          reference: paymentReference.trim(),
+          paymentChannel: "send",
+          completionMethod: metadata?.completionMethod ||
+            (sourceChainId === destinationChainId ? "direct" : "standard"),
+          xdcidFeeAtomic: metadata?.xdcidFeeAtomic,
+          circleFeeAtomic: metadata?.circleFeeAtomic
       });
       setHistoryStatus("Payment added to private history.");
     } catch (cause) {
