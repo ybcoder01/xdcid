@@ -1,9 +1,9 @@
 import { isHex } from "viem";
 import {
   isPaymentHistoryConfigured,
-  readAuthorizedPaymentHistory,
-  type PaymentHistoryFilters
+  readAuthorizedPaymentHistory
 } from "../../../../lib/paymentHistory";
+import { parsePaymentHistoryFilters } from "../../../../lib/paymentHistoryFilters";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,6 +33,9 @@ type ExportRequest = {
     destinationChainId?: unknown;
     name?: unknown;
     counterparty?: unknown;
+    direction?: unknown;
+    transactionType?: unknown;
+    completionMethod?: unknown;
   };
 };
 
@@ -52,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const timeZone = validTimeZone(body.timeZone) ? body.timeZone : "UTC";
-    const filters = parseFilters(body.filters);
+    const filters = parsePaymentHistoryFilters(body.filters);
     const records = await readAuthorizedPaymentHistory(
       body.challengeId,
       body.signature,
@@ -65,7 +68,10 @@ export async function POST(request: Request) {
       "Completed local time",
       "Local timezone",
       "Payment ID",
-      "Type",
+      "Direction",
+      "Transaction type",
+      "Payment channel",
+      "Completion method",
       "Status",
       "XNS ID",
       "Sender",
@@ -73,9 +79,14 @@ export async function POST(request: Request) {
       "Source network",
       "Destination network",
       "Asset",
+      "Token address",
       "Amount atomic",
       "Token decimals",
       "Amount",
+      "XDCID fee atomic",
+      "XDCID fee (USDC)",
+      "Circle fee atomic",
+      "Circle fee (USDC)",
       "Reference",
       "Description",
       "Source transaction hash",
@@ -92,7 +103,10 @@ export async function POST(request: Request) {
         formatLocal(new Date(record.completedAt), timeZone),
         timeZone,
         record.id,
-        record.sourceChainId === record.destinationChainId ? "same-chain" : "cross-chain",
+        record.direction,
+        record.transactionType,
+        record.paymentChannel,
+        record.completionMethod,
         "completed",
         record.name || "",
         record.payer,
@@ -100,9 +114,14 @@ export async function POST(request: Request) {
         source?.name || "Chain " + record.sourceChainId,
         destination?.name || "Chain " + record.destinationChainId,
         record.token,
+        record.tokenAddress || "",
         record.amountAtomic,
         String(record.tokenDecimals),
         formatAtomic(record.amountAtomic, record.tokenDecimals),
+        record.xdcidFeeAtomic || "",
+        record.xdcidFeeAtomic ? formatAtomic(record.xdcidFeeAtomic, 6) : "",
+        record.circleFeeAtomic || "",
+        record.circleFeeAtomic ? formatAtomic(record.circleFeeAtomic, 6) : "",
         record.privateContext?.reference || "",
         record.privateContext?.description || "",
         record.sourceTransactionHash,
@@ -128,38 +147,6 @@ export async function POST(request: Request) {
   } catch {
     return json({ error: "Payment history export could not be generated" }, 400);
   }
-}
-
-function parseFilters(value: ExportRequest["filters"]): PaymentHistoryFilters {
-  const filters: PaymentHistoryFilters = {};
-  if (!value) return filters;
-  if (typeof value.from === "string" && value.from) {
-    const from = new Date(value.from);
-    if (!Number.isNaN(from.valueOf())) filters.from = from;
-  }
-  if (typeof value.to === "string" && value.to) {
-    const to = new Date(value.to);
-    if (!Number.isNaN(to.valueOf())) filters.to = to;
-  }
-  if (filters.from && filters.to && filters.from > filters.to) {
-    throw new Error("Invalid date range");
-  }
-  if (typeof value.token === "string" && /^[A-Za-z0-9]{1,32}$/.test(value.token)) {
-    filters.token = value.token;
-  }
-  if (typeof value.sourceChainId === "number" && Number.isInteger(value.sourceChainId) && value.sourceChainId > 0) {
-    filters.sourceChainId = Number(value.sourceChainId);
-  }
-  if (typeof value.destinationChainId === "number" && Number.isInteger(value.destinationChainId) && value.destinationChainId > 0) {
-    filters.destinationChainId = Number(value.destinationChainId);
-  }
-  if (typeof value.name === "string" && value.name.trim()) {
-    filters.name = value.name.trim().toLowerCase();
-  }
-  if (typeof value.counterparty === "string" && value.counterparty.trim()) {
-    filters.counterparty = value.counterparty.trim();
-  }
-  return filters;
 }
 
 function validTimeZone(value: unknown): value is string {

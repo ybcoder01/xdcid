@@ -10,7 +10,14 @@ type PaymentRecord = {
   payer: string;
   amountAtomic: string;
   token: string;
+  tokenAddress: string | null;
   tokenDecimals: number;
+  transactionType: "native" | "same_chain_usdc" | "cross_chain_usdc" | "legacy";
+  completionMethod: "direct" | "standard" | "automatic" | "recovered" | "wallet";
+  paymentChannel: "send" | "pay_link";
+  direction: "incoming" | "outgoing";
+  xdcidFeeAtomic: string | null;
+  circleFeeAtomic: string | null;
   sourceChainId: number;
   destinationChainId: number;
   sourceTransactionHash: string;
@@ -30,6 +37,9 @@ type Filters = {
   destinationChainId: string;
   name: string;
   counterparty: string;
+  direction: string;
+  transactionType: string;
+  completionMethod: string;
 };
 
 const EMPTY_FILTERS: Filters = {
@@ -39,7 +49,10 @@ const EMPTY_FILTERS: Filters = {
   sourceChainId: "",
   destinationChainId: "",
   name: "",
-  counterparty: ""
+  counterparty: "",
+  direction: "",
+  transactionType: "",
+  completionMethod: ""
 };
 
 const NETWORKS = [
@@ -62,6 +75,7 @@ export default function PaymentHistoryPage() {
   const [loaded, setLoaded] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [exporting, setExporting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function signedChallenge() {
@@ -86,12 +100,16 @@ export default function PaymentHistoryPage() {
   async function unlockHistory() {
     if (!address || signer.isPending) return;
     setError("");
+    setLoading(true);
     try {
+      if (filters.from && filters.to && filters.from > filters.to) {
+        throw new Error("The start date must be before the end date.");
+      }
       const authorization = await signedChallenge();
       const historyResponse = await fetch("/api/payment-history/history", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(authorization)
+        body: JSON.stringify({ ...authorization, filters: filterPayload(filters) })
       });
       const history = await historyResponse.json() as {
         records?: PaymentRecord[];
@@ -104,6 +122,8 @@ export default function PaymentHistoryPage() {
       setLoaded(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Payment history could not be loaded.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -152,11 +172,16 @@ export default function PaymentHistoryPage() {
       "Payment ID: " + record.id,
       "Completed UTC: " + completed.toISOString(),
       "Completed local: " + completed.toLocaleString(),
-      "XNS ID: " + record.name,
+      "Direction: " + record.direction,
+      "Type: " + paymentKind(record),
+      "Completion method: " + completionLabel(record.completionMethod),
+      "Route identifier: " + displayRoute(record),
       "Amount: " + amount + " " + record.token,
       "Payer: " + record.payer,
       "Recipient: " + record.creator,
-      "Route: Chain " + record.sourceChainId + " to chain " + record.destinationChainId,
+      "Route: " + networkName(record.sourceChainId) + " to " + networkName(record.destinationChainId),
+      "XDCID fee: " + formatFee(record.xdcidFeeAtomic),
+      "Circle fee: " + formatFee(record.circleFeeAtomic),
       "Source transaction: " + record.sourceTransactionHash,
       record.destinationTransactionHash
         ? "Destination transaction: " + record.destinationTransactionHash
@@ -193,13 +218,13 @@ export default function PaymentHistoryPage() {
       <section className="mt-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <button
           type="button"
-          disabled={!isConnected || signer.isPending}
+          disabled={!isConnected || signer.isPending || loading}
           onClick={unlockHistory}
           className="rounded-xl bg-slate-950 px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           {!isConnected
             ? "Connect wallet to continue"
-            : signer.isPending
+            : signer.isPending || loading
               ? "Waiting for signature..."
               : loaded
                 ? "Refresh private history"
@@ -214,11 +239,20 @@ export default function PaymentHistoryPage() {
       <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold text-slate-950">Export transaction history</h2>
+            <h2 className="text-2xl font-semibold text-slate-950">Filter and export transaction history</h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-600">
-              Leave filters empty to export every authorized record. The CSV includes separate UTC and browser-local time columns.
+              Apply filters to the on-screen history or CSV. The export includes separate UTC and browser-local time columns.
             </p>
           </div>
+          <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={!isConnected || signer.isPending || loading}
+            onClick={unlockHistory}
+            className="rounded-xl border border-teal-700 px-6 py-3 font-semibold text-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {loading ? "Loading..." : "Apply to history"}
+          </button>
           <button
             type="button"
             disabled={!isConnected || signer.isPending || exporting}
@@ -227,6 +261,7 @@ export default function PaymentHistoryPage() {
           >
             {exporting ? "Preparing CSV..." : "Download CSV"}
           </button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-5 md:grid-cols-2">
@@ -255,7 +290,35 @@ export default function PaymentHistoryPage() {
           </label>
           <NetworkSelect label="Source network" value={filters.sourceChainId} onChange={(sourceChainId) => setFilters({ ...filters, sourceChainId })} />
           <NetworkSelect label="Destination network" value={filters.destinationChainId} onChange={(destinationChainId) => setFilters({ ...filters, destinationChainId })} />
-          <label className="text-sm font-semibold text-slate-700 md:col-span-2">
+          <label className="text-sm font-semibold text-slate-700">
+            Direction
+            <select value={filters.direction} onChange={(event) => setFilters({ ...filters, direction: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-normal">
+              <option value="">Incoming and outgoing</option>
+              <option value="incoming">Incoming</option>
+              <option value="outgoing">Outgoing</option>
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Transaction type
+            <select value={filters.transactionType} onChange={(event) => setFilters({ ...filters, transactionType: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-normal">
+              <option value="">All transaction types</option>
+              <option value="native">Native transfer</option>
+              <option value="same_chain_usdc">Same-chain USDC</option>
+              <option value="cross_chain_usdc">Cross-chain USDC</option>
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Completion method
+            <select value={filters.completionMethod} onChange={(event) => setFilters({ ...filters, completionMethod: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-normal">
+              <option value="">All completion methods</option>
+              <option value="direct">Direct</option>
+              <option value="standard">Standard</option>
+              <option value="automatic">Automatic forwarding</option>
+              <option value="recovered">Recovered</option>
+              <option value="wallet">Wallet</option>
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
             Counterparty wallet
             <input value={filters.counterparty} onChange={(event) => setFilters({ ...filters, counterparty: event.target.value })} placeholder="0x..." className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal" />
           </label>
@@ -278,7 +341,13 @@ export default function PaymentHistoryPage() {
             <article key={record.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-950">{record.name}</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-semibold text-slate-950">{displayRoute(record)}</h2>
+                    <span className={"rounded-full px-3 py-1 text-xs font-semibold " + (record.direction === "incoming" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800")}>
+                      {record.direction === "incoming" ? "Incoming" : "Outgoing"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-slate-700">{paymentKind(record)} · {completionLabel(record.completionMethod)}</p>
                   <p className="mt-1 text-sm text-slate-500">
                     Local: {new Date(record.completedAt).toLocaleString()}
                   </p>
@@ -293,8 +362,12 @@ export default function PaymentHistoryPage() {
               <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2">
                 <div><dt className="text-slate-500">From</dt><dd className="break-all">{record.payer}</dd></div>
                 <div><dt className="text-slate-500">To</dt><dd className="break-all">{record.creator}</dd></div>
-                <div><dt className="text-slate-500">Route</dt><dd>Chain {record.sourceChainId} → chain {record.destinationChainId}</dd></div>
+                <div><dt className="text-slate-500">Route</dt><dd>{networkName(record.sourceChainId)} → {networkName(record.destinationChainId)}</dd></div>
+                <div><dt className="text-slate-500">Payment route</dt><dd>{record.paymentChannel === "pay_link" ? "Pay Link" : displayRoute(record)}</dd></div>
+                <div><dt className="text-slate-500">XDCID fee</dt><dd>{formatFee(record.xdcidFeeAtomic)}</dd></div>
+                <div><dt className="text-slate-500">Circle fee</dt><dd>{formatFee(record.circleFeeAtomic)}</dd></div>
                 <div><dt className="text-slate-500">Reference</dt><dd>{record.privateContext?.reference || "—"}</dd></div>
+                <div><dt className="text-slate-500">Description</dt><dd>{record.privateContext?.description || "—"}</dd></div>
               </dl>
               <div className="mt-5 flex flex-wrap gap-3">
                 <a className="rounded-xl border border-slate-300 px-4 py-2 font-semibold text-slate-800" href={explorerLink(record.sourceChainId, record.sourceTransactionHash)} target="_blank" rel="noreferrer">
@@ -337,7 +410,10 @@ function filterPayload(filters: Filters) {
     sourceChainId: filters.sourceChainId ? Number(filters.sourceChainId) : undefined,
     destinationChainId: filters.destinationChainId ? Number(filters.destinationChainId) : undefined,
     name: filters.name.trim() || undefined,
-    counterparty: filters.counterparty.trim() || undefined
+    counterparty: filters.counterparty.trim() || undefined,
+    direction: filters.direction || undefined,
+    transactionType: filters.transactionType || undefined,
+    completionMethod: filters.completionMethod || undefined
   };
 }
 
@@ -355,6 +431,37 @@ function formatAtomic(value: string, decimals: number): string {
   const whole = padded.slice(0, -decimals) || "0";
   const fraction = decimals ? padded.slice(-decimals).replace(/0+$/, "") : "";
   return (negative ? "-" : "") + whole + (fraction ? "." + fraction : "");
+}
+
+function networkName(chainId: number): string {
+  return NETWORKS.find(([id]) => id === chainId)?.[1] || "Chain " + chainId;
+}
+
+function displayRoute(record: PaymentRecord): string {
+  return /^0x[a-fA-F0-9]{40}$/.test(record.name) ? "Direct wallet" : record.name;
+}
+
+function paymentKind(record: PaymentRecord): string {
+  if (record.paymentChannel === "pay_link") return "Pay Link";
+  if (record.completionMethod === "automatic" || record.completionMethod === "recovered") return "Forwarding";
+  if (record.transactionType === "native") return "Native transfer";
+  if (record.transactionType === "same_chain_usdc") return "Same-chain USDC";
+  if (record.transactionType === "cross_chain_usdc") return "Cross-chain USDC";
+  return "Legacy payment";
+}
+
+function completionLabel(method: PaymentRecord["completionMethod"]): string {
+  return {
+    direct: "Direct completion",
+    standard: "Standard completion",
+    automatic: "Automatic forwarding",
+    recovered: "Recovered transfer",
+    wallet: "Wallet completion"
+  }[method];
+}
+
+function formatFee(value: string | null): string {
+  return value ? formatAtomic(value, 6) + " USDC" : "—";
 }
 
 function explorerLink(chainId: number, hash: string): string {

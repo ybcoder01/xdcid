@@ -19,6 +19,8 @@ export type PaymentCompletionMethod =
 
 export type PaymentChannel = "send" | "pay_link";
 
+export type PaymentDirection = "incoming" | "outgoing";
+
 export type PaymentRecord = {
   id: string;
   requestId: string;
@@ -70,6 +72,10 @@ export type PaymentParticipantAccessWrite = Omit<
 
 export type PaymentHistoryQuery = {
   participantFingerprint: string;
+  participantAddress: string;
+  direction?: PaymentDirection;
+  transactionType?: PaymentTransactionType;
+  completionMethod?: PaymentCompletionMethod;
   from?: Date;
   to?: Date;
   token?: string;

@@ -351,6 +351,17 @@ implements PaymentHistoryRepository {
     );
 
     const conditions: SQL[] = [participant];
+    if (query.direction === "outgoing") {
+      conditions.push(eq(paymentRecords.payer, query.participantAddress));
+    } else if (query.direction === "incoming") {
+      conditions.push(eq(paymentRecords.creator, query.participantAddress));
+    }
+    if (query.transactionType) {
+      conditions.push(eq(paymentRecords.transactionType, query.transactionType));
+    }
+    if (query.completionMethod) {
+      conditions.push(eq(paymentRecords.completionMethod, query.completionMethod));
+    }
     if (query.from) conditions.push(gte(paymentRecords.completedAt, query.from));
     if (query.to) conditions.push(lte(paymentRecords.completedAt, query.to));
     if (query.token) conditions.push(eq(paymentRecords.token, query.token.toUpperCase()));
