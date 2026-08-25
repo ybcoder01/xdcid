@@ -4,6 +4,7 @@ import { and, asc, count, gt, lte } from "drizzle-orm";
 import { ensurePaymentHistorySchema } from "./paymentHistory";
 import { getDatabase } from "./db/client";
 import { paymentRecords } from "./db/schema";
+import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryRepository";
 
 const CONTROL_ID = "completed-history";
 const INCLUDED_MONTHS = 15;
@@ -17,7 +18,7 @@ export type PaymentRetentionPreview = {
   policy: {
     includedMonths: number;
     archiveMonths: number;
-    deletionExecutionEnabled: false;
+    deletionExecutionEnabled: true;
   };
   counts: {
     included: number;
@@ -36,6 +37,9 @@ export type PaymentRetentionPreview = {
     approvedCandidateCount: number | null;
     reviewedBy: string | null;
     reviewedAt: string | null;
+    lastExecutionAt: string | null;
+    lastExecutionCount: number;
+    lastExecutionManifestHash: string | null;
     approvalMatchesCurrentManifest: boolean;
   };
 };
@@ -59,7 +63,7 @@ export async function getPaymentRetentionPreview(
     policy: {
       includedMonths: INCLUDED_MONTHS,
       archiveMonths: ARCHIVE_MONTHS,
-      deletionExecutionEnabled: false
+      deletionExecutionEnabled: true
     },
     counts: snapshot.counts,
     eligibleRange: snapshot.eligibleRange,
@@ -78,6 +82,74 @@ export async function getPaymentRetentionManifest(
   now = new Date()
 ): Promise<RetentionManifestRow[]> {
   return (await retentionSnapshot(now)).manifest;
+}
+
+export async function deleteApprovedPaymentRetentionCandidates(
+  now = new Date()
+): Promise<{
+  status: "no_candidates" | "held" | "approval_stale" | "deleted";
+  candidates: number;
+  deleted: number;
+  manifestHash: string;
+}> {
+  const snapshot = await retentionSnapshot(now);
+  const control = await readControl();
+  if (snapshot.counts.eligible === 0) {
+    return {
+      status: "no_candidates",
+      candidates: 0,
+      deleted: 0,
+      manifestHash: snapshot.manifestHash
+    };
+  }
+  if (control.status !== "approved") {
+    return {
+      status: "held",
+      candidates: snapshot.counts.eligible,
+      deleted: 0,
+      manifestHash: snapshot.manifestHash
+    };
+  }
+  if (
+    control.approvedManifestHash !== snapshot.manifestHash ||
+    control.approvedCandidateCount !== snapshot.counts.eligible
+  ) {
+    return {
+      status: "approval_stale",
+      candidates: snapshot.counts.eligible,
+      deleted: 0,
+      manifestHash: snapshot.manifestHash
+    };
+  }
+
+  const deleted = await paymentHistoryRepository.deletePaymentRecordsByIds(
+    snapshot.manifest.map((row) => row.paymentId)
+  );
+  if (deleted !== snapshot.counts.eligible) {
+    throw new Error("Retention deletion count did not match approved manifest");
+  }
+
+  const client = await ensureControlSchema();
+  await client`
+    UPDATE payment_retention_control
+    SET status = 'held',
+      approved_manifest_hash = NULL,
+      approved_candidate_count = NULL,
+      reviewed_by = NULL,
+      reviewed_at = NULL,
+      last_execution_at = ${now.toISOString()},
+      last_execution_count = ${deleted},
+      last_execution_manifest_hash = ${snapshot.manifestHash},
+      updated_at = ${now.toISOString()}
+    WHERE id = ${CONTROL_ID}
+  `;
+
+  return {
+    status: "deleted",
+    candidates: snapshot.counts.eligible,
+    deleted,
+    manifestHash: snapshot.manifestHash
+  };
 }
 
 export async function setPaymentRetentionControl(input: {
@@ -187,7 +259,8 @@ async function readControl() {
   const client = await ensureControlSchema();
   const rows = await client`
     SELECT status, approved_manifest_hash, approved_candidate_count,
-      reviewed_by, reviewed_at
+      reviewed_by, reviewed_at, last_execution_at, last_execution_count,
+      last_execution_manifest_hash
     FROM payment_retention_control
     WHERE id = ${CONTROL_ID}
     LIMIT 1
@@ -205,6 +278,15 @@ async function readControl() {
     reviewedBy: row?.reviewed_by ? String(row.reviewed_by) : null,
     reviewedAt: row?.reviewed_at
       ? new Date(String(row.reviewed_at)).toISOString()
+      : null,
+    lastExecutionAt: row?.last_execution_at
+      ? new Date(String(row.last_execution_at)).toISOString()
+      : null,
+    lastExecutionCount: row?.last_execution_count
+      ? Number(row.last_execution_count)
+      : 0,
+    lastExecutionManifestHash: row?.last_execution_manifest_hash
+      ? String(row.last_execution_manifest_hash)
       : null
   };
 }
@@ -222,9 +304,15 @@ async function ensureControlSchema() {
       approved_candidate_count integer,
       reviewed_by varchar(42),
       reviewed_at timestamptz,
+      last_execution_at timestamptz,
+      last_execution_count integer NOT NULL DEFAULT 0,
+      last_execution_manifest_hash varchar(64),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `;
+  await client`ALTER TABLE payment_retention_control ADD COLUMN IF NOT EXISTS last_execution_at timestamptz`;
+  await client`ALTER TABLE payment_retention_control ADD COLUMN IF NOT EXISTS last_execution_count integer NOT NULL DEFAULT 0`;
+  await client`ALTER TABLE payment_retention_control ADD COLUMN IF NOT EXISTS last_execution_manifest_hash varchar(64)`;
   await client`
     INSERT INTO payment_retention_control (id, status)
     VALUES (${CONTROL_ID}, 'held')
