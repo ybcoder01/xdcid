@@ -1,16 +1,20 @@
 import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, exists, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "../db/client";
 import {
   paymentAccessChallenges,
+  paymentParticipantAccess,
   paymentPrivateContexts,
   paymentRecords
 } from "../db/schema";
+import { paymentParticipantFingerprint } from "../paymentParticipantFingerprint";
 import type {
   PaymentAccessChallenge,
   PaymentAccessChallengeWrite,
   PaymentHistoryQuery,
   PaymentHistoryRepository,
+  PaymentParticipantAccess,
+  PaymentParticipantAccessWrite,
   PaymentRecord,
   PaymentRecordWrite
 } from "./paymentHistoryRepository";
@@ -90,6 +94,68 @@ async function createSchema(): Promise<void> {
     ON CONFLICT (payment_record_id) DO NOTHING
   `;
   await client`
+    CREATE TABLE IF NOT EXISTS payment_participant_access (
+      payment_record_id varchar(40) NOT NULL REFERENCES payment_records(id) ON DELETE CASCADE,
+      participant_fingerprint varchar(64) NOT NULL,
+      role varchar(16) NOT NULL CHECK (role IN ('sender', 'receiver')),
+      included_access_expires_at timestamptz NOT NULL,
+      archive_access_expires_at timestamptz NOT NULL,
+      access_revoked_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT payment_participant_access_pk PRIMARY KEY (
+        payment_record_id, participant_fingerprint, role
+      )
+    )
+  `;
+  await client`CREATE INDEX IF NOT EXISTS payment_participant_access_fingerprint_idx ON payment_participant_access (participant_fingerprint)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_participant_access_included_expiry_idx ON payment_participant_access (included_access_expires_at)`;
+  await client`CREATE INDEX IF NOT EXISTS payment_participant_access_archive_expiry_idx ON payment_participant_access (archive_access_expires_at)`;
+  const missingParticipantAccess = await client`
+    SELECT id, creator, payer, completed_at
+    FROM payment_records payment
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM payment_participant_access access
+      WHERE access.payment_record_id = payment.id
+    )
+  `;
+  for (const payment of missingParticipantAccess) {
+    const completedAt = new Date(String(payment.completed_at));
+    const includedAccessExpiresAt = addUtcMonths(completedAt, 15);
+    const archiveAccessExpiresAt = addUtcMonths(completedAt, 84);
+    const participants = [
+      {
+        fingerprint: paymentParticipantFingerprint(String(payment.payer)),
+        role: "sender"
+      },
+      {
+        fingerprint: paymentParticipantFingerprint(String(payment.creator)),
+        role: "receiver"
+      }
+    ] as const;
+    for (const participant of participants) {
+      await client`
+        INSERT INTO payment_participant_access (
+          payment_record_id,
+          participant_fingerprint,
+          role,
+          included_access_expires_at,
+          archive_access_expires_at,
+          access_revoked_at
+        ) VALUES (
+          ${String(payment.id)},
+          ${participant.fingerprint},
+          ${participant.role},
+          ${includedAccessExpiresAt.toISOString()},
+          ${archiveAccessExpiresAt.toISOString()},
+          NULL
+        )
+        ON CONFLICT (payment_record_id, participant_fingerprint, role) DO NOTHING
+      `;
+    }
+  }
+  await client`
     CREATE TABLE IF NOT EXISTS payment_access_challenges (
       id varchar(40) PRIMARY KEY,
       payment_record_id varchar(40) REFERENCES payment_records(id) ON DELETE CASCADE,
@@ -121,7 +187,10 @@ implements PaymentHistoryRepository {
     await schemaPromise;
   }
 
-  async saveCompletedPayment(record: PaymentRecordWrite): Promise<void> {
+  async saveCompletedPayment(
+    record: PaymentRecordWrite,
+    participantAccess: PaymentParticipantAccessWrite[]
+  ): Promise<void> {
     await this.ensureSchema();
     const {
       privateCiphertext,
@@ -172,26 +241,64 @@ implements PaymentHistoryRepository {
         })
         .onConflictDoNothing();
     }
+    for (const access of participantAccess) {
+      await getDatabase()
+        .insert(paymentParticipantAccess)
+        .values({ ...access, paymentRecordId: saved[0].id })
+        .onConflictDoUpdate({
+          target: [
+            paymentParticipantAccess.paymentRecordId,
+            paymentParticipantAccess.participantFingerprint,
+            paymentParticipantAccess.role
+          ],
+          set: {
+            includedAccessExpiresAt: sql`GREATEST(
+              ${paymentParticipantAccess.includedAccessExpiresAt},
+              excluded.included_access_expires_at
+            )`,
+            archiveAccessExpiresAt: sql`GREATEST(
+              ${paymentParticipantAccess.archiveAccessExpiresAt},
+              excluded.archive_access_expires_at
+            )`,
+            updatedAt: new Date()
+          }
+        });
+    }
   }
 
-  async findParticipants(recordId: string) {
+  async findParticipantAccess(
+    recordId: string,
+    participantFingerprint: string
+  ): Promise<PaymentParticipantAccess | undefined> {
     await this.ensureSchema();
-    const [record] = await getDatabase()
-      .select({ creator: paymentRecords.creator, payer: paymentRecords.payer })
-      .from(paymentRecords)
-      .where(eq(paymentRecords.id, recordId))
+    const [access] = await getDatabase()
+      .select()
+      .from(paymentParticipantAccess)
+      .where(and(
+        eq(paymentParticipantAccess.paymentRecordId, recordId),
+        eq(paymentParticipantAccess.participantFingerprint, participantFingerprint),
+        isNull(paymentParticipantAccess.accessRevokedAt)
+      ))
       .limit(1);
-    return record;
+    return access
+      ? {
+          ...access,
+          role: access.role as PaymentParticipantAccess["role"]
+        }
+      : undefined;
   }
 
-  async hasParticipantPayments(address: string): Promise<boolean> {
+  async hasParticipantPayments(participantFingerprint: string): Promise<boolean> {
     await this.ensureSchema();
-    const [record] = await getDatabase()
-      .select({ id: paymentRecords.id })
-      .from(paymentRecords)
-      .where(or(eq(paymentRecords.creator, address), eq(paymentRecords.payer, address)))
+    const [access] = await getDatabase()
+      .select({ paymentRecordId: paymentParticipantAccess.paymentRecordId })
+      .from(paymentParticipantAccess)
+      .where(and(
+        eq(paymentParticipantAccess.participantFingerprint, participantFingerprint),
+        isNull(paymentParticipantAccess.accessRevokedAt)
+      ))
       .limit(1);
-    return Boolean(record);
+    return Boolean(access);
   }
 
   async createChallenge(challenge: PaymentAccessChallengeWrite): Promise<void> {
@@ -229,11 +336,19 @@ implements PaymentHistoryRepository {
 
   async listParticipantPayments(query: PaymentHistoryQuery): Promise<PaymentRecord[]> {
     await this.ensureSchema();
-    const participant = or(
-      eq(paymentRecords.creator, query.participant),
-      eq(paymentRecords.payer, query.participant)
+    const participant = exists(
+      getDatabase()
+        .select({ value: sql`1` })
+        .from(paymentParticipantAccess)
+        .where(and(
+          eq(paymentParticipantAccess.paymentRecordId, paymentRecords.id),
+          eq(
+            paymentParticipantAccess.participantFingerprint,
+            query.participantFingerprint
+          ),
+          isNull(paymentParticipantAccess.accessRevokedAt)
+        ))
     );
-    if (!participant) return [];
 
     const conditions: SQL[] = [participant];
     if (query.from) conditions.push(gte(paymentRecords.completedAt, query.from));
@@ -277,7 +392,7 @@ implements PaymentHistoryRepository {
 
   async findParticipantPayment(
     recordId: string,
-    participant: string
+    participantFingerprint: string
   ): Promise<PaymentRecord | undefined> {
     await this.ensureSchema();
     const [record] = await getDatabase()
@@ -292,9 +407,18 @@ implements PaymentHistoryRepository {
       )
       .where(and(
         eq(paymentRecords.id, recordId),
-        or(
-          eq(paymentRecords.creator, participant),
-          eq(paymentRecords.payer, participant)
+        exists(
+          getDatabase()
+            .select({ value: sql`1` })
+            .from(paymentParticipantAccess)
+            .where(and(
+              eq(paymentParticipantAccess.paymentRecordId, paymentRecords.id),
+              eq(
+                paymentParticipantAccess.participantFingerprint,
+                participantFingerprint
+              ),
+              isNull(paymentParticipantAccess.accessRevokedAt)
+            ))
         )
       ))
       .limit(1);
@@ -309,6 +433,12 @@ implements PaymentHistoryRepository {
       .returning({ id: paymentAccessChallenges.id });
     return deleted.length;
   }
+}
+
+function addUtcMonths(value: Date, months: number): Date {
+  const result = new Date(value);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  return result;
 }
 
 export const paymentHistoryRepository: PaymentHistoryRepository =
