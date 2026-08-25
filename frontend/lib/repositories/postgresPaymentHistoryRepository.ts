@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { and, desc, eq, exists, gte, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, exists, gt, gte, inArray, isNull, lt, lte, or, sql, type SQL } from "drizzle-orm";
 import { getDatabase, isDatabaseConfigured } from "../db/client";
 import {
   paymentAccessChallenges,
@@ -277,7 +277,8 @@ implements PaymentHistoryRepository {
       .where(and(
         eq(paymentParticipantAccess.paymentRecordId, recordId),
         eq(paymentParticipantAccess.participantFingerprint, participantFingerprint),
-        isNull(paymentParticipantAccess.accessRevokedAt)
+        isNull(paymentParticipantAccess.accessRevokedAt),
+        gt(paymentParticipantAccess.includedAccessExpiresAt, new Date())
       ))
       .limit(1);
     return access
@@ -295,7 +296,8 @@ implements PaymentHistoryRepository {
       .from(paymentParticipantAccess)
       .where(and(
         eq(paymentParticipantAccess.participantFingerprint, participantFingerprint),
-        isNull(paymentParticipantAccess.accessRevokedAt)
+        isNull(paymentParticipantAccess.accessRevokedAt),
+        gt(paymentParticipantAccess.includedAccessExpiresAt, new Date())
       ))
       .limit(1);
     return Boolean(access);
@@ -346,7 +348,8 @@ implements PaymentHistoryRepository {
             paymentParticipantAccess.participantFingerprint,
             query.participantFingerprint
           ),
-          isNull(paymentParticipantAccess.accessRevokedAt)
+          isNull(paymentParticipantAccess.accessRevokedAt),
+          gt(paymentParticipantAccess.includedAccessExpiresAt, new Date())
         ))
     );
 
@@ -428,7 +431,8 @@ implements PaymentHistoryRepository {
                 paymentParticipantAccess.participantFingerprint,
                 participantFingerprint
               ),
-              isNull(paymentParticipantAccess.accessRevokedAt)
+              isNull(paymentParticipantAccess.accessRevokedAt),
+              gt(paymentParticipantAccess.includedAccessExpiresAt, new Date())
             ))
         )
       ))
@@ -442,6 +446,16 @@ implements PaymentHistoryRepository {
       .delete(paymentAccessChallenges)
       .where(lt(paymentAccessChallenges.expiresAt, now))
       .returning({ id: paymentAccessChallenges.id });
+    return deleted.length;
+  }
+
+  async deletePaymentRecordsByIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    await this.ensureSchema();
+    const deleted = await getDatabase()
+      .delete(paymentRecords)
+      .where(inArray(paymentRecords.id, ids))
+      .returning({ id: paymentRecords.id });
     return deleted.length;
   }
 }
