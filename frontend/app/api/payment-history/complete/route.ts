@@ -1,5 +1,6 @@
 import { getAddress, isAddress, isHash, type Hash } from "viem";
 import { getPaymentNetwork, USDC_DECIMALS } from "../../../../config/paymentNetworks";
+import { calculateXdcidConvenienceFee } from "../../../../lib/cctpMainnet";
 import {
   isPaymentHistoryConfigured,
   saveCompletedPayment
@@ -20,6 +21,8 @@ type CompletionBody = {
   destinationTransactionHash?: unknown;
   reference?: unknown;
   description?: unknown;
+  paymentChannel?: unknown;
+  completionMethod?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -38,6 +41,8 @@ export async function POST(request: Request) {
     const token = body.token as "NATIVE" | "USDC";
     const amountAtomic = BigInt(body.amountAtomic as string);
     const recipient = getAddress(body.recipient as string);
+    const sourceNetwork = getPaymentNetwork(body.sourceChainId as number);
+    if (!sourceNetwork) return json({ error: "Source network is unsupported" }, 400);
     const verified = await verifySettlement({
       sourceChainId: body.sourceChainId as number,
       destinationChainId: body.destinationChainId as number,
@@ -48,6 +53,18 @@ export async function POST(request: Request) {
       destinationTransactionHash: destinationHash
     });
 
+    const crossChain = body.sourceChainId !== body.destinationChainId;
+    const transactionType = token === "NATIVE"
+      ? "native"
+      : crossChain
+        ? "cross_chain_usdc"
+        : "same_chain_usdc";
+    const forwarded = crossChain && verified.circleFeeAtomic > 0n;
+    const completionMethod = transactionType === "native" || transactionType === "same_chain_usdc"
+      ? "direct"
+      : forwarded
+        ? body.completionMethod === "recovered" ? "recovered" : "automatic"
+        : "standard";
     const id = "pm_" + sourceHash.slice(2, 39).toLowerCase();
     await saveCompletedPayment({
       id,
@@ -59,7 +76,17 @@ export async function POST(request: Request) {
       token: token === "NATIVE"
         ? getPaymentNetwork(body.sourceChainId as number)?.nativeSymbol || "NATIVE"
         : "USDC",
+      tokenAddress: token === "USDC" ? sourceNetwork.usdcAddress : undefined,
       tokenDecimals: token === "USDC" ? USDC_DECIMALS : 18,
+      transactionType,
+      completionMethod,
+      paymentChannel: body.paymentChannel === "pay_link" ? "pay_link" : "send",
+      xdcidFeeAtomic: forwarded
+        ? calculateXdcidConvenienceFee(amountAtomic).toString()
+        : undefined,
+      circleFeeAtomic: forwarded
+        ? verified.circleFeeAtomic.toString()
+        : undefined,
       sourceChainId: body.sourceChainId as number,
       destinationChainId: body.destinationChainId as number,
       sourceTransactionHash: verified.sourceTransactionHash,
@@ -117,6 +144,15 @@ function validate(body: CompletionBody): string | undefined {
   if (body.description !== undefined && (typeof body.description !== "string" || body.description.length > 120)) {
     return "Private payment description is too long";
   }
+  if (
+    body.paymentChannel !== undefined &&
+    body.paymentChannel !== "send" &&
+    body.paymentChannel !== "pay_link"
+  ) return "Payment channel is invalid";
+  if (
+    body.completionMethod !== undefined &&
+    !["direct", "standard", "automatic", "recovered"].includes(body.completionMethod as string)
+  ) return "Completion method is invalid";
   return undefined;
 }
 
