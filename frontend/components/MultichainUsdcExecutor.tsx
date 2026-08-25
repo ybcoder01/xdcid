@@ -59,6 +59,12 @@ type ForwardingQuote = {
   quotedAt: number;
 };
 
+export type PaymentCompletionMetadata = {
+  completionMethod: "standard" | "automatic" | "recovered";
+  xdcidFeeAtomic?: string;
+  circleFeeAtomic?: string;
+};
+
 type MultichainUsdcExecutorProps = {
   sourceChainId: number;
   destinationChainId: number;
@@ -66,7 +72,11 @@ type MultichainUsdcExecutorProps = {
   recipient: Address;
   ready: boolean;
   paymentReference?: string;
-  onCompleted?: (sourceHash: Hash, destinationHash?: Hash) => void | Promise<void>;
+  onCompleted?: (
+    sourceHash: Hash,
+    destinationHash?: Hash,
+    metadata?: PaymentCompletionMetadata
+  ) => void | Promise<void>;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
 };
 
@@ -132,11 +142,36 @@ export function MultichainUsdcExecutor({
     const key = sourceHash + ":" + receiveHash;
     if (reportedSettlement.current === key) return;
     reportedSettlement.current = key;
+    let metadata: PaymentCompletionMetadata = {
+      completionMethod: recoveryFeeHash ? "recovered" : "standard"
+    };
+    if (automaticForwarding && forwardingQuote) {
+      const recipientAmount = parseMainnetUsdcAmount(amount);
+      metadata = {
+        completionMethod: recoveryFeeHash ? "recovered" : "automatic",
+        xdcidFeeAtomic: calculateXdcidConvenienceFee(recipientAmount).toString(),
+        circleFeeAtomic: (
+          forwardingQuote.forwardFee +
+          calculateCctpProtocolFee(recipientAmount, forwardingQuote.minimumFeeBps)
+        ).toString()
+      };
+    }
     void onCompleted(
       sourceHash as Hash,
-      crossChain ? receiveHash as Hash : undefined
+      crossChain ? receiveHash as Hash : undefined,
+      metadata
     );
-  }, [burnHash, crossChain, onCompleted, phase, receiveHash]);
+  }, [
+    amount,
+    automaticForwarding,
+    burnHash,
+    crossChain,
+    forwardingQuote,
+    onCompleted,
+    phase,
+    receiveHash,
+    recoveryFeeHash
+  ]);
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
     destinationChainId,
