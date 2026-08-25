@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { isPaymentHistoryConfigured } from "../../../../lib/paymentHistory";
+import { deleteApprovedPaymentRetentionCandidates } from "../../../../lib/paymentRetentionReview";
 import { removeExpiredTemporaryPaymentData } from "../../../../lib/temporaryPaymentRetention";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +14,17 @@ export async function GET(request: Request) {
   if (!isPaymentHistoryConfigured()) {
     return Response.json({ error: "Payment history is not configured" }, { status: 503 });
   }
-  const cleanup = await removeExpiredTemporaryPaymentData();
+  const [cleanup, completedRetention] = await Promise.all([
+    removeExpiredTemporaryPaymentData(),
+    deleteApprovedPaymentRetentionCandidates()
+  ]);
   return Response.json({
     cleanup,
+    completedRetention,
     temporaryRetentionDays: 7,
-    completedPaymentsDeleted: 0,
+    includedHistoryMonths: 15,
+    completedHistoryRetentionMonths: 84,
+    completedPaymentsDeleted: completedRetention.deleted,
     aggregateFeeEventsDeleted: 0
   }, {
     headers: { "cache-control": "no-store" }
