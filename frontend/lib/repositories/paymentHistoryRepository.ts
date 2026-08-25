@@ -50,8 +50,26 @@ export type PaymentRecord = {
 
 export type PaymentRecordWrite = Omit<PaymentRecord, "createdAt" | "updatedAt">;
 
+export type PaymentParticipantRole = "sender" | "receiver";
+
+export type PaymentParticipantAccess = {
+  paymentRecordId: string;
+  participantFingerprint: string;
+  role: PaymentParticipantRole;
+  includedAccessExpiresAt: Date;
+  archiveAccessExpiresAt: Date;
+  accessRevokedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PaymentParticipantAccessWrite = Omit<
+  PaymentParticipantAccess,
+  "createdAt" | "updatedAt"
+>;
+
 export type PaymentHistoryQuery = {
-  participant: string;
+  participantFingerprint: string;
   from?: Date;
   to?: Date;
   token?: string;
@@ -80,11 +98,15 @@ export type PaymentAccessChallengeWrite = Pick<
 export interface PaymentHistoryRepository {
   isConfigured(): boolean;
   ensureSchema(): Promise<void>;
-  saveCompletedPayment(record: PaymentRecordWrite): Promise<void>;
-  findParticipants(recordId: string): Promise<
-    Pick<PaymentRecord, "creator" | "payer"> | undefined
-  >;
-  hasParticipantPayments(address: string): Promise<boolean>;
+  saveCompletedPayment(
+    record: PaymentRecordWrite,
+    participantAccess: PaymentParticipantAccessWrite[]
+  ): Promise<void>;
+  findParticipantAccess(
+    recordId: string,
+    participantFingerprint: string
+  ): Promise<PaymentParticipantAccess | undefined>;
+  hasParticipantPayments(participantFingerprint: string): Promise<boolean>;
   createChallenge(challenge: PaymentAccessChallengeWrite): Promise<void>;
   findUnusedChallenge(
     challengeId: string,
@@ -94,7 +116,7 @@ export interface PaymentHistoryRepository {
   listParticipantPayments(query: PaymentHistoryQuery): Promise<PaymentRecord[]>;
   findParticipantPayment(
     recordId: string,
-    participant: string
+    participantFingerprint: string
   ): Promise<PaymentRecord | undefined>;
   deleteExpiredChallenges(now: Date): Promise<number>;
 }
