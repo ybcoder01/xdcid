@@ -136,6 +136,19 @@ export function MultichainUsdcExecutor({
   const destination = getPaymentNetwork(destinationChainId);
   const crossChain = sourceChainId !== destinationChainId;
 
+  const routeCapability = getPaymentRouteCapability(
+    sourceChainId,
+    destinationChainId,
+    process.env.NEXT_PUBLIC_XDCID_PREVIEW_FORWARDING_ROUTES
+  );
+  const forwardingAvailable =
+    routeCapability.automaticForwarding === "mainnet-enabled" ||
+    routeCapability.automaticForwarding === "mainnet-preview" ||
+    routeCapability.automaticForwarding === "testnet-enabled";
+  const automaticForwarding =
+    forwardingAvailable && transferMode === "forwarded";
+  const transferModeLocked = requestedTransferMode !== "payer-choice";
+
   useEffect(() => {
     if (phase !== "complete" || !onCompleted || !receiveHash) return;
     const sourceHash = crossChain ? burnHash : receiveHash;
@@ -173,18 +186,6 @@ export function MultichainUsdcExecutor({
     receiveHash,
     recoveredMode
   ]);
-  const routeCapability = getPaymentRouteCapability(
-    sourceChainId,
-    destinationChainId,
-    process.env.NEXT_PUBLIC_XDCID_PREVIEW_FORWARDING_ROUTES
-  );
-  const forwardingAvailable =
-    routeCapability.automaticForwarding === "mainnet-enabled" ||
-    routeCapability.automaticForwarding === "mainnet-preview" ||
-    routeCapability.automaticForwarding === "testnet-enabled";
-  const automaticForwarding =
-    forwardingAvailable && transferMode === "forwarded";
-  const transferModeLocked = requestedTransferMode !== "payer-choice";
 
   async function writeWithAdaptiveFees(
     request: Record<string, unknown>,
