@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
-import { paymentParticipantFingerprint } from "./paymentParticipantFingerprint";
+import {
+  paymentNameFingerprint,
+  paymentParticipantFingerprint
+} from "./paymentParticipantFingerprint";
 import { hasActiveArchiveEntitlement } from "./archiveEntitlements";
 import {
   getHistoryAccessPolicy,
@@ -82,6 +85,7 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     id: input.id,
     requestId: input.requestId,
     name: input.name,
+    nameFingerprint: paymentNameFingerprint(input.name),
     creator: getAddress(input.creator).toLowerCase(),
     payer: getAddress(input.payer).toLowerCase(),
     amountAtomic: input.amountAtomic,
@@ -200,23 +204,27 @@ export async function readAuthorizedPaymentHistory(
     : accessCutoff;
   const records = await paymentHistoryRepository.listParticipantPayments({
     participantFingerprint,
-    participantAddress: challenge.address,
     from: effectiveFrom,
     to: filters?.to,
     token: filters?.token,
     sourceChainId: filters?.sourceChainId,
     destinationChainId: filters?.destinationChainId,
-    name: filters?.name,
-    counterparty,
+    nameFingerprint: filters?.name ? paymentNameFingerprint(filters.name) : undefined,
+    counterpartyFingerprint: counterparty
+      ? paymentParticipantFingerprint(counterparty)
+      : undefined,
     direction: filters?.direction,
     transactionType: filters?.transactionType,
     completionMethod: filters?.completionMethod,
     limit: filters?.limit
   });
-  return records.map((record) => ({
-    ...withPrivateContext(record),
-    direction: (record.payer === challenge.address ? "outgoing" : "incoming") as PaymentDirection
-  }));
+  return records.map((record) => {
+    const hydrated = withPrivateContext(record);
+    return {
+      ...hydrated,
+      direction: (hydrated.payer === challenge.address ? "outgoing" : "incoming") as PaymentDirection
+    };
+  });
 }
 
 export async function readAuthorizedPayment(
