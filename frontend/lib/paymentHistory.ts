@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
+import { paymentParticipantFingerprint } from "./paymentParticipantFingerprint";
 import { decryptPaymentContext, encryptPaymentContext } from "./paymentRecordCrypto";
 import { paymentHistoryRepository } from "./repositories/postgresPaymentHistoryRepository";
 import type {
@@ -63,6 +64,9 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
   const encrypted = input.privateContext
     ? encryptPaymentContext(input.privateContext)
     : undefined;
+  const completedAt = input.completedAt || new Date();
+  const includedAccessExpiresAt = addCalendarMonths(completedAt, 15);
+  const archiveAccessExpiresAt = addCalendarMonths(completedAt, 84);
   await paymentHistoryRepository.saveCompletedPayment({
     id: input.id,
     requestId: input.requestId,
@@ -86,9 +90,26 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
     privateCiphertext: encrypted?.ciphertext ?? null,
     privateIv: encrypted?.iv ?? null,
     privateTag: encrypted?.tag ?? null,
-    completedAt: input.completedAt || new Date(),
+    completedAt,
     expiresAt: null
-  });
+  }, [
+    {
+      paymentRecordId: input.id,
+      participantFingerprint: paymentParticipantFingerprint(input.payer),
+      role: "sender",
+      includedAccessExpiresAt,
+      archiveAccessExpiresAt,
+      accessRevokedAt: null
+    },
+    {
+      paymentRecordId: input.id,
+      participantFingerprint: paymentParticipantFingerprint(input.creator),
+      role: "receiver",
+      includedAccessExpiresAt,
+      archiveAccessExpiresAt,
+      accessRevokedAt: null
+    }
+  ]);
 }
 
 export async function createPaymentAccessChallenge(
@@ -96,16 +117,19 @@ export async function createPaymentAccessChallenge(
   rawAddress: string
 ) {
   const address = getAddress(rawAddress).toLowerCase();
-  const record = await paymentHistoryRepository.findParticipants(recordId);
-  if (!record || (address !== record.creator && address !== record.payer)) {
-    return undefined;
-  }
+  const access = await paymentHistoryRepository.findParticipantAccess(
+    recordId,
+    paymentParticipantFingerprint(address)
+  );
+  if (!access) return undefined;
   return createChallenge(recordId, address, "receipt", recordId);
 }
 
 export async function createPaymentHistoryChallenge(rawAddress: string) {
   const address = getAddress(rawAddress).toLowerCase();
-  if (!await paymentHistoryRepository.hasParticipantPayments(address)) {
+  if (!await paymentHistoryRepository.hasParticipantPayments(
+    paymentParticipantFingerprint(address)
+  )) {
     return undefined;
   }
   return createChallenge(null, address, "history");
@@ -150,7 +174,7 @@ export async function readAuthorizedPaymentHistory(
     ? getAddress(filters.counterparty).toLowerCase()
     : undefined;
   const records = await paymentHistoryRepository.listParticipantPayments({
-    participant: challenge.address,
+    participantFingerprint: paymentParticipantFingerprint(challenge.address),
     from: filters?.from,
     to: filters?.to,
     token: filters?.token,
@@ -173,7 +197,7 @@ export async function readAuthorizedPayment(
 
   const record = await paymentHistoryRepository.findParticipantPayment(
     recordId,
-    challenge.address
+    paymentParticipantFingerprint(challenge.address)
   );
   return record ? withPrivateContext(record) : undefined;
 }
@@ -210,6 +234,20 @@ function withPrivateContext(record: PaymentRecord) {
     });
   }
   return { ...record, privateContext };
+}
+
+function addCalendarMonths(value: Date, months: number): Date {
+  const result = new Date(value);
+  const day = result.getUTCDate();
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(
+    result.getUTCFullYear(),
+    result.getUTCMonth() + 1,
+    0
+  )).getUTCDate();
+  result.setUTCDate(Math.min(day, lastDay));
+  return result;
 }
 
 export async function removeExpiredPaymentData(now = new Date()): Promise<number> {
