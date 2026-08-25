@@ -16,6 +16,7 @@ import { AdminOperations } from "../../components/AdminOperations";
 import { AdminRoleManagement } from "../../components/AdminRoleManagement";
 import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPolicy";
 import { AdminArchiveEntitlements } from "../../components/AdminArchiveEntitlements";
+import { AdminDomainPricing } from "../../components/AdminDomainPricing";
 
 type AdminSession = {
   authenticated: boolean;
@@ -339,6 +340,8 @@ export default function AdminPage() {
       </section>
 
       <AdminRoleManagement />
+
+      <AdminDomainPricing />
 
       <AdminHistoryAccessPolicy />
 
