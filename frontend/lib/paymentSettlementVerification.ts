@@ -1,13 +1,17 @@
 import {
   createPublicClient,
+  decodeEventLog,
   defineChain,
   fallback,
   getAddress,
   http,
   keccak256,
+  padHex,
   stringToHex,
+  zeroAddress,
   type Address,
   type Hash,
+  type Hex,
   type Log
 } from "viem";
 import {
@@ -15,6 +19,7 @@ import {
   getPaymentNetwork,
   type PaymentNetwork
 } from "../config/paymentNetworks";
+import { cctpDepositForBurnEventAbi } from "./forwardingBurnVerification";
 
 const TRANSFER_TOPIC = keccak256(stringToHex("Transfer(address,address,uint256)"));
 
@@ -60,10 +65,10 @@ export async function verifySettlement(
     sourceClient.getTransaction({ hash: input.sourceTransactionHash })
   ]);
   if (sourceReceipt.status !== "success") throw new Error("Source transaction failed");
-  const payer = getAddress(sourceTransaction.from);
   const recipient = getAddress(input.recipient);
 
   if (input.token === "NATIVE") {
+    const payer = getAddress(sourceTransaction.from);
     if (source.chainId !== destination.chainId) {
       throw new Error("Native cross-chain settlement is unsupported");
     }
@@ -80,21 +85,24 @@ export async function verifySettlement(
   if (input.token !== "USDC") throw new Error("Unsupported settlement token");
 
   if (source.chainId === destination.chainId) {
-    if (!hasTransfer(sourceReceipt.logs, source.usdcAddress, payer, recipient, input.amountAtomic, true)) {
-      throw new Error("USDC transfer does not match the payment");
-    }
+    const payer = findUniqueUsdcTransferPayer(
+      sourceReceipt.logs,
+      source.usdcAddress,
+      recipient,
+      input.amountAtomic
+    );
+    if (!payer) throw new Error("USDC transfer does not match the payment");
     return { payer, sourceTransactionHash: input.sourceTransactionHash };
   }
 
-  if (
-    !sourceTransaction.to ||
-    getAddress(sourceTransaction.to) !== getAddress(CCTP_TOKEN_MESSENGER_V2)
-  ) {
-    throw new Error("Source transaction is not a CCTP burn");
-  }
-  if (!hasTransfer(sourceReceipt.logs, source.usdcAddress, payer, undefined, input.amountAtomic, false)) {
-    throw new Error("CCTP burn amount does not cover the payment");
-  }
+  const payer = findUniqueCctpDepositor(sourceReceipt.logs, {
+    tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+    burnToken: source.usdcAddress,
+    recipient,
+    recipientAmount: input.amountAtomic,
+    destinationDomain: destination.circleDomain
+  });
+  if (!payer) throw new Error("Source transaction is not a matching CCTP burn");
   if (!input.destinationTransactionHash) {
     throw new Error("Completed cross-chain settlement requires a destination transaction");
   }
@@ -113,6 +121,58 @@ export async function verifySettlement(
     sourceTransactionHash: input.sourceTransactionHash,
     destinationTransactionHash: input.destinationTransactionHash
   };
+}
+
+export function findUniqueUsdcTransferPayer(
+  logs: readonly Log[],
+  token: Address,
+  recipient: Address,
+  amount: bigint
+): Address | undefined {
+  const matches = matchingTransfers(logs, token, undefined, recipient, amount, true)
+    .filter((match) => match.from !== zeroAddress);
+  if (matches.length !== 1) return undefined;
+  return matches[0].from;
+}
+
+export function findUniqueCctpDepositor(
+  logs: readonly Log[],
+  input: {
+    tokenMessenger: Address;
+    burnToken: Address;
+    recipient: Address;
+    recipientAmount: bigint;
+    destinationDomain: number;
+  }
+): Address | undefined {
+  const expectedRecipient = padHex(input.recipient, { size: 32 }).toLowerCase();
+  const depositors: Address[] = [];
+  for (const log of logs) {
+    if (
+      getAddress(log.address) !== getAddress(input.tokenMessenger) ||
+      !log.topics[0]
+    ) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: cctpDepositForBurnEventAbi,
+        data: log.data,
+        topics: log.topics as [Hex, ...Hex[]],
+        strict: true
+      });
+      const args = decoded.args;
+      if (
+        getAddress(args.burnToken) !== getAddress(input.burnToken) ||
+        args.amount < input.recipientAmount ||
+        args.destinationDomain !== input.destinationDomain ||
+        args.mintRecipient.toLowerCase() !== expectedRecipient
+      ) continue;
+      const depositor = getAddress(args.depositor);
+      if (depositor !== zeroAddress) depositors.push(depositor);
+    } catch {
+      continue;
+    }
+  }
+  return depositors.length === 1 ? depositors[0] : undefined;
 }
 
 function requiredNetwork(chainId: number): PaymentNetwork {
@@ -151,21 +211,43 @@ function hasTransfer(
   expectedAmount: bigint,
   exactAmount: boolean
 ): boolean {
+  return matchingTransfers(
+    logs,
+    token,
+    expectedFrom,
+    expectedTo,
+    expectedAmount,
+    exactAmount
+  ).length > 0;
+}
+
+function matchingTransfers(
+  logs: readonly Log[],
+  token: Address,
+  expectedFrom: Address | undefined,
+  expectedTo: Address | undefined,
+  expectedAmount: bigint,
+  exactAmount: boolean
+): Array<{ from: Address; to: Address; amount: bigint }> {
   const tokenAddress = getAddress(token);
-  return logs.some((log) => {
+  const matches: Array<{ from: Address; to: Address; amount: bigint }> = [];
+  for (const log of logs) {
     if (getAddress(log.address) !== tokenAddress || log.topics[0] !== TRANSFER_TOPIC) {
-      return false;
+      continue;
     }
-    if (log.topics.length < 3 || !log.topics[1] || !log.topics[2]) return false;
+    if (log.topics.length < 3 || !log.topics[1] || !log.topics[2]) continue;
     const from = topicAddress(log.topics[1]);
     const to = topicAddress(log.topics[2]);
     const amount = BigInt(log.data || "0x0");
-    return (
+    if (
       (!expectedFrom || from === getAddress(expectedFrom)) &&
       (!expectedTo || to === getAddress(expectedTo)) &&
       (exactAmount ? amount === expectedAmount : amount >= expectedAmount)
-    );
-  });
+    ) {
+      matches.push({ from, to, amount });
+    }
+  }
+  return matches;
 }
 
 function topicAddress(topic: string): Address {
