@@ -27,6 +27,10 @@ import {
 import { parseXnsName } from "../../lib/names";
 import { selectPaymentDestination } from "../../lib/paymentPreparation";
 import {
+  installPaymentCompletionRetry,
+  submitPaymentCompletion
+} from "../../lib/paymentCompletionQueue";
+import {
   planPaymentRoute,
   swapPaymentNetworks,
   type PaymentRoute,
@@ -67,6 +71,8 @@ export default function SendPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
   const recordingHashes = useRef(new Set<string>());
+
+  useEffect(() => installPaymentCompletionRetry(), []);
   const { chainId: connectedChainId, isConnected } = useAccount();
   const {
     sendTransactionAsync,
@@ -240,10 +246,7 @@ export default function SendPage() {
     recordingHashes.current.add(key);
     setHistoryStatus("Verifying payment for private history...");
     try {
-      const response = await fetch("/api/payment-history/complete", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      await submitPaymentCompletion({
           name: directRecipient || name,
           sourceChainId,
           destinationChainId,
@@ -253,10 +256,7 @@ export default function SendPage() {
           sourceTransactionHash,
           destinationTransactionHash,
           reference: paymentReference.trim()
-        })
       });
-      const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || "Payment history could not be recorded");
       setHistoryStatus("Payment added to private history.");
     } catch (cause) {
       recordingHashes.current.delete(key);
