@@ -18,6 +18,7 @@ import { getPaymentRouteCapability } from "../lib/paymentRouteCapabilities";
 import { AdminPaymentMonitor } from "./AdminPaymentMonitor";
 import { AdminPaymentRecovery } from "./AdminPaymentRecovery";
 import { AdminRevenueReport } from "./AdminRevenueReport";
+import { AdminRetentionReview } from "./AdminRetentionReview";
 
 type HealthResponse = {
   checkedAt: string;
@@ -125,6 +126,8 @@ export function AdminOperations() {
       <AdminPaymentMonitor />
 
       <AdminRevenueReport />
+
+      <AdminRetentionReview />
 
       <AdminPaymentRecovery />
 
