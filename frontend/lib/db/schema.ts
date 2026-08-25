@@ -4,6 +4,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -208,12 +209,67 @@ export const paymentPrivateContexts = pgTable(
   }
 );
 
-export const paymentRecordsRelations = relations(paymentRecords, ({ one }) => ({
+export const paymentParticipantAccess = pgTable(
+  "payment_participant_access",
+  {
+    paymentRecordId: varchar("payment_record_id", { length: 40 })
+      .notNull()
+      .references(() => paymentRecords.id, { onDelete: "cascade" }),
+    participantFingerprint: varchar("participant_fingerprint", { length: 64 }).notNull(),
+    role: varchar("role", { length: 16 }).notNull(),
+    includedAccessExpiresAt: timestamp("included_access_expires_at", {
+      withTimezone: true,
+      mode: "date"
+    }).notNull(),
+    archiveAccessExpiresAt: timestamp("archive_access_expires_at", {
+      withTimezone: true,
+      mode: "date"
+    }).notNull(),
+    accessRevokedAt: timestamp("access_revoked_at", {
+      withTimezone: true,
+      mode: "date"
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    primaryKey({
+      name: "payment_participant_access_pk",
+      columns: [table.paymentRecordId, table.participantFingerprint, table.role]
+    }),
+    index("payment_participant_access_fingerprint_idx").on(
+      table.participantFingerprint
+    ),
+    index("payment_participant_access_included_expiry_idx").on(
+      table.includedAccessExpiresAt
+    ),
+    index("payment_participant_access_archive_expiry_idx").on(
+      table.archiveAccessExpiresAt
+    )
+  ]
+);
+
+export const paymentRecordsRelations = relations(paymentRecords, ({ many, one }) => ({
   privateContext: one(paymentPrivateContexts, {
     fields: [paymentRecords.id],
     references: [paymentPrivateContexts.paymentRecordId]
-  })
+  }),
+  participantAccess: many(paymentParticipantAccess)
 }));
+
+export const paymentParticipantAccessRelations = relations(
+  paymentParticipantAccess,
+  ({ one }) => ({
+    payment: one(paymentRecords, {
+      fields: [paymentParticipantAccess.paymentRecordId],
+      references: [paymentRecords.id]
+    })
+  })
+);
 
 export const paymentPrivateContextsRelations = relations(
   paymentPrivateContexts,
