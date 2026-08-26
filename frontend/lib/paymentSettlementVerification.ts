@@ -53,6 +53,20 @@ export type VerifiedSettlement = {
   circleFeeAtomic: bigint;
 };
 
+export async function verifyWalletMessage(input: {
+  chainId: number;
+  address: Address;
+  message: string;
+  signature: Hex;
+}): Promise<boolean> {
+  const network = requiredNetwork(input.chainId);
+  return clientFor(network).verifyMessage({
+    address: getAddress(input.address),
+    message: input.message,
+    signature: input.signature
+  });
+}
+
 export async function verifySettlement(
   input: SettlementVerificationInput
 ): Promise<VerifiedSettlement> {
