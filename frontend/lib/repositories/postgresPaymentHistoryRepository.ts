@@ -379,6 +379,9 @@ implements PaymentHistoryRepository {
         ))
       ));
     }
+    if (query.sameChainOnly) {
+      conditions.push(sql`${paymentRecords.sourceChainId} = ${paymentRecords.destinationChainId}`);
+    }
     if (query.transactionType) {
       conditions.push(eq(paymentRecords.transactionType, query.transactionType));
     }
