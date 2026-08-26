@@ -6,8 +6,13 @@ import {
 } from "./paymentParticipantFingerprint";
 import { hasActiveArchiveEntitlement } from "./archiveEntitlements";
 import {
+  evaluateCrossChainArchiveAccess,
+  getOrCreateCrossChainTrial,
+  recordCrossChainTrialStart,
+  type CrossChainArchiveAccess
+} from "./crossChainArchiveTrial";
+import {
   getHistoryAccessPolicy,
-  includedHistoryCutoff,
   retainedHistoryCutoff
 } from "./historyAccessPolicy";
 import { decryptPaymentContext, encryptPaymentContext } from "./paymentRecordCrypto";
@@ -126,6 +131,16 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
       accessRevokedAt: null
     }
   ]);
+
+  if (input.sourceChainId !== input.destinationChainId) {
+    const fingerprints = new Set([
+      paymentParticipantFingerprint(input.payer),
+      paymentParticipantFingerprint(input.creator)
+    ]);
+    await Promise.all([...fingerprints].map((participantFingerprint) =>
+      recordCrossChainTrialStart(participantFingerprint, completedAt, policy.freeHistoryMonths)
+    ));
+  }
 }
 
 export async function createPaymentAccessChallenge(
@@ -191,17 +206,15 @@ export async function readAuthorizedPaymentHistory(
     : undefined;
   const policy = await getHistoryAccessPolicy();
   const participantFingerprint = paymentParticipantFingerprint(challenge.address);
-  const hasArchiveAccess = policy.archiveAccessEnabled && await hasActiveArchiveEntitlement(
+  const archiveAccess = await resolveCrossChainArchiveAccess(
     participantFingerprint,
-    policy.archiveGraceDays
+    policy
   );
-  const accessCutoff = hasArchiveAccess
-    ? retainedHistoryCutoff(policy)
-    : includedHistoryCutoff(policy);
+  const retainedCutoff = retainedHistoryCutoff(policy);
   const requestedFrom = filters?.from;
-  const effectiveFrom = requestedFrom && requestedFrom > accessCutoff
+  const effectiveFrom = requestedFrom && requestedFrom > retainedCutoff
     ? requestedFrom
-    : accessCutoff;
+    : retainedCutoff;
   const records = await paymentHistoryRepository.listParticipantPayments({
     participantFingerprint,
     from: effectiveFrom,
@@ -216,15 +229,19 @@ export async function readAuthorizedPaymentHistory(
     direction: filters?.direction,
     transactionType: filters?.transactionType,
     completionMethod: filters?.completionMethod,
+    sameChainOnly: !archiveAccess.crossChainHistoryAllowed,
     limit: filters?.limit
   });
-  return records.map((record) => {
-    const hydrated = withPrivateContext(record);
-    return {
-      ...hydrated,
-      direction: (hydrated.payer === challenge.address ? "outgoing" : "incoming") as PaymentDirection
-    };
-  });
+  return {
+    records: records.map((record) => {
+      const hydrated = withPrivateContext(record);
+      return {
+        ...hydrated,
+        direction: (hydrated.payer === challenge.address ? "outgoing" : "incoming") as PaymentDirection
+      };
+    }),
+    archiveAccess
+  };
 }
 
 export async function readAuthorizedPayment(
@@ -241,16 +258,34 @@ export async function readAuthorizedPayment(
   );
   if (!record) return undefined;
   const policy = await getHistoryAccessPolicy();
-  const participantFingerprint = paymentParticipantFingerprint(challenge.address);
-  const hasArchiveAccess = policy.archiveAccessEnabled && await hasActiveArchiveEntitlement(
-    participantFingerprint,
-    policy.archiveGraceDays
-  );
-  const accessCutoff = hasArchiveAccess
-    ? retainedHistoryCutoff(policy)
-    : includedHistoryCutoff(policy);
-  if (record.completedAt < accessCutoff) return undefined;
+  if (record.completedAt < retainedHistoryCutoff(policy)) return undefined;
+
+  if (record.sourceChainId !== record.destinationChainId) {
+    const archiveAccess = await resolveCrossChainArchiveAccess(
+      paymentParticipantFingerprint(challenge.address),
+      policy
+    );
+    if (!archiveAccess.crossChainHistoryAllowed) return undefined;
+  }
   return withPrivateContext(record);
+}
+
+async function resolveCrossChainArchiveAccess(
+  participantFingerprint: string,
+  policy: Awaited<ReturnType<typeof getHistoryAccessPolicy>>
+): Promise<CrossChainArchiveAccess> {
+  const [trial, hasEntitlement] = await Promise.all([
+    getOrCreateCrossChainTrial(participantFingerprint, policy.freeHistoryMonths),
+    policy.archiveAccessEnabled
+      ? hasActiveArchiveEntitlement(participantFingerprint, policy.archiveGraceDays)
+      : Promise.resolve(false)
+  ]);
+  return evaluateCrossChainArchiveAccess({
+    enforcementEnabled: policy.archiveAccessEnabled,
+    hasActiveEntitlement: hasEntitlement,
+    trial,
+    now: new Date()
+  });
 }
 
 async function authorizeChallenge(
