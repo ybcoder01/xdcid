@@ -56,12 +56,13 @@ export async function POST(request: Request) {
 
     const timeZone = validTimeZone(body.timeZone) ? body.timeZone : "UTC";
     const filters = parsePaymentHistoryFilters(body.filters);
-    const records = await readAuthorizedPaymentHistory(
+    const history = await readAuthorizedPaymentHistory(
       body.challengeId,
       body.signature,
       { ...filters, limit: null }
     );
-    if (!records) return json({ error: "Payment history access was denied" }, 403);
+    if (!history) return json({ error: "Payment history access was denied" }, 403);
+    const records = history.records;
 
     const header = [
       "Completed UTC",
