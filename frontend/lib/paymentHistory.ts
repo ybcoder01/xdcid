@@ -289,7 +289,7 @@ async function resolveCrossChainArchiveAccess(
   ]);
   return evaluateCrossChainArchiveAccess({
     paywallEnabled: policy.archiveAccessEnabled,
-    hasActiveEntitlement: hasEntitlement,
+    hasEntitlement,
     trial,
     now: new Date()
   });
