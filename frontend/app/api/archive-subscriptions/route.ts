@@ -1,4 +1,4 @@
-import { getAddress, isAddress, recoverMessageAddress, type Hash } from "viem";
+import { getAddress, isAddress, isHex, type Hash, type Hex } from "viem";
 import {
   activateArchivePurchase,
   createArchivePurchaseChallenge,
@@ -6,7 +6,10 @@ import {
   normalizeArchivePlanYears
 } from "../../../lib/archiveSubscriptionPurchases";
 import { archivePlanQuotes, getHistoryAccessPolicy } from "../../../lib/historyAccessPolicy";
-import { verifySettlement } from "../../../lib/paymentSettlementVerification";
+import {
+  verifySettlement,
+  verifyWalletMessage
+} from "../../../lib/paymentSettlementVerification";
 import {
   PAYMENT_NETWORK_ENV,
   TESTNET_PAYMENT_NETWORKS,
@@ -69,7 +72,7 @@ export async function PUT(request: Request) {
     const challengeId = String(body.challengeId || "");
     const signature = String(body.signature || "");
     const transactionHash = String(body.transactionHash || "") as Hash;
-    if (!challengeId || !/^0x[0-9a-fA-F]{130}$/.test(signature)) {
+    if (!challengeId || !isHex(signature) || signature.length <= 2 || signature.length % 2 !== 0) {
       return json({ error: "A valid signed archive challenge is required" }, 400);
     }
     if (!/^0x[0-9a-fA-F]{64}$/.test(transactionHash)) {
@@ -88,11 +91,13 @@ export async function PUT(request: Request) {
       return json({ error: "Archive checkout challenge has already been used" }, 409);
     }
 
-    const signer = await recoverMessageAddress({
+    const validSignature = await verifyWalletMessage({
+      chainId: challenge.chainId,
+      address: challenge.wallet,
       message: challenge.message,
-      signature: signature as `0x${string}`
+      signature: signature as Hex
     });
-    if (getAddress(signer) !== challenge.wallet) {
+    if (!validSignature) {
       return json({ error: "Archive checkout signature does not match the purchasing wallet" }, 403);
     }
 
