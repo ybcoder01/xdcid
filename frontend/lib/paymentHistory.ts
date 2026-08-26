@@ -138,7 +138,11 @@ export async function saveCompletedPayment(input: CompletedPaymentInput): Promis
       paymentParticipantFingerprint(input.creator)
     ]);
     await Promise.all([...fingerprints].map((participantFingerprint) =>
-      recordCrossChainTrialStart(participantFingerprint, completedAt, policy.freeHistoryMonths)
+      recordCrossChainTrialStart({
+        walletFingerprint: participantFingerprint,
+        completedAt,
+        trialMonths: policy.freeHistoryMonths
+      })
     ));
   }
 }
@@ -275,13 +279,16 @@ async function resolveCrossChainArchiveAccess(
   policy: Awaited<ReturnType<typeof getHistoryAccessPolicy>>
 ): Promise<CrossChainArchiveAccess> {
   const [trial, hasEntitlement] = await Promise.all([
-    getOrCreateCrossChainTrial(participantFingerprint, policy.freeHistoryMonths),
+    getOrCreateCrossChainTrial({
+      walletFingerprint: participantFingerprint,
+      trialMonths: policy.freeHistoryMonths
+    }),
     policy.archiveAccessEnabled
       ? hasActiveArchiveEntitlement(participantFingerprint, policy.archiveGraceDays)
       : Promise.resolve(false)
   ]);
   return evaluateCrossChainArchiveAccess({
-    enforcementEnabled: policy.archiveAccessEnabled,
+    paywallEnabled: policy.archiveAccessEnabled,
     hasActiveEntitlement: hasEntitlement,
     trial,
     now: new Date()
