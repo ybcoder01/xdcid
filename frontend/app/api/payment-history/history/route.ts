@@ -25,13 +25,13 @@ export async function POST(request: Request) {
     ) {
       return json({ error: "A valid signed challenge is required" }, 400);
     }
-    const records = await readAuthorizedPaymentHistory(
+    const history = await readAuthorizedPaymentHistory(
       body.challengeId,
       body.signature,
       parsePaymentHistoryFilters(body.filters)
     );
-    if (!records) return json({ error: "Payment history access was denied" }, 403);
-    return json({ records });
+    if (!history) return json({ error: "Payment history access was denied" }, 403);
+    return json(history);
   } catch {
     return json({ error: "Payment history access could not be verified" }, 400);
   }

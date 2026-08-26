@@ -29,6 +29,13 @@ type PaymentRecord = {
   };
 };
 
+type ArchiveAccess = {
+  crossChainHistoryAllowed: boolean;
+  mode: "enforcement_disabled" | "trial_not_started" | "trial" | "subscription" | "subscription_required";
+  trialStartedAt: string | null;
+  trialEndsAt: string | null;
+};
+
 type Filters = {
   from: string;
   to: string;
@@ -72,6 +79,7 @@ export default function PaymentHistoryPage() {
   const { address, isConnected } = useAccount();
   const signer = useSignMessage();
   const [records, setRecords] = useState<PaymentRecord[]>([]);
+  const [archiveAccess, setArchiveAccess] = useState<ArchiveAccess>();
   const [loaded, setLoaded] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [exporting, setExporting] = useState(false);
@@ -113,12 +121,14 @@ export default function PaymentHistoryPage() {
       });
       const history = await historyResponse.json() as {
         records?: PaymentRecord[];
+        archiveAccess?: ArchiveAccess;
         error?: string;
       };
       if (!historyResponse.ok || !history.records) {
         throw new Error(history.error || "Payment history could not be loaded.");
       }
       setRecords(history.records);
+      setArchiveAccess(history.archiveAccess);
       setLoaded(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Payment history could not be loaded.");
@@ -235,6 +245,8 @@ export default function PaymentHistoryPage() {
         </p>
         {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
       </section>
+
+      {loaded && archiveAccess ? <ArchiveAccessNotice access={archiveAccess} /> : null}
 
       <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -387,6 +399,36 @@ export default function PaymentHistoryPage() {
         </section>
       ) : null}
     </main>
+  );
+}
+
+function ArchiveAccessNotice({ access }: { access: ArchiveAccess }) {
+  if (access.mode === "enforcement_disabled") return null;
+  const content = {
+    trial_not_started: {
+      title: "Your cross-chain history trial has not started",
+      body: "Your one-time free trial begins when your first XDCID cross-chain payment completes."
+    },
+    trial: {
+      title: "Cross-chain history trial active",
+      body: access.trialEndsAt
+        ? "Cross-chain history is included until " + new Date(access.trialEndsAt).toLocaleString() + "."
+        : "Cross-chain history is currently included."
+    },
+    subscription: {
+      title: "Cross-chain archive access active",
+      body: "Your archive entitlement currently includes retained cross-chain history and exports."
+    },
+    subscription_required: {
+      title: "Cross-chain archive subscription required",
+      body: "Your one-time trial has ended. Same-chain history remains visible, while cross-chain records, exports and receipts require archive access."
+    }
+  }[access.mode];
+  return (
+    <section className="mt-8 rounded-2xl border border-amber-300 bg-amber-50 p-6 text-amber-950">
+      <h2 className="font-semibold">{content.title}</h2>
+      <p className="mt-2 text-sm leading-6">{content.body}</p>
+    </section>
   );
 }
 
