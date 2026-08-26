@@ -85,6 +85,7 @@ export type PaymentHistoryQuery = {
   destinationChainId?: number;
   nameFingerprint?: string;
   counterpartyFingerprint?: string;
+  sameChainOnly?: boolean;
   limit?: number | null;
 };
 
