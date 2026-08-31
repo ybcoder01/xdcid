@@ -2,9 +2,9 @@ import { isAddress } from "viem";
 import { requireAdminPermission } from "../../../../lib/adminAuth";
 import {
   grantWalletArchiveEntitlement,
-  listArchiveEntitlements,
   revokeArchiveEntitlement
 } from "../../../../lib/archiveEntitlements";
+import { listArchiveSubscriptionOperations } from "../../../../lib/archiveSubscriptionPurchases";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const session = await requireAdminPermission(request, "archive:manage");
   if (!session) return json({ error: "Admin authentication required" }, 401);
   try {
-    return json({ entitlements: await listArchiveEntitlements() });
+    return json({ entitlements: await listArchiveSubscriptionOperations() });
   } catch {
     return json({ error: "Archive entitlements are unavailable" }, 503);
   }
