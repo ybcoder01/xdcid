@@ -20,6 +20,8 @@ export async function GET(request: Request) {
       authenticated: true,
       address: session.address,
       expiresAt: new Date(session.expiresAt * 1_000).toISOString(),
+      roles: session.roles,
+      permissions: session.permissions,
     },
     { headers: { "cache-control": "no-store" } },
   );
