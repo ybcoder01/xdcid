@@ -80,7 +80,7 @@ export function AdminArchiveRevenue() {
         </button>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Metric
           label="Verified revenue"
           value={report ? `${formatUsdc(report.totals.amountAtomic)} USDC` : "—"}
@@ -98,7 +98,7 @@ export function AdminArchiveRevenue() {
               value={plan ? String(plan.verifiedPurchases) : "0"}
             />
           );
-        }).slice(0, 2)}
+        })}
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
