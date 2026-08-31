@@ -284,6 +284,132 @@ export async function getActiveArchiveSubscription(
   };
 }
 
+
+export type ArchiveSubscriptionOperation = {
+  entitlementId: string;
+  walletFingerprint: string;
+  startsAt: string;
+  expiresAt: string;
+  state: "active" | "expired" | "revoked";
+  source: "admin" | "purchase";
+  planYears: ArchivePlanYears | null;
+  chainId: number | null;
+  transactionHash: Hash | null;
+  createdAt: string;
+};
+
+export async function listArchiveSubscriptionOperations(
+  limit = 200,
+  now = new Date(),
+): Promise<ArchiveSubscriptionOperation[]> {
+  const client = await ensureSchema();
+  const rows = await client`
+    SELECT
+      e.id AS entitlement_id,
+      e.wallet_fingerprint,
+      e.starts_at,
+      e.expires_at,
+      e.status,
+      e.source,
+      e.created_at,
+      p.plan_years,
+      p.chain_id,
+      p.transaction_hash
+    FROM history_archive_entitlements e
+    LEFT JOIN archive_subscription_payments p ON p.entitlement_id = e.id
+    ORDER BY e.created_at DESC
+    LIMIT ${Math.min(Math.max(limit, 1), 500)}
+  `;
+  return rows.map((row) => {
+    const status = String(row.status);
+    const expiresAt = new Date(String(row.expires_at));
+    return {
+      entitlementId: String(row.entitlement_id),
+      walletFingerprint: String(row.wallet_fingerprint),
+      startsAt: new Date(String(row.starts_at)).toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      state: status === "revoked"
+        ? "revoked"
+        : expiresAt < now
+          ? "expired"
+          : "active",
+      source: String(row.source) as ArchiveSubscriptionOperation["source"],
+      planYears: row.plan_years ? normalizeArchivePlanYears(row.plan_years) : null,
+      chainId: row.chain_id === null || row.chain_id === undefined
+        ? null
+        : Number(row.chain_id),
+      transactionHash: row.transaction_hash
+        ? String(row.transaction_hash) as Hash
+        : null,
+      createdAt: new Date(String(row.created_at)).toISOString(),
+    };
+  });
+}
+
+export type ArchiveRevenueReport = {
+  generatedAt: string;
+  totals: {
+    verifiedPurchases: number;
+    amountAtomic: string;
+  };
+  plans: Array<{
+    planYears: ArchivePlanYears;
+    verifiedPurchases: number;
+    amountAtomic: string;
+  }>;
+  recentPayments: Array<{
+    chainId: number;
+    transactionHash: Hash;
+    planYears: ArchivePlanYears;
+    amountAtomic: string;
+    createdAt: string;
+  }>;
+};
+
+export async function getArchiveRevenueReport(): Promise<ArchiveRevenueReport> {
+  const client = await ensureSchema();
+  const [totals, plans, recentPayments] = await Promise.all([
+    client`
+      SELECT count(*)::integer AS verified_purchases,
+        coalesce(sum(amount_atomic), 0)::text AS amount_atomic
+      FROM archive_subscription_payments
+    `,
+    client`
+      SELECT plan_years, count(*)::integer AS verified_purchases,
+        coalesce(sum(amount_atomic), 0)::text AS amount_atomic
+      FROM archive_subscription_payments
+      GROUP BY plan_years
+      ORDER BY plan_years
+    `,
+    client`
+      SELECT chain_id, transaction_hash, plan_years, amount_atomic, created_at
+      FROM archive_subscription_payments
+      ORDER BY created_at DESC
+      LIMIT 100
+    `,
+  ]);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totals: {
+      verifiedPurchases: Number(totals[0]?.verified_purchases || 0),
+      amountAtomic: String(totals[0]?.amount_atomic || "0"),
+    },
+    plans: plans.map((row) => ({
+      planYears: normalizeArchivePlanYears(row.plan_years),
+      verifiedPurchases: Number(row.verified_purchases || 0),
+      amountAtomic: String(row.amount_atomic || "0"),
+    })),
+    recentPayments: recentPayments.map((row) => ({
+      chainId: Number(row.chain_id),
+      transactionHash: String(row.transaction_hash) as Hash,
+      planYears: normalizeArchivePlanYears(row.plan_years),
+      amountAtomic: String(row.amount_atomic),
+      createdAt: new Date(String(row.created_at)).toISOString(),
+    })),
+  };
+}
+
 async function markChallengeUsed(
   client: Awaited<ReturnType<typeof ensureSchema>>,
   id: string,

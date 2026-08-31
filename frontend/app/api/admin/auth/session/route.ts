@@ -1,10 +1,10 @@
-import { requireAdminSession } from "../../../../../lib/adminAuth";
+import { requireAuthorizedAdminSession } from "../../../../../lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const session = await requireAdminSession(request);
+  const session = await requireAuthorizedAdminSession(request);
   if (!session) {
     return Response.json(
       { authenticated: false },
@@ -20,6 +20,8 @@ export async function GET(request: Request) {
       authenticated: true,
       address: session.address,
       expiresAt: new Date(session.expiresAt * 1_000).toISOString(),
+      roles: session.roles,
+      permissions: session.permissions,
     },
     { headers: { "cache-control": "no-store" } },
   );
