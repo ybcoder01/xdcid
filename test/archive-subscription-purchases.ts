@@ -3,6 +3,7 @@ import {
   archivePurchaseMessage,
   normalizeArchivePlanYears
 } from "../frontend/lib/archiveSubscriptionPurchases";
+import { isSameArchiveWallet } from "../frontend/lib/archiveAccessAdministrator";
 
 describe("archive subscription purchase authorization", function () {
   it("accepts only the supported one, three, and seven year plans", function () {
@@ -12,6 +13,17 @@ describe("archive subscription purchase authorization", function () {
     expect(() => normalizeArchivePlanYears(5)).to.throw(
       "Archive plan must be 1, 3, or 7 years"
     );
+  });
+
+  it("identifies treasury self-payments", function () {
+    expect(isSameArchiveWallet(
+      "0x0000000000000000000000000000000000000001",
+      "0x0000000000000000000000000000000000000001"
+    )).to.equal(true);
+    expect(isSameArchiveWallet(
+      "0x0000000000000000000000000000000000000001",
+      "0x0000000000000000000000000000000000000002"
+    )).to.equal(false);
   });
 
   it("binds a checkout signature to the wallet, price, chain, treasury, and expiry", function () {
