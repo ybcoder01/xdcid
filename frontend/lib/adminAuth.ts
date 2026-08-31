@@ -268,7 +268,7 @@ export function isSameOrigin(request: Request): boolean {
   return !suppliedOrigin || suppliedOrigin === new URL(request.url).origin;
 }
 
-export async function requireAdminSession(
+export async function requireAuthorizedAdminSession(
   request: Request,
 ): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
   const session = parseAdminSession(cookieValue(request, ADMIN_SESSION_COOKIE));
@@ -284,10 +284,17 @@ export async function requireAdminSession(
   }
 }
 
+export async function requireAdminSession(
+  request: Request,
+): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
+  const session = await requireAuthorizedAdminSession(request);
+  return session?.permissions.includes("platform:manage") ? session : null;
+}
+
 export async function requireAdminPermission(
   request: Request,
   permission: AdminPermission,
 ): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
-  const session = await requireAdminSession(request);
+  const session = await requireAuthorizedAdminSession(request);
   return session?.permissions.includes(permission) ? session : null;
 }
