@@ -4,6 +4,7 @@ import {
   adminSessionCookie,
   createAdminSession,
   isAuthorizedAdmin,
+  resolveAdminAuthorization,
   hashAdminMessage,
   isSameOrigin,
   verifyAdminWalletSignature,
@@ -109,11 +110,14 @@ export async function POST(request: Request) {
     }
 
     const session = createAdminSession(address);
+    const authorization = await resolveAdminAuthorization(address);
     return Response.json(
       {
         authenticated: true,
         address,
         expiresAt: session.expiresAt,
+        roles: authorization.roles,
+        permissions: authorization.permissions,
       },
       {
         headers: {
