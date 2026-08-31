@@ -17,7 +17,6 @@ import {
 import { getPaymentRouteCapability } from "../lib/paymentRouteCapabilities";
 import { AdminPaymentMonitor } from "./AdminPaymentMonitor";
 import { AdminPaymentRecovery } from "./AdminPaymentRecovery";
-import { AdminRevenueReport } from "./AdminRevenueReport";
 import { AdminRetentionReview } from "./AdminRetentionReview";
 
 type HealthResponse = {
@@ -124,8 +123,6 @@ export function AdminOperations() {
   return (
     <div className="mt-8 grid gap-8">
       <AdminPaymentMonitor />
-
-      <AdminRevenueReport />
 
       <AdminRetentionReview />
 
