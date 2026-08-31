@@ -1,4 +1,4 @@
-import { requireAdminSession } from "../../../../../lib/adminAuth";
+import { requireAuthorizedAdminSession } from "../../../../../lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
