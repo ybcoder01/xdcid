@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { getAddress, type Address, type Hash } from "viem";
 import { paymentParticipantFingerprint } from "./paymentParticipantFingerprint";
+import {
+  isArchiveAccessAdministratorWallet,
+  isSameArchiveWallet
+} from "./archiveAccessAdministrator";
 
 export type ArchivePlanYears = 1 | 3 | 7;
 
@@ -72,6 +76,11 @@ export async function createArchivePurchaseChallenge(input: {
   if (input.amountAtomic <= 0n) throw new Error("Archive price must be positive");
   const wallet = getAddress(input.wallet);
   const treasury = getAddress(input.treasury);
+  if (isSameArchiveWallet(wallet, treasury)) {
+    throw new Error(
+      "The archive treasury cannot purchase a subscription because the transfer would pay itself"
+    );
+  }
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + CHALLENGE_MINUTES * 60_000);
   const message = archivePurchaseMessage({
@@ -212,9 +221,9 @@ export async function activateArchivePurchase(input: {
 
 export type ActiveArchiveSubscription = {
   entitlementId: string;
-  startsAt: string;
-  expiresAt: string;
-  source: "admin" | "purchase";
+  startsAt: string | null;
+  expiresAt: string | null;
+  source: "admin" | "purchase" | "administrator";
   transactionHash: Hash | null;
   planYears: ArchivePlanYears | null;
   amountAtomic: string | null;
@@ -225,6 +234,19 @@ export async function getActiveArchiveSubscription(
   wallet: string,
   now = new Date()
 ): Promise<ActiveArchiveSubscription | null> {
+  const normalizedWallet = getAddress(wallet);
+  if (await isArchiveAccessAdministratorWallet(normalizedWallet)) {
+    return {
+      entitlementId: "archive-administrator",
+      startsAt: null,
+      expiresAt: null,
+      source: "administrator",
+      transactionHash: null,
+      planYears: null,
+      amountAtomic: null,
+      chainId: null
+    };
+  }
   const client = await ensureSchema();
   const rows = await client`
     SELECT
@@ -239,7 +261,7 @@ export async function getActiveArchiveSubscription(
     FROM history_archive_entitlements e
     LEFT JOIN archive_subscription_payments p ON p.entitlement_id = e.id
     WHERE e.subject_type = 'wallet'
-      AND e.wallet_fingerprint = ${paymentParticipantFingerprint(getAddress(wallet))}
+      AND e.wallet_fingerprint = ${paymentParticipantFingerprint(normalizedWallet)}
       AND e.status = 'active'
       AND e.starts_at <= ${now.toISOString()}
       AND e.expires_at >= ${now.toISOString()}

@@ -15,6 +15,7 @@ import {
   TESTNET_PAYMENT_NETWORKS,
   MAINNET_PAYMENT_NETWORKS
 } from "../../../config/paymentNetworks";
+import { isSameArchiveWallet } from "../../../lib/archiveAccessAdministrator";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,8 +35,14 @@ export async function POST(request: Request) {
     if (!isAddress(String(body.wallet || ""))) {
       return json({ error: "A valid purchasing wallet is required" }, 400);
     }
+    const wallet = getAddress(String(body.wallet));
     const planYears = normalizeArchivePlanYears(body.planYears);
     const configuration = await archiveCheckoutConfiguration();
+    if (isSameArchiveWallet(wallet, configuration.treasury)) {
+      return json({
+        error: "The archive treasury cannot purchase a subscription because the transfer would pay itself"
+      }, 409);
+    }
     if (!configuration.salesEnabled) {
       return json({ error: "Archive subscription sales are not enabled" }, 409);
     }
@@ -44,7 +51,7 @@ export async function POST(request: Request) {
       return json({ error: "Archive plan pricing is unavailable" }, 409);
     }
     const challenge = await createArchivePurchaseChallenge({
-      wallet: String(body.wallet),
+      wallet,
       planYears,
       amountAtomic: BigInt(plan.payableUsdMicros),
       chainId: configuration.chainId,
@@ -81,6 +88,9 @@ export async function PUT(request: Request) {
 
     const challenge = await getArchivePurchaseChallenge(challengeId);
     if (!challenge) return json({ error: "Archive checkout challenge was not found" }, 404);
+    if (isSameArchiveWallet(challenge.wallet, challenge.treasury)) {
+      return json({ error: "Archive treasury purchases are not permitted" }, 409);
+    }
     if (challenge.expiresAt.getTime() < Date.now() && !challenge.usedAt) {
       return json({ error: "Archive checkout challenge expired; start again" }, 410);
     }

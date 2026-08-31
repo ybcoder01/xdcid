@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { getAddress } from "viem";
 import { paymentParticipantFingerprint } from "./paymentParticipantFingerprint";
+import { isArchiveAccessAdministratorFingerprint } from "./archiveAccessAdministrator";
 
 export type ArchiveEntitlement = {
   id: string;
@@ -22,6 +23,7 @@ export async function hasActiveArchiveEntitlement(
   graceDays: number,
   now = new Date()
 ): Promise<boolean> {
+  if (await isArchiveAccessAdministratorFingerprint(walletFingerprint)) return true;
   const client = await ensureSchema();
   const rows = await client`
     SELECT expires_at
