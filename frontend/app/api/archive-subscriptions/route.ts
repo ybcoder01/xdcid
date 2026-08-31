@@ -88,6 +88,9 @@ export async function PUT(request: Request) {
 
     const challenge = await getArchivePurchaseChallenge(challengeId);
     if (!challenge) return json({ error: "Archive checkout challenge was not found" }, 404);
+    if (isSameArchiveWallet(challenge.wallet, challenge.treasury)) {
+      return json({ error: "Archive treasury purchases are not permitted" }, 409);
+    }
     if (challenge.expiresAt.getTime() < Date.now() && !challenge.usedAt) {
       return json({ error: "Archive checkout challenge expired; start again" }, 410);
     }
