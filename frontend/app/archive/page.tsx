@@ -41,9 +41,9 @@ type Configuration = {
 
 type ActiveSubscription = {
   entitlementId: string;
-  startsAt: string;
-  expiresAt: string;
-  source: "admin" | "purchase";
+  startsAt: string | null;
+  expiresAt: string | null;
+  source: "admin" | "purchase" | "administrator";
   transactionHash: Hash | null;
   planYears: 1 | 3 | 7 | null;
   amountAtomic: string | null;
@@ -105,6 +105,12 @@ export default function ArchiveSubscriptionPage() {
     setActiveSubscription(null);
     setSubscriptionChecked(false);
   }, [address]);
+
+  const isTreasuryWallet = useMemo(
+    () => !!address && !!configuration &&
+      getAddress(address) === getAddress(configuration.treasury),
+    [address, configuration]
+  );
 
   const selectedPlan = useMemo(
     () => configuration?.plans.find((plan) => plan.years === selectedYears) || null,
@@ -266,20 +272,27 @@ export default function ArchiveSubscriptionPage() {
               {activeSubscription ? (
                 <div className="mt-3 space-y-1 text-sm text-slate-700">
                   <p>
-                    <strong>Status:</strong> Active
+                    <strong>Status:</strong>{" "}
+                    {activeSubscription.source === "administrator"
+                      ? "Archive administrator access"
+                      : "Active"}
                     {activeSubscription.planYears
                       ? ` · ${activeSubscription.planYears}-year plan`
                       : ""}
                   </p>
-                  <p>
-                    <strong>Active through:</strong>{" "}
-                    {new Date(activeSubscription.expiresAt).toLocaleString()}
-                  </p>
+                  {activeSubscription.expiresAt ? (
+                    <p>
+                      <strong>Active through:</strong>{" "}
+                      {new Date(activeSubscription.expiresAt).toLocaleString()}
+                    </p>
+                  ) : null}
                   <p>
                     <strong>Source:</strong>{" "}
                     {activeSubscription.source === "purchase"
                       ? "Verified USDC purchase"
-                      : "Administrative grant"}
+                      : activeSubscription.source === "administrator"
+                        ? "Configurable archive administrator"
+                        : "Administrative grant"}
                   </p>
                   {activeSubscription.transactionHash && configuration ? (
                     <a
@@ -364,17 +377,28 @@ export default function ArchiveSubscriptionPage() {
           </div>
           <button
             className="mt-5 w-full rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-[#0b6670] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!configuration?.salesEnabled || !isConnected || busy}
+            disabled={!configuration?.salesEnabled || !isConnected || busy || isTreasuryWallet || activeSubscription?.source === "administrator"}
             onClick={purchase}
             type="button"
           >
             {busy
               ? "Processing…"
-              : isConnected
-                ? `Purchase or renew ${selectedYears}-year access`
-                : "Connect wallet to continue"}
+              : isTreasuryWallet
+                ? "Treasury cannot purchase from itself"
+                : activeSubscription?.source === "administrator"
+                  ? "Archive administrator access included"
+                  : isConnected
+                    ? `Purchase or renew ${selectedYears}-year access`
+                    : "Connect wallet to continue"}
           </button>
           <p className="mt-3 break-words text-sm text-slate-600">{status}</p>
+          {isTreasuryWallet ? (
+            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              This wallet is the subscription treasury. A self-payment would not reduce its USDC
+              balance, so checkout is disabled. Archive administrative access is managed separately
+              in the admin panel.
+            </p>
+          ) : null}
           {paymentHash && configuration ? (
             <a
               className="mt-2 block break-all text-sm text-[#0b7477] underline"
