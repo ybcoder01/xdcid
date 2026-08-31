@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const session = await requireAdminSession(request);
+  const session = await requireAuthorizedAdminSession(request);
   if (!session) {
     return Response.json(
       { authenticated: false },
