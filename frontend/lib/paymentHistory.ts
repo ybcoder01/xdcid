@@ -170,10 +170,15 @@ export async function createPaymentHistoryChallenge(rawAddress: string) {
   return createChallenge(null, address, "history");
 }
 
+export async function createArchiveEntitlementChallenge(rawAddress: string) {
+  const address = getAddress(rawAddress).toLowerCase();
+  return createChallenge(null, address, "archive");
+}
+
 async function createChallenge(
   paymentRecordId: string | null,
   address: string,
-  scope: "receipt" | "history",
+  scope: "receipt" | "history" | "archive",
   recordId?: string
 ) {
   const id = randomBytes(18).toString("base64url");
@@ -195,6 +200,14 @@ async function createChallenge(
     expiresAt
   });
   return { challengeId: id, message, expiresAt };
+}
+
+export async function authorizeArchiveEntitlementChallenge(
+  challengeId: string,
+  signature: Hex
+) {
+  const challenge = await authorizeChallenge(challengeId, null, signature);
+  return challenge?.address;
 }
 
 export async function readAuthorizedPaymentHistory(

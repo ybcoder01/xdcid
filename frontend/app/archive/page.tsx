@@ -39,6 +39,17 @@ type Configuration = {
   error?: string;
 };
 
+type ActiveSubscription = {
+  entitlementId: string;
+  startsAt: string;
+  expiresAt: string;
+  source: "admin" | "purchase";
+  transactionHash: Hash | null;
+  planYears: 1 | 3 | 7 | null;
+  amountAtomic: string | null;
+  chainId: number | null;
+};
+
 type Challenge = {
   challengeId: string;
   message: string;
@@ -67,6 +78,9 @@ export default function ArchiveSubscriptionPage() {
   const [busy, setBusy] = useState(false);
   const [paymentHash, setPaymentHash] = useState<Hash | null>(null);
   const [entitlementExpiry, setEntitlementExpiry] = useState<string | null>(null);
+  const [activeSubscription, setActiveSubscription] = useState<ActiveSubscription | null>(null);
+  const [subscriptionChecked, setSubscriptionChecked] = useState(false);
+  const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -87,10 +101,62 @@ export default function ArchiveSubscriptionPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    setActiveSubscription(null);
+    setSubscriptionChecked(false);
+  }, [address]);
+
   const selectedPlan = useMemo(
     () => configuration?.plans.find((plan) => plan.years === selectedYears) || null,
     [configuration, selectedYears]
   );
+
+  async function verifyCurrentSubscription() {
+    if (!address || checkingSubscription) return;
+    setCheckingSubscription(true);
+    setSubscriptionChecked(false);
+    try {
+      const challengeResponse = await fetch("/api/archive-subscriptions/status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address })
+      });
+      const challenge = await challengeResponse.json() as {
+        challengeId?: string;
+        message?: string;
+        error?: string;
+      };
+      if (!challengeResponse.ok || !challenge.challengeId || !challenge.message) {
+        throw new Error(challenge.error || "Archive access verification could not start");
+      }
+
+      const signature = await signMessageAsync({ message: challenge.message });
+      const statusResponse = await fetch("/api/archive-subscriptions/status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          challengeId: challenge.challengeId,
+          signature
+        })
+      });
+      const result = await statusResponse.json() as {
+        entitlement?: ActiveSubscription | null;
+        error?: string;
+      };
+      if (!statusResponse.ok) {
+        throw new Error(result.error || "Archive access could not be verified");
+      }
+      setActiveSubscription(result.entitlement || null);
+      setSubscriptionChecked(true);
+      setStatus(result.entitlement
+        ? "Current archive access verified."
+        : "No active archive subscription was found for this wallet.");
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : "Archive access could not be verified");
+    } finally {
+      setCheckingSubscription(false);
+    }
+  }
 
   async function purchase() {
     if (!address || !configuration || !selectedPlan || !publicClient) return;
@@ -148,13 +214,29 @@ export default function ArchiveSubscriptionPage() {
         })
       });
       const activation = await activationResponse.json() as {
-        entitlement?: { expiresAt: string };
+        entitlement?: {
+          entitlementId: string;
+          startsAt: string;
+          expiresAt: string;
+          transactionHash: Hash;
+        };
         error?: string;
       };
       if (!activationResponse.ok || !activation.entitlement) {
         throw new Error(activation.error || "Archive entitlement activation failed");
       }
       setEntitlementExpiry(activation.entitlement.expiresAt);
+      setActiveSubscription({
+        entitlementId: activation.entitlement.entitlementId,
+        startsAt: activation.entitlement.startsAt,
+        expiresAt: activation.entitlement.expiresAt,
+        source: "purchase",
+        transactionHash: activation.entitlement.transactionHash,
+        planYears: selectedYears,
+        amountAtomic: challenge.amountAtomic,
+        chainId: configuration.chainId
+      });
+      setSubscriptionChecked(true);
       setStatus("Archive access activated successfully.");
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Archive checkout failed");
@@ -176,6 +258,69 @@ export default function ArchiveSubscriptionPage() {
           Purchase or renew access to your retained XDCID cross-chain records.
           Same-chain history remains outside this subscription.
         </p>
+
+        <div className="mt-8 rounded-2xl border border-black/10 bg-slate-50 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">Current archive access</h2>
+              {activeSubscription ? (
+                <div className="mt-3 space-y-1 text-sm text-slate-700">
+                  <p>
+                    <strong>Status:</strong> Active
+                    {activeSubscription.planYears
+                      ? ` · ${activeSubscription.planYears}-year plan`
+                      : ""}
+                  </p>
+                  <p>
+                    <strong>Active through:</strong>{" "}
+                    {new Date(activeSubscription.expiresAt).toLocaleString()}
+                  </p>
+                  <p>
+                    <strong>Source:</strong>{" "}
+                    {activeSubscription.source === "purchase"
+                      ? "Verified USDC purchase"
+                      : "Administrative grant"}
+                  </p>
+                  {activeSubscription.transactionHash && configuration ? (
+                    <a
+                      className="block break-all text-[#0b7477] underline"
+                      href={`${configuration.explorerUrl}/tx/${activeSubscription.transactionHash}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      View subscription payment
+                    </a>
+                  ) : null}
+                </div>
+              ) : subscriptionChecked ? (
+                <p className="mt-3 text-sm text-slate-600">
+                  No active archive subscription was found for this wallet.
+                </p>
+              ) : (
+                <p className="mt-3 text-sm text-slate-600">
+                  Verify the connected wallet to view its current plan and expiry.
+                </p>
+              )}
+            </div>
+            <button
+              className="rounded-xl border border-[#0b7477] px-4 py-2 text-sm font-semibold text-[#0b7477] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!isConnected || checkingSubscription}
+              onClick={verifyCurrentSubscription}
+              type="button"
+            >
+              {!isConnected
+                ? "Connect wallet to verify"
+                : checkingSubscription
+                  ? "Verifying…"
+                  : activeSubscription
+                    ? "Refresh access"
+                    : "Verify current subscription"}
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            The verification signature is gasless, expires after five minutes, and cannot move funds.
+          </p>
+        </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {(configuration?.plans || []).map((plan) => {

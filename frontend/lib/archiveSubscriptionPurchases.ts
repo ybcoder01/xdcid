@@ -210,6 +210,58 @@ export async function activateArchivePurchase(input: {
   return purchaseResult(resultRow, input.transactionHash, false);
 }
 
+export type ActiveArchiveSubscription = {
+  entitlementId: string;
+  startsAt: string;
+  expiresAt: string;
+  source: "admin" | "purchase";
+  transactionHash: Hash | null;
+  planYears: ArchivePlanYears | null;
+  amountAtomic: string | null;
+  chainId: number | null;
+};
+
+export async function getActiveArchiveSubscription(
+  wallet: string,
+  now = new Date()
+): Promise<ActiveArchiveSubscription | null> {
+  const client = await ensureSchema();
+  const rows = await client`
+    SELECT
+      e.id AS entitlement_id,
+      e.starts_at,
+      e.expires_at,
+      e.source,
+      p.transaction_hash,
+      p.plan_years,
+      p.amount_atomic,
+      p.chain_id
+    FROM history_archive_entitlements e
+    LEFT JOIN archive_subscription_payments p ON p.entitlement_id = e.id
+    WHERE e.subject_type = 'wallet'
+      AND e.wallet_fingerprint = ${paymentParticipantFingerprint(getAddress(wallet))}
+      AND e.status = 'active'
+      AND e.starts_at <= ${now.toISOString()}
+      AND e.expires_at >= ${now.toISOString()}
+    ORDER BY e.expires_at DESC, p.created_at DESC NULLS LAST
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    entitlementId: String(row.entitlement_id),
+    startsAt: new Date(String(row.starts_at)).toISOString(),
+    expiresAt: new Date(String(row.expires_at)).toISOString(),
+    source: String(row.source) as ActiveArchiveSubscription["source"],
+    transactionHash: row.transaction_hash ? String(row.transaction_hash) as Hash : null,
+    planYears: row.plan_years ? normalizeArchivePlanYears(row.plan_years) : null,
+    amountAtomic: row.amount_atomic ? String(row.amount_atomic) : null,
+    chainId: row.chain_id === null || row.chain_id === undefined
+      ? null
+      : Number(row.chain_id)
+  };
+}
+
 async function markChallengeUsed(
   client: Awaited<ReturnType<typeof ensureSchema>>,
   id: string,
