@@ -32,6 +32,8 @@ type AdminPermission =
   | "archive:manage"
   | "revenue:view";
 
+const ADMIN_SESSION_CHANGED_EVENT = "xdcid:admin-session-changed";
+
 type AdminSession = {
   authenticated: boolean;
   address?: string;
@@ -188,6 +190,7 @@ export default function AdminPage() {
         );
       }
       setSession(verified as AdminSession);
+      window.dispatchEvent(new Event(ADMIN_SESSION_CHANGED_EVENT));
     } catch (cause) {
       setSession({ authenticated: false });
       setAuthError(
@@ -204,6 +207,7 @@ export default function AdminPage() {
       credentials: "same-origin",
     }).catch(() => undefined);
     setSession({ authenticated: false });
+    window.dispatchEvent(new Event(ADMIN_SESSION_CHANGED_EVENT));
   }
 
   function withdraw() {
