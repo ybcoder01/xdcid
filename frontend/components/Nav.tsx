@@ -2,13 +2,22 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
 import { WalletButton } from "./WalletButton";
 
+type AdminSessionStatus = {
+  authenticated?: boolean;
+  address?: string;
+};
+
+const ADMIN_SESSION_CHANGED_EVENT = "xdcid:admin-session-changed";
+
 export function Nav() {
   const { address } = useAccount();
+  const [authorizedSessionAddress, setAuthorizedSessionAddress] =
+    useState<string>();
   const registryOwner = useReadContract({
     address: addresses.registry,
     abi: ownableAbi,
@@ -20,13 +29,50 @@ export function Nav() {
     functionName: "owner",
     query: { enabled: addresses.pricingPolicy !== zeroAddress }
   });
+  const checkAdminSession = useCallback(async () => {
+    if (!address) {
+      setAuthorizedSessionAddress(undefined);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/auth/session", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const session = (await response.json().catch(() => ({}))) as AdminSessionStatus;
+      setAuthorizedSessionAddress(
+        response.ok &&
+          session.authenticated === true &&
+          session.address?.toLowerCase() === address.toLowerCase()
+          ? session.address
+          : undefined,
+      );
+    } catch {
+      setAuthorizedSessionAddress(undefined);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    void checkAdminSession();
+
+    const refreshSession = () => void checkAdminSession();
+    window.addEventListener(ADMIN_SESSION_CHANGED_EVENT, refreshSession);
+    window.addEventListener("focus", refreshSession);
+    return () => {
+      window.removeEventListener(ADMIN_SESSION_CHANGED_EVENT, refreshSession);
+      window.removeEventListener("focus", refreshSession);
+    };
+  }, [checkAdminSession]);
+
   const canSeeAdmin = useMemo(
     () =>
       !!address &&
-      [registryOwner.data, policyOwner.data]
-        .filter((candidate): candidate is `0x${string}` => !!candidate)
-        .some((candidate) => candidate.toLowerCase() === address.toLowerCase()),
-    [address, policyOwner.data, registryOwner.data]
+      (authorizedSessionAddress?.toLowerCase() === address.toLowerCase() ||
+        [registryOwner.data, policyOwner.data]
+          .filter((candidate): candidate is `0x${string}` => !!candidate)
+          .some((candidate) => candidate.toLowerCase() === address.toLowerCase())),
+    [address, authorizedSessionAddress, policyOwner.data, registryOwner.data],
   );
 
   return (
