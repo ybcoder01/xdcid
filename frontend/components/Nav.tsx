@@ -41,11 +41,28 @@ export function Nav() {
         credentials: "same-origin",
       });
       const session = (await response.json().catch(() => ({}))) as AdminSessionStatus;
-      setAuthorizedSessionAddress(
+      if (
         response.ok &&
-          session.authenticated === true &&
-          session.address?.toLowerCase() === address.toLowerCase()
-          ? session.address
+        session.authenticated === true &&
+        session.address?.toLowerCase() === address.toLowerCase()
+      ) {
+        setAuthorizedSessionAddress(session.address);
+        return;
+      }
+
+      const eligibilityResponse = await fetch(
+        `/api/admin/auth/eligibility?address=${encodeURIComponent(address)}`,
+        {
+          cache: "no-store",
+          credentials: "same-origin",
+        },
+      );
+      const eligibility = (await eligibilityResponse
+        .json()
+        .catch(() => ({}))) as { eligible?: boolean };
+      setAuthorizedSessionAddress(
+        eligibilityResponse.ok && eligibility.eligible === true
+          ? address
           : undefined,
       );
     } catch {
