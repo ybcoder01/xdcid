@@ -44,11 +44,15 @@ The endpoint does not write quote requests, wallet addresses, names, IP addresse
 
 - `XNS_SIGNED_QUOTE_REGISTRAR`
 - `XNS_PRICING_POLICY`
+- `XNS_PRICING_POLICY_VERSION` (`legacy` or `v2`)
 - `XNS_QUOTE_CHAIN_ID`
 - `XNS_QUOTE_RPC_URLS`
 - `XNS_QUOTE_SIGNER_PRIVATE_KEY`
 - `COINGECKO_DEMO_API_KEY` for XDC quotes
 
-`XNS_QUOTE_RPC_TIMEOUT_MS` is optional.
+`XNS_QUOTE_RPC_TIMEOUT_MS` is optional. If the policy version is omitted, the
+service defaults XDC mainnet to `legacy` and Apothem to `v2`; production should
+set it explicitly so a future contract migration cannot silently change the
+EIP-712 signing domain.
 
 For Apothem testing, set the chain ID and both deployed contract addresses to the Apothem deployment. Production must use separate environment values and a separate signer from testing.

@@ -3,13 +3,22 @@ import { zeroAddress } from "viem";
 import {
   buildRegistrarQuote,
   calculateBufferedXdcWeiForPolicy,
+  LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
   normalizeSignedQuoteRequest,
+  SIGNED_QUOTE_DOMAIN_NAME,
   SIGNED_QUOTE_LIFETIME_SECONDS,
 } from "../frontend/lib/signedRegistrarQuotes";
 
 describe("signed registrar quote helpers", function () {
   const payer = "0x0000000000000000000000000000000000000001";
   const nameOwner = "0x0000000000000000000000000000000000000002";
+
+  it("keeps legacy and v2 EIP-712 domains distinct", function () {
+    expect(LEGACY_SIGNED_QUOTE_DOMAIN_NAME).to.equal(
+      "XDCID Signed Quote Registrar",
+    );
+    expect(SIGNED_QUOTE_DOMAIN_NAME).to.equal("XDCID Registrar V2");
+  });
 
   it("canonicalizes and validates quote requests", function () {
     const request = normalizeSignedQuoteRequest({

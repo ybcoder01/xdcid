@@ -11,16 +11,17 @@ import {
 import {
   addresses,
   pricingPolicyAbi,
+  pricingPolicyGeneration,
   zeroAddress,
 } from "../config/contracts";
 
 type PricingConfig = {
-  twoCharacterAnnualUsdMicros: bigint;
+  twoCharacterAnnualUsdMicros?: bigint;
   threeCharacterAnnualUsdMicros: bigint;
   fourCharacterAnnualUsdMicros: bigint;
   standardAnnualUsdMicros: bigint;
   subdomainAnnualUsdMicros: bigint;
-  premiumSubdomainAnnualUsdMicros: bigint;
+  premiumSubdomainAnnualUsdMicros?: bigint;
   migrationUsdMicros: bigint;
   threeYearDiscountBps: number;
   fiveYearDiscountBps: number;
@@ -134,12 +135,18 @@ export function AdminDomainPricing() {
   useEffect(() => {
     if (!current) return;
     setForm({
-      twoCharacter: microsToUsd(current.twoCharacterAnnualUsdMicros),
+      twoCharacter:
+        current.twoCharacterAnnualUsdMicros === undefined
+          ? ""
+          : microsToUsd(current.twoCharacterAnnualUsdMicros),
       threeCharacter: microsToUsd(current.threeCharacterAnnualUsdMicros),
       fourCharacter: microsToUsd(current.fourCharacterAnnualUsdMicros),
       standard: microsToUsd(current.standardAnnualUsdMicros),
       subdomain: microsToUsd(current.subdomainAnnualUsdMicros),
-      premiumSubdomain: microsToUsd(current.premiumSubdomainAnnualUsdMicros),
+      premiumSubdomain:
+        current.premiumSubdomainAnnualUsdMicros === undefined
+          ? ""
+          : microsToUsd(current.premiumSubdomainAnnualUsdMicros),
       migration: microsToUsd(current.migrationUsdMicros),
       threeYearDiscount: (current.threeYearDiscountBps / 100).toString(),
       fiveYearDiscount: (current.fiveYearDiscountBps / 100).toString(),
@@ -172,7 +179,16 @@ export function AdminDomainPricing() {
       tenYear: percentToBps(form.tenYearDiscount),
       buffer: percentToBps(form.xdcQuoteBuffer),
     };
-    const validPrices = Object.values(prices).every((value) => value !== null);
+    const requiredPrices = pricingPolicyGeneration === "v2"
+      ? Object.values(prices)
+      : [
+          prices.threeCharacter,
+          prices.fourCharacter,
+          prices.standard,
+          prices.subdomain,
+          prices.migration,
+        ];
+    const validPrices = requiredPrices.every((value) => value !== null);
     const validDiscounts =
       discounts.threeYear !== null &&
       discounts.fiveYear !== null &&
@@ -198,24 +214,42 @@ export function AdminDomainPricing() {
     if (!current || !parsed.valid || !isPolicyOwner) return;
     const prices = parsed.prices;
     const discounts = parsed.discounts;
+    const nextConfig = pricingPolicyGeneration === "v2"
+      ? {
+          ...current,
+          twoCharacterAnnualUsdMicros: prices.twoCharacter!,
+          threeCharacterAnnualUsdMicros: prices.threeCharacter!,
+          fourCharacterAnnualUsdMicros: prices.fourCharacter!,
+          standardAnnualUsdMicros: prices.standard!,
+          subdomainAnnualUsdMicros: prices.subdomain!,
+          premiumSubdomainAnnualUsdMicros: prices.premiumSubdomain!,
+          migrationUsdMicros: prices.migration!,
+          threeYearDiscountBps: discounts.threeYear!,
+          fiveYearDiscountBps: discounts.fiveYear!,
+          tenYearDiscountBps: discounts.tenYear!,
+          xdcQuoteBufferBps: discounts.buffer!,
+        }
+      : {
+          threeCharacterAnnualUsdMicros: prices.threeCharacter!,
+          fourCharacterAnnualUsdMicros: prices.fourCharacter!,
+          standardAnnualUsdMicros: prices.standard!,
+          subdomainAnnualUsdMicros: prices.subdomain!,
+          migrationUsdMicros: prices.migration!,
+          threeYearDiscountBps: discounts.threeYear!,
+          fiveYearDiscountBps: discounts.fiveYear!,
+          tenYearDiscountBps: discounts.tenYear!,
+          xdcQuoteBufferBps: discounts.buffer!,
+          quoteSigner: current.quoteSigner,
+          usdcToken: current.usdcToken,
+          treasury: current.treasury,
+          xdcPaymentsEnabled: current.xdcPaymentsEnabled,
+          usdcPaymentsEnabled: current.usdcPaymentsEnabled,
+        };
     write.writeContract({
       address: addresses.pricingPolicy,
       abi: pricingPolicyAbi,
       functionName: "proposeConfig",
-      args: [{
-        ...current,
-        twoCharacterAnnualUsdMicros: prices.twoCharacter!,
-        threeCharacterAnnualUsdMicros: prices.threeCharacter!,
-        fourCharacterAnnualUsdMicros: prices.fourCharacter!,
-        standardAnnualUsdMicros: prices.standard!,
-        subdomainAnnualUsdMicros: prices.subdomain!,
-        premiumSubdomainAnnualUsdMicros: prices.premiumSubdomain!,
-        migrationUsdMicros: prices.migration!,
-        threeYearDiscountBps: discounts.threeYear!,
-        fiveYearDiscountBps: discounts.fiveYear!,
-        tenYearDiscountBps: discounts.tenYear!,
-        xdcQuoteBufferBps: discounts.buffer!,
-      }],
+      args: [nextConfig as never],
     });
   }
 
@@ -251,12 +285,16 @@ export function AdminDomainPricing() {
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MoneyField label="2-character / year" value={form.twoCharacter} onChange={(value) => update("twoCharacter", value)} />
+        {pricingPolicyGeneration === "v2" ? (
+          <MoneyField label="2-character / year" value={form.twoCharacter} onChange={(value) => update("twoCharacter", value)} />
+        ) : null}
         <MoneyField label="3-character / year" value={form.threeCharacter} onChange={(value) => update("threeCharacter", value)} />
         <MoneyField label="4-character / year" value={form.fourCharacter} onChange={(value) => update("fourCharacter", value)} />
         <MoneyField label="5+ character / year" value={form.standard} onChange={(value) => update("standard", value)} />
         <MoneyField label="Subdomain / year" value={form.subdomain} onChange={(value) => update("subdomain", value)} />
-        <MoneyField label="Premium subdomain / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
+        {pricingPolicyGeneration === "v2" ? (
+          <MoneyField label="Premium subdomain / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
+        ) : null}
         <MoneyField label="Migration (one-time)" value={form.migration} onChange={(value) => update("migration", value)} />
       </div>
 
