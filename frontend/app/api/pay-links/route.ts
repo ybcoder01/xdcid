@@ -4,13 +4,15 @@ import {
   getAddress,
   http,
   isHex,
+  keccak256,
+  stringToHex,
   zeroAddress,
   type Address,
   type Hex
 } from "viem";
 import {
-  addresses,
-  registrarAbi,
+  activeRegistryAddress,
+  isTestnetEnvironment,
   registryAbi
 } from "../../../config/contracts";
 import { verifyPaymentRequestSignature } from "../../../lib/accountSignatures";
@@ -71,14 +73,9 @@ export async function POST(request: Request) {
   try {
     const paymentRequest = decodePaymentRequest(encodedRequest);
     const client = getXdcClient();
-    const node = await client.readContract({
-      address: addresses.registrar,
-      abi: registrarAbi,
-      functionName: "nodeFor",
-      args: [paymentRequest.name]
-    });
+    const node = keccak256(stringToHex(paymentRequest.name));
     const owner = await client.readContract({
-      address: addresses.registry,
+      address: activeRegistryAddress,
       abi: registryAbi,
       functionName: "ownerOf",
       args: [node]
@@ -128,9 +125,13 @@ export async function POST(request: Request) {
 
 function getXdcClient() {
   const urls = (
-    process.env.XDC_RPC_URLS ||
-    process.env.XDC_MAINNET_RPC_URL ||
-    "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
+    (isTestnetEnvironment
+      ? process.env.XDC_APOTHEM_RPC_URLS ||
+        process.env.XDC_APOTHEM_RPC_URL ||
+        "https://rpc.apothem.network,https://erpc.apothem.network"
+      : process.env.XDC_RPC_URLS ||
+        process.env.XDC_MAINNET_RPC_URL ||
+        "https://rpc.xdcrpc.com,https://earpc.xinfin.network")
   )
     .split(",")
     .map((value) => value.trim())

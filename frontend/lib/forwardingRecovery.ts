@@ -5,7 +5,7 @@ import {
 } from "./cctpMainnet";
 import { getPaymentNetwork } from "../config/paymentNetworks";
 
-export const FORWARDING_RECOVERY_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const FORWARDING_RECOVERY_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export type ForwardingRecoveryInput = {
   feeTransactionHash: Hash;

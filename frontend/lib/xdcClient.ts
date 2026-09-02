@@ -1,10 +1,9 @@
 import { createPublicClient, fallback, http } from "viem";
-import { xdcMainnet } from "../config/contracts";
+import { isTestnetEnvironment, xdcMainnet } from "../config/contracts";
 
-const DEFAULT_RPC_URLS = [
-  "https://rpc.xdcrpc.com",
-  "https://earpc.xinfin.network"
-] as const;
+const DEFAULT_RPC_URLS = isTestnetEnvironment
+  ? ["https://rpc.apothem.network", "https://erpc.apothem.network"]
+  : ["https://rpc.xdcrpc.com", "https://earpc.xinfin.network"];
 
 function boundedInteger(
   value: string | undefined,
@@ -28,11 +27,19 @@ function isHttpUrl(value: string): boolean {
 }
 
 function configuredRpcUrls(): string[] {
-  const list = process.env.XDC_RPC_URLS?.split(",") || [];
+  const list = (
+    isTestnetEnvironment
+      ? process.env.XDC_APOTHEM_RPC_URLS
+      : process.env.XDC_RPC_URLS
+  )?.split(",") || [];
   const candidates = [
     ...list,
-    process.env.XDC_RPC_URL,
-    process.env.XDC_MAINNET_RPC_URL,
+    isTestnetEnvironment
+      ? process.env.XDC_APOTHEM_RPC_URL
+      : process.env.XDC_RPC_URL,
+    isTestnetEnvironment
+      ? undefined
+      : process.env.XDC_MAINNET_RPC_URL,
     ...DEFAULT_RPC_URLS
   ];
 
@@ -55,7 +62,15 @@ export const xdcRpcTimeoutMs = boundedInteger(
 export const xdcRpcUrls = configuredRpcUrls();
 
 export const xdcClient = createPublicClient({
-  chain: xdcMainnet,
+  chain: isTestnetEnvironment
+    ? {
+        ...xdcMainnet,
+        id: 51,
+        name: "XDC Apothem",
+        nativeCurrency: { name: "TXDC", symbol: "TXDC", decimals: 18 },
+        blockExplorers: { default: { name: "XDCScan Testnet", url: "https://testnet.xdcscan.com" } }
+      }
+    : xdcMainnet,
   transport: fallback(
     xdcRpcUrls.map((url) =>
       http(url, {

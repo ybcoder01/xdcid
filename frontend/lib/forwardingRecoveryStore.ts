@@ -247,7 +247,7 @@ export async function createForwardingRecoveryRecord(
   record: ForwardingRecoveryRecord
 ): Promise<boolean> {
   await ensureForwardingRecoverySchema();
-  await removeExpiredRecoveries();
+  await removeExpiredForwardingRecoveryData();
   const created = await getDatabase()
     .insert(forwardingRecoveries)
     .values({
@@ -449,10 +449,19 @@ async function createSchema(): Promise<void> {
   `;
 }
 
-async function removeExpiredRecoveries(): Promise<void> {
-  await getDatabase()
+export async function removeExpiredForwardingRecoveryData(
+  now = new Date()
+): Promise<number> {
+  await ensureForwardingRecoverySchema();
+  const sevenDayCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1_000);
+  const deleted = await getDatabase()
     .delete(forwardingRecoveries)
-    .where(lt(forwardingRecoveries.expiresAt, new Date()));
+    .where(or(
+      lt(forwardingRecoveries.expiresAt, now),
+      lt(forwardingRecoveries.createdAt, sevenDayCutoff)
+    ))
+    .returning({ feeTransactionHash: forwardingRecoveries.feeTransactionHash });
+  return deleted.length;
 }
 
 function normalizeHash(value: string): string {

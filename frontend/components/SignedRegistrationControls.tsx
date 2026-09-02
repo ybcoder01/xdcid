@@ -14,14 +14,18 @@ import {
   useAccount,
   useChainId,
   usePublicClient,
+  useReadContract,
+  useSwitchChain,
   useWriteContract,
 } from "wagmi";
 import {
   addresses,
   erc20ApprovalAbi,
+  pricingPolicyAbi,
   signedRegistrarAbi,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
+import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -58,21 +62,75 @@ type QuoteResponse = {
 export function SignedRegistrationControls(props: {
   name: string;
   enabled: boolean;
+  expectedChainId?: number;
+  registrarAddress?: Address;
+  pricingPolicyAddress?: Address;
+  nativeCurrencyLabel?: string;
 }) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const client = usePublicClient();
+  const client = usePublicClient({ chainId: props.expectedChainId ?? 50 });
+  const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const [termYears, setTermYears] = useState<Term>(1);
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const expectedChainId = props.expectedChainId ?? 50;
+  const registrarAddress = props.registrarAddress ?? addresses.registrar;
+  const pricingPolicyAddress = props.pricingPolicyAddress ?? addresses.pricingPolicy;
+  const nativeCurrencyLabel = props.nativeCurrencyLabel ?? "XDC";
+  const labelLength = props.name.endsWith(".xdc")
+    ? props.name.slice(0, -4).length
+    : props.name.length;
+  const pricingEnabled = pricingPolicyAddress !== zeroAddress;
+  const annualPrice = useReadContract({
+    address: pricingPolicyAddress,
+    chainId: expectedChainId,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, BigInt(labelLength), 1n],
+    query: { enabled: pricingEnabled },
+  });
+  const discountedPrice = useReadContract({
+    address: pricingPolicyAddress,
+    chainId: expectedChainId,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, BigInt(labelLength), BigInt(termYears)],
+    query: { enabled: pricingEnabled },
+  });
+  const grossUsdMicros =
+    typeof annualPrice.data === "bigint"
+      ? annualPrice.data * BigInt(termYears)
+      : undefined;
+  const finalUsdMicros =
+    typeof discountedPrice.data === "bigint"
+      ? discountedPrice.data
+      : undefined;
+  const discountBps =
+    grossUsdMicros && finalUsdMicros !== undefined
+      ? ((grossUsdMicros - finalUsdMicros) * 10_000n) / grossUsdMicros
+      : 0n;
 
   async function register() {
     if (!props.enabled || !isConnected || !address || !client) return;
-    if (chainId !== 50) {
-      setStatus("Switch your wallet to XDC Network before requesting a quote.");
-      return;
+    if (chainId !== expectedChainId) {
+      setStatus(
+        "Requesting a switch to " +
+          (expectedChainId === 51 ? "XDC Apothem" : "XDC Network") +
+          "…",
+      );
+      try {
+        await switchChainAsync({ chainId: expectedChainId });
+      } catch {
+        setStatus(
+          "Switch your wallet to " +
+            (expectedChainId === 51 ? "XDC Apothem" : "XDC Network") +
+            " to continue.",
+        );
+        return;
+      }
     }
 
     setBusy(true);
@@ -97,8 +155,8 @@ export function SignedRegistrationControls(props: {
         );
       }
       if (
-        payload.data.chainId !== 50 ||
-        getAddress(payload.data.registrar) !== getAddress(addresses.registrar)
+        payload.data.chainId !== expectedChainId ||
+        getAddress(payload.data.registrar) !== getAddress(registrarAddress)
       ) {
         throw new Error("The quote does not match the active XDCID registrar");
       }
@@ -123,11 +181,17 @@ export function SignedRegistrationControls(props: {
             formatUnits(quote.paymentAmount, 6) +
             " USDC in your wallet…",
         );
+        const approvalGas = await xdcWriteOverrides(
+          client,
+          expectedChainId,
+          XDC_WRITE_GAS_LIMITS.erc20Approval,
+        );
         const approvalHash = await writeContractAsync({
           address: quote.paymentToken,
           abi: erc20ApprovalAbi,
           functionName: "approve",
-          args: [addresses.registrar, quote.paymentAmount],
+          args: [registrarAddress, quote.paymentAmount],
+          ...approvalGas,
         });
         const approvalReceipt = await client.waitForTransactionReceipt({
           hash: approvalHash,
@@ -139,15 +203,25 @@ export function SignedRegistrationControls(props: {
 
       setStatus(
         currency === "XDC"
-          ? "Confirm payment of " + formatEther(quote.paymentAmount) + " XDC…"
+          ? "Confirm payment of " +
+              formatEther(quote.paymentAmount) +
+              " " +
+              nativeCurrencyLabel +
+              "…"
           : "Confirm the registration payment…",
       );
+      const registrationGas = await xdcWriteOverrides(
+        client,
+        expectedChainId,
+        XDC_WRITE_GAS_LIMITS.registration,
+      );
       const transactionHash = await writeContractAsync({
-        address: addresses.registrar,
+        address: registrarAddress,
         abi: signedRegistrarAbi,
         functionName: "registerWithQuote",
         args: [props.name, quote, payload.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+        ...registrationGas,
       });
       const receipt = await client.waitForTransactionReceipt({
         hash: transactionHash,
@@ -190,11 +264,26 @@ export function SignedRegistrationControls(props: {
             value={currency}
             onChange={(event) => setCurrency(event.target.value as Currency)}
           >
-            <option value="XDC">XDC</option>
+            <option value="XDC">{nativeCurrencyLabel}</option>
             <option value="USDC">USDC</option>
           </select>
         </label>
       </div>
+      {pricingEnabled ? (
+        <div className="mt-4 rounded-lg border border-black/10 bg-white p-3 text-sm text-slate-700">
+          {annualPrice.isLoading || discountedPrice.isLoading ? (
+            <p>Reading the live on-chain price…</p>
+          ) : annualPrice.isError || discountedPrice.isError ? (
+            <p className="text-red-600">Unable to read the live pricing policy.</p>
+          ) : grossUsdMicros !== undefined && finalUsdMicros !== undefined ? (
+            <div className="grid gap-1 sm:grid-cols-3">
+              <p><span className="block text-xs text-slate-500">Regular cost</span>{formatUsdMicros(grossUsdMicros)}</p>
+              <p><span className="block text-xs text-slate-500">Discount</span>{formatDiscount(discountBps)}</p>
+              <p><span className="block text-xs text-slate-500">You pay</span><strong>{formatUsdMicros(finalUsdMicros)}</strong></p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <button
         className="mt-4 w-full rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
         disabled={!props.enabled || !isConnected || busy}
@@ -224,4 +313,19 @@ function deserializeQuote(value: SerializedQuote) {
     issuedAt: BigInt(value.issuedAt),
     deadline: BigInt(value.deadline),
   };
+}
+
+
+function formatUsdMicros(value: bigint): string {
+  const whole = value / 1_000_000n;
+  const fraction = (value % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return "$" + whole.toString() + (fraction ? "." + fraction : "");
+}
+
+function formatDiscount(value: bigint): string {
+  const whole = value / 100n;
+  const fraction = value % 100n;
+  return fraction === 0n
+    ? whole.toString() + "%"
+    : whole.toString() + "." + fraction.toString().padStart(2, "0") + "%";
 }

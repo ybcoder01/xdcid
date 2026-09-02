@@ -4,8 +4,16 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEther } from "viem";
 import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { addresses, contractsConfigured, registrarAbi, signedRegistrarEnabled } from "../config/contracts";
+import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
+import {
+  addresses,
+  apothemRegistration,
+  contractsConfigured as mainnetContractsConfigured,
+  pricingPolicyAbi,
+  registrarAbi,
+  signedRegistrarEnabled,
+  zeroAddress,
+} from "../config/contracts";
 import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
@@ -57,14 +65,31 @@ const capabilities = [
 export default function Home() {
   const [input, setInput] = useState("");
   const { address, isConnected } = useAccount();
+  const connectedChainId = useChainId();
+  const apothemMode = process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV === "testnet";
+  const registrationChainId = apothemMode ? apothemRegistration.chainId : 50;
+  const registrationRegistrar = apothemMode
+    ? apothemRegistration.registrar
+    : addresses.registrar;
+  const registrationPricingPolicy = apothemMode
+    ? apothemRegistration.pricingPolicy
+    : addresses.pricingPolicy;
+  const registrationSignedEnabled = apothemMode || signedRegistrarEnabled;
+  const registrationContractsConfigured = apothemMode
+    ? registrationRegistrar !== zeroAddress && registrationPricingPolicy !== zeroAddress
+    : mainnetContractsConfigured;
   const { writeContract, isPending, data: hash } = useWriteContract();
 
   const parsedName = useMemo(() => parseXnsName(input), [input]);
   const { name, isValid, error: validationError } = parsedName;
   const hasInput = input.trim().length > 0;
-  const canReadContracts = isValid && contractsConfigured;
+  const registrarSupportsName =
+    registrationSignedEnabled || parsedName.label.length >= 3;
+  const canReadContracts =
+    isValid && registrationContractsConfigured && registrarSupportsName;
   const availability = useReadContract({
-    address: addresses.registrar,
+    address: registrationRegistrar,
+    chainId: registrationChainId,
     abi: registrarAbi,
     functionName: "available",
     args: [name],
@@ -72,26 +97,29 @@ export default function Home() {
   });
 
   const price = useReadContract({
-    address: addresses.registrar,
+    address: registrationRegistrar,
+    chainId: registrationChainId,
     abi: registrarAbi,
     functionName: "price",
     args: [name],
-    query: { enabled: canReadContracts && !signedRegistrarEnabled }
+    query: { enabled: canReadContracts && !registrationSignedEnabled }
   });
 
   const registry = useRegistryStatus(
     name,
     typeof availability.data === "boolean" ? !availability.data : undefined,
-    canReadContracts
+    canReadContracts,
+    registrationChainId
   );
   const registrationAllowed =
     availability.data === true && registry.status?.registrationAllowed === true;
 
   function claim() {
-    if (signedRegistrarEnabled || !isValid || !contractsConfigured || !address || !price.data || !registrationAllowed) return;
+    if (registrationSignedEnabled || !isValid || !registrationContractsConfigured || !address || !price.data || !registrationAllowed) return;
     writeContract(
       {
-        address: addresses.registrar,
+        address: registrationRegistrar,
+        chainId: registrationChainId,
         abi: registrarAbi,
         functionName: "register",
         args: [name, address, 1n],
@@ -187,7 +215,7 @@ export default function Home() {
       <section className="mt-10 grid gap-6 lg:grid-cols-[1fr_340px]" id="register">
         <div className="rounded-2xl border border-black/10 bg-white/95 p-6 shadow-sm md:p-8">
           <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">XDC mainnet identity</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">{apothemMode ? "XDC Apothem test identity" : "XDC mainnet identity"}</p>
             <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950 md:text-4xl">Claim your .XDC name</h2>
             <p className="mt-3 text-base text-neutral-600">
               Search, register, and manage XDCID names with wallet-native ownership and resolver records.
@@ -210,14 +238,16 @@ export default function Home() {
           <p className={"mt-2 text-sm " + (hasInput && !isValid ? "text-red-600" : "text-neutral-500")}>
             {hasInput && !isValid
               ? validationError
-              : "Use 3-63 letters, numbers, or hyphens; a hyphen cannot be first or last."}
+              : signedRegistrarEnabled
+                ? "Use 2-63 letters, numbers, or hyphens; a hyphen cannot be first or last."
+                : "Use 3-63 letters, numbers, or hyphens; two-character names activate with Pricing V2."}
           </p>
 
-          <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-3">
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">3 chars</p><p>{signedRegistrarEnabled ? "$20/year" : "500 XDC/year"}</p></div>
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">4 chars</p><p>{signedRegistrarEnabled ? "$10/year" : "100 XDC/year"}</p></div>
-            <div className="rounded-xl border border-black/10 bg-neutral-50 p-3"><p className="font-semibold text-slate-950">5+ chars</p><p>{signedRegistrarEnabled ? "$5/year" : "10 XDC/year"}</p></div>
-          </div>
+          <LivePricingTiers
+            chainId={registrationChainId}
+            pricingPolicy={registrationPricingPolicy}
+            signedEnabled={registrationSignedEnabled}
+          />
 
           {hasInput && (
             <div className="mt-6 rounded-xl border border-black/10 bg-white p-4 shadow-sm">
@@ -227,11 +257,13 @@ export default function Home() {
                   <p className="text-sm text-neutral-600">
                     {!isValid
                       ? validationError
-                      : !contractsConfigured
+                      : !registrationContractsConfigured
                         ? "Contracts not configured"
-                        : availability.isLoading || (!signedRegistrarEnabled && price.isLoading) || registry.isChecking
+                        : !registrarSupportsName
+                          ? "Two-character names become available when Pricing V2 is activated"
+                          : availability.isLoading || (!registrationSignedEnabled && price.isLoading) || registry.isChecking
                           ? "Checking both registries..."
-                          : availability.isError || (!signedRegistrarEnabled && price.isError) || registry.isError
+                          : availability.isError || (!registrationSignedEnabled && price.isError) || registry.isError
                             ? "Could not check registry status"
                             : registry.status?.state === "legacy"
                               ? "Reserved in XDCDomains; migration required"
@@ -242,16 +274,27 @@ export default function Home() {
                                   : registry.status?.state === "xdcid"
                                     ? "Already registered with XDCID"
                                     : "Unavailable"}
-                    {!signedRegistrarEnabled && price.data ? " - " + formatEther(price.data) + " XDC/year" : ""}
+                    {!registrationSignedEnabled && price.data ? " - " + formatEther(price.data) + " XDC/year" : ""}
                   </p>
                 </div>
                 {isValid && registrationAllowed ? (
-                  signedRegistrarEnabled ? (
-                    <SignedRegistrationControls name={name} enabled={contractsConfigured && isConnected} />
+                  registrationSignedEnabled ? (
+                    <SignedRegistrationControls
+                      name={name}
+                      enabled={
+                        registrationContractsConfigured &&
+                        isConnected &&
+                        connectedChainId === registrationChainId
+                      }
+                      expectedChainId={registrationChainId}
+                      registrarAddress={registrationRegistrar}
+                      pricingPolicyAddress={registrationPricingPolicy}
+                      nativeCurrencyLabel={apothemMode ? "TXDC" : "XDC"}
+                    />
                   ) : (
                     <button
                       className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
-                      disabled={!contractsConfigured || !isConnected || isPending}
+                      disabled={!registrationContractsConfigured || !isConnected || isPending}
                       onClick={claim}
                     >
                       Claim
@@ -279,7 +322,7 @@ export default function Home() {
             </div>
             <div className="grid gap-3 text-sm">
               <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Ownership</span><span>Your wallet</span></div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Home network</span><span>XDC mainnet</span></div>
+              <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Home network</span><span>{apothemMode ? "XDC Apothem" : "XDC mainnet"}</span></div>
               <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Connections</span><span>5 EVM networks</span></div>
               <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Utilities</span><span>Profile + payments</span></div>
             </div>
@@ -288,4 +331,88 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+
+function LivePricingTiers(props: {
+  chainId: number;
+  pricingPolicy: `0x${string}`;
+  signedEnabled: boolean;
+}) {
+  const enabled = props.signedEnabled && props.pricingPolicy !== zeroAddress;
+  const two = useReadContract({
+    address: props.pricingPolicy,
+    chainId: props.chainId,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 2n, 1n],
+    query: { enabled },
+  });
+  const three = useReadContract({
+    address: props.pricingPolicy,
+    chainId: props.chainId,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 3n, 1n],
+    query: { enabled },
+  });
+  const four = useReadContract({
+    address: props.pricingPolicy,
+    chainId: props.chainId,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 4n, 1n],
+    query: { enabled },
+  });
+  const standard = useReadContract({
+    address: props.pricingPolicy,
+    chainId: props.chainId,
+    abi: pricingPolicyAbi,
+    functionName: "priceUsdMicros",
+    args: [0, 5n, 1n],
+    query: { enabled },
+  });
+
+  if (!props.signedEnabled) {
+    return (
+      <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-3">
+        <PriceCard label="3 chars" price="500 XDC/year" />
+        <PriceCard label="4 chars" price="100 XDC/year" />
+        <PriceCard label="5+ chars" price="10 XDC/year" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-4">
+      <PriceCard label="2 chars" price={formatLiveTier(two.data, two.isLoading, two.isError)} />
+      <PriceCard label="3 chars" price={formatLiveTier(three.data, three.isLoading, three.isError)} />
+      <PriceCard label="4 chars" price={formatLiveTier(four.data, four.isLoading, four.isError)} />
+      <PriceCard label="5+ chars" price={formatLiveTier(standard.data, standard.isLoading, standard.isError)} />
+    </div>
+  );
+}
+
+function PriceCard(props: { label: string; price: string }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-neutral-50 p-3">
+      <p className="font-semibold text-slate-950">{props.label}</p>
+      <p>{props.price}</p>
+    </div>
+  );
+}
+
+function formatLiveTier(
+  value: unknown,
+  loading: boolean,
+  failed: boolean,
+): string {
+  if (loading) return "Loading live price…";
+  if (failed || typeof value !== "bigint") return "Live price unavailable";
+  const whole = value / 1_000_000n;
+  const fraction = (value % 1_000_000n)
+    .toString()
+    .padStart(6, "0")
+    .replace(/0+$/, "");
+  return "$" + whole.toString() + (fraction ? "." + fraction : "") + "/year";
 }

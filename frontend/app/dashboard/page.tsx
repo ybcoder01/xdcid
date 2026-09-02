@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
+import { loadNames } from "../../config/localNames";
 import {
   useAccount,
   useReadContract,
@@ -26,6 +27,9 @@ type OwnedName = {
     iso: string;
   };
 };
+
+const isTestnetDashboard =
+  process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV?.toLowerCase() === "testnet";
 
 type OwnedNamesResponse = {
   data?: {
@@ -121,8 +125,15 @@ export default function Dashboard() {
     setLookupError("");
 
     try {
+      const params = new URLSearchParams();
+      if (isTestnetDashboard) {
+        loadNames(address)
+          .slice(0, 50)
+          .forEach((name) => params.append("known", name));
+      }
+      const query = params.size > 0 ? "?" + params.toString() : "";
       const response = await fetch(
-        "/api/v1/addresses/" + address + "/names",
+        "/api/v1/addresses/" + address + "/names" + query,
         { cache: "no-store" }
       );
       const body = (await response.json()) as OwnedNamesResponse;
@@ -188,12 +199,13 @@ export default function Dashboard() {
           Dashboard
         </h1>
         <p className="mt-2 text-sm text-neutral-600">
-          Names are indexed from XDCScan and ownership is verified directly
-          against the XDCID registry.
+          {isTestnetDashboard
+            ? "Test names created in this browser are verified directly against the Apothem registry."
+            : "Names are indexed from XDCScan and ownership is verified directly against the XDCID registry."}
         </p>
       </section>
 
-      {isConnected && names.length > 0 && (
+      {isConnected && names.length > 0 && !isTestnetDashboard && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
             Primary XDCID

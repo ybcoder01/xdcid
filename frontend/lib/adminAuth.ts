@@ -18,10 +18,23 @@ import {
   erc1271Abi,
 } from "./accountSignatures";
 import { xdcClient } from "./xdcClient";
+import { isArchiveAccessAdministratorWallet } from "./archiveAccessAdministrator";
 
 export const ADMIN_SESSION_COOKIE = "xdcid_admin_session";
 export const ADMIN_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
 export const ADMIN_SESSION_TTL_SECONDS = 15 * 60;
+
+export type AdminPermission =
+  | "platform:manage"
+  | "archive:manage"
+  | "revenue:view";
+
+export type AdminRole = "platform-owner" | "archive-administrator" | "treasury";
+
+export type AdminAuthorization = {
+  roles: AdminRole[];
+  permissions: AdminPermission[];
+};
 
 type AdminSessionPayload = {
   v: 1;
@@ -183,6 +196,51 @@ export async function isCurrentAdmin(address: Address): Promise<boolean> {
   return admins.includes(getAddress(address));
 }
 
+export async function resolveAdminAuthorization(
+  address: Address,
+): Promise<AdminAuthorization> {
+  const normalized = getAddress(address);
+  const roles: AdminRole[] = [];
+  const permissions = new Set<AdminPermission>();
+
+  const [ownersResult, archiveResult] = await Promise.allSettled([
+    currentAdminOwners(),
+    isArchiveAccessAdministratorWallet(normalized),
+  ]);
+
+  if (
+    ownersResult.status === "fulfilled" &&
+    ownersResult.value.includes(normalized)
+  ) {
+    roles.push("platform-owner");
+    permissions.add("platform:manage");
+    permissions.add("archive:manage");
+    permissions.add("revenue:view");
+  }
+
+  if (archiveResult.status === "fulfilled" && archiveResult.value) {
+    roles.push("archive-administrator");
+    permissions.add("archive:manage");
+  }
+
+  const configuredTreasury =
+    process.env.ARCHIVE_SUBSCRIPTION_TREASURY_ADDRESS || "";
+  if (
+    isAddress(configuredTreasury) &&
+    getAddress(configuredTreasury) === normalized
+  ) {
+    roles.push("treasury");
+    permissions.add("revenue:view");
+  }
+
+  return { roles, permissions: [...permissions] };
+}
+
+export async function isAuthorizedAdmin(address: Address): Promise<boolean> {
+  const authorization = await resolveAdminAuthorization(address);
+  return authorization.permissions.length > 0;
+}
+
 export async function verifyAdminWalletSignature(
   message: string,
   signature: Hex,
@@ -210,15 +268,33 @@ export function isSameOrigin(request: Request): boolean {
   return !suppliedOrigin || suppliedOrigin === new URL(request.url).origin;
 }
 
-export async function requireAdminSession(
+export async function requireAuthorizedAdminSession(
   request: Request,
-): Promise<AdminSessionPayload | null> {
+): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
   const session = parseAdminSession(cookieValue(request, ADMIN_SESSION_COOKIE));
   if (!session) return null;
 
   try {
-    return (await isCurrentAdmin(session.address)) ? session : null;
+    const authorization = await resolveAdminAuthorization(session.address);
+    return authorization.permissions.length > 0
+      ? { ...session, ...authorization }
+      : null;
   } catch {
     return null;
   }
+}
+
+export async function requireAdminSession(
+  request: Request,
+): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
+  const session = await requireAuthorizedAdminSession(request);
+  return session?.permissions.includes("platform:manage") ? session : null;
+}
+
+export async function requireAdminPermission(
+  request: Request,
+  permission: AdminPermission,
+): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
+  const session = await requireAuthorizedAdminSession(request);
+  return session?.permissions.includes(permission) ? session : null;
 }

@@ -20,6 +20,13 @@ export const xdcMainnet = {
   }
 } as const;
 
+export const apothemRegistration = {
+  chainId: 51,
+  registry: "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1" as `0x${string}`,
+  registrar: "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d" as `0x${string}`,
+  pricingPolicy: "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81" as `0x${string}`,
+} as const;
+
 export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
@@ -33,6 +40,22 @@ export const addresses = {
     "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`
 };
+
+export const isTestnetEnvironment =
+  process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV?.toLowerCase() === "testnet";
+
+export const activeXnsChainId = isTestnetEnvironment ? apothemRegistration.chainId : 50;
+export const activeRegistryAddress = isTestnetEnvironment
+  ? apothemRegistration.registry
+  : addresses.registry;
+export const activeRegistrarAddress = isTestnetEnvironment
+  ? apothemRegistration.registrar
+  : addresses.registrar;
+
+// Apothem currently has the registry and signed registrar, but no separately
+// deployed resolver suite. Dev therefore resolves registered names to their
+// registry owner as the safe EVM-wide fallback and never calls mainnet resolvers.
+export const activeResolverSuiteAvailable = !isTestnetEnvironment;
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
@@ -304,6 +327,17 @@ export const pricingPolicyAbi = [
   },
   {
     type: "function",
+    name: "priceUsdMicros",
+    stateMutability: "view",
+    inputs: [
+      { name: "product", type: "uint8" },
+      { name: "labelLength", type: "uint256" },
+      { name: "years_", type: "uint256" }
+    ],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
     name: "config",
     stateMutability: "view",
     inputs: [],
@@ -311,10 +345,12 @@ export const pricingPolicyAbi = [
       name: "",
       type: "tuple",
       components: [
+        { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
         { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
         { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
         { name: "standardAnnualUsdMicros", type: "uint64" },
         { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
         { name: "migrationUsdMicros", type: "uint64" },
         { name: "threeYearDiscountBps", type: "uint16" },
         { name: "fiveYearDiscountBps", type: "uint16" },
@@ -350,10 +386,12 @@ export const pricingPolicyAbi = [
       name: "nextConfig",
       type: "tuple",
       components: [
+        { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
         { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
         { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
         { name: "standardAnnualUsdMicros", type: "uint64" },
         { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
         { name: "migrationUsdMicros", type: "uint64" },
         { name: "threeYearDiscountBps", type: "uint16" },
         { name: "fiveYearDiscountBps", type: "uint16" },

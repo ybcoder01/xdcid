@@ -1,6 +1,10 @@
 import {
+  createPublicClient,
   decodeFunctionData,
+  defineChain,
+  fallback,
   getAddress,
+  http,
   isAddress,
   keccak256,
   stringToHex,
@@ -9,6 +13,7 @@ import {
 } from "viem";
 import {
   addresses,
+  apothemRegistration,
   registryAbi,
   reverseResolverAbi,
   xdcMainnet
@@ -19,11 +24,31 @@ import { withShortCache } from "./shortCache";
 import { xdcClient } from "./xdcClient";
 
 const LEGACY_REGISTRAR = "0x31c41237A551FCadf22F8B231D8accA2c16f669b";
+const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
 const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 const CATALOG_TTL_MS = 60_000;
 const READ_BATCH_SIZE = 20;
+const MAX_KNOWN_NAMES = 50;
+
+const apothem = defineChain({
+  id: 51,
+  name: "XDC Apothem",
+  nativeCurrency: { name: "Test XDC", symbol: "TXDC", decimals: 18 },
+  rpcUrls: {
+    default: {
+      http: ["https://rpc.apothem.network", "https://erpc.apothem.network"]
+    }
+  }
+});
+
+const apothemClient = createPublicClient({
+  chain: apothem,
+  transport: fallback(
+    apothem.rpcUrls.default.http.map((url) => http(url, { timeout: 8_000 }))
+  )
+});
 
 const registrationAbi = [
   {
@@ -34,6 +59,34 @@ const registrationAbi = [
       { name: "name", type: "string" },
       { name: "nameOwner", type: "address" },
       { name: "years_", type: "uint256" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "registerWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "nameOwner", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "signature", type: "bytes" }
     ],
     outputs: []
   }
@@ -47,7 +100,6 @@ type ExplorerTransaction = {
 };
 
 type ExplorerResponse = {
-  status?: string;
   message?: string;
   result?: ExplorerTransaction[] | string;
 };
@@ -66,7 +118,16 @@ let catalog: string[] | null = null;
 let catalogExpiresAt = 0;
 let catalogRequest: Promise<string[]> | null = null;
 
+function useApothemIndex() {
+  return (
+    process.env.XNS_QUOTE_CHAIN_ID?.trim() === "51" ||
+    process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV?.trim().toLowerCase() === "testnet"
+  );
+}
+
 function registrarHistory(): Address[] {
+  if (useApothemIndex()) return [getAddress(apothemRegistration.registrar)];
+
   const configured = (process.env.XDCID_REGISTRAR_HISTORY || "")
     .split(",")
     .map((value) => value.trim())
@@ -150,7 +211,12 @@ function registeredName(
         : "0x" + transaction.input
     ) as Hex;
     const decoded = decodeFunctionData({ abi: registrationAbi, data: input });
-    if (decoded.functionName !== "register") return null;
+    if (
+      decoded.functionName !== "register" &&
+      decoded.functionName !== "registerWithQuote"
+    ) {
+      return null;
+    }
 
     const parsed = parseXnsName(decoded.args[0]);
     return parsed.isValid ? parsed.name : null;
@@ -160,6 +226,7 @@ function registeredName(
 }
 
 async function loadCatalog() {
+  if (useApothemIndex()) return [];
   if (catalog && Date.now() < catalogExpiresAt) return catalog;
   if (catalogRequest) return catalogRequest;
 
@@ -196,7 +263,19 @@ async function loadCatalog() {
   return catalogRequest;
 }
 
-export async function getOwnedNamesData(input: string) {
+function validKnownNames(values: string[]) {
+  const names = new Set<string>();
+  values.slice(0, MAX_KNOWN_NAMES).forEach((value) => {
+    const parsed = parseXnsName(value);
+    if (parsed.isValid) names.add(parsed.name);
+  });
+  return Array.from(names);
+}
+
+export async function getOwnedNamesData(
+  input: string,
+  knownNames: string[] = []
+) {
   if (!isAddress(input)) {
     throw new ApiInputError(
       "INVALID_ADDRESS",
@@ -205,74 +284,93 @@ export async function getOwnedNamesData(input: string) {
   }
 
   const address = getAddress(input);
-  return withShortCache("owned-names:" + address.toLowerCase(), async () => {
-    const candidates = await loadCatalog();
-    const owned: Array<Omit<OwnedName, "primary">> = [];
-    const now = BigInt(Math.floor(Date.now() / 1000));
+  const isApothem = useApothemIndex();
+  const activeClient = isApothem ? apothemClient : xdcClient;
+  const registryAddress = getAddress(
+    isApothem ? APOTHEM_REGISTRY : addresses.registry
+  );
+  const known = validKnownNames(knownNames);
+  const cacheSuffix = known.slice().sort().join(",");
 
-    for (let start = 0; start < candidates.length; start += READ_BATCH_SIZE) {
-      const batch = candidates.slice(start, start + READ_BATCH_SIZE);
-      const records = await Promise.all(
-        batch.map(async (name) => {
-          const node = keccak256(stringToHex(name));
-          const [owner, expiry] = await Promise.all([
-            xdcClient.readContract({
-              address: addresses.registry,
-              abi: registryAbi,
-              functionName: "ownerOf",
-              args: [node]
-            }),
-            xdcClient.readContract({
-              address: addresses.registry,
-              abi: registryAbi,
-              functionName: "expiryOf",
-              args: [node]
-            })
-          ]);
-          return { name, node, owner, expiry };
-        })
+  return withShortCache(
+    "owned-names:" +
+      (isApothem ? "51:" : "50:") +
+      address.toLowerCase() +
+      ":" +
+      cacheSuffix,
+    async () => {
+      const candidates = Array.from(
+        new Set([...(await loadCatalog()), ...known])
       );
+      const owned: Array<Omit<OwnedName, "primary">> = [];
+      const now = BigInt(Math.floor(Date.now() / 1000));
 
-      records.forEach(({ name, node, owner, expiry }) => {
-        if (
-          owner.toLowerCase() === address.toLowerCase() &&
-          expiry > now
-        ) {
-          owned.push({
-            name,
-            node,
-            expiry: {
-              timestamp: expiry.toString(),
-              iso: new Date(Number(expiry) * 1000).toISOString()
-            }
-          });
-        }
-      });
+      for (let start = 0; start < candidates.length; start += READ_BATCH_SIZE) {
+        const batch = candidates.slice(start, start + READ_BATCH_SIZE);
+        const records = await Promise.all(
+          batch.map(async (name) => {
+            const node = keccak256(stringToHex(name));
+            const [owner, expiry] = await Promise.all([
+              activeClient.readContract({
+                address: registryAddress,
+                abi: registryAbi,
+                functionName: "ownerOf",
+                args: [node]
+              }),
+              activeClient.readContract({
+                address: registryAddress,
+                abi: registryAbi,
+                functionName: "expiryOf",
+                args: [node]
+              })
+            ]);
+            return { name, node, owner, expiry };
+          })
+        );
+
+        records.forEach(({ name, node, owner, expiry }) => {
+          if (owner.toLowerCase() === address.toLowerCase() && expiry > now) {
+            owned.push({
+              name,
+              node,
+              expiry: {
+                timestamp: expiry.toString(),
+                iso: new Date(Number(expiry) * 1000).toISOString()
+              }
+            });
+          }
+        });
+      }
+
+      let primaryName: string | null = null;
+      if (!isApothem) {
+        const storedPrimary = await xdcClient.readContract({
+          address: addresses.reverseResolver,
+          abi: reverseResolverAbi,
+          functionName: "primaryNames",
+          args: [address]
+        });
+        const parsedPrimary = parseXnsName(storedPrimary);
+        primaryName =
+          parsedPrimary.isValid &&
+          owned.some((record) => record.name === parsedPrimary.name)
+            ? parsedPrimary.name
+            : null;
+      }
+
+      return {
+        address,
+        network: isApothem
+          ? { chainId: apothem.id, name: apothem.name }
+          : { chainId: xdcMainnet.id, name: xdcMainnet.name },
+        primaryName,
+        names: owned
+          .map((record) => ({
+            ...record,
+            primary: record.name === primaryName
+          }))
+          .sort((left, right) => left.name.localeCompare(right.name))
+      };
     }
-
-    const storedPrimary = await xdcClient.readContract({
-      address: addresses.reverseResolver,
-      abi: reverseResolverAbi,
-      functionName: "primaryNames",
-      args: [address]
-    });
-    const parsedPrimary = parseXnsName(storedPrimary);
-    const primaryName =
-      parsedPrimary.isValid &&
-      owned.some((record) => record.name === parsedPrimary.name)
-        ? parsedPrimary.name
-        : null;
-
-    return {
-      address,
-      network: { chainId: xdcMainnet.id, name: xdcMainnet.name },
-      primaryName,
-      names: owned
-        .map((record) => ({
-          ...record,
-          primary: record.name === primaryName
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name))
-    };
-  });
+  );
 }

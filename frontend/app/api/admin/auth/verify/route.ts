@@ -3,7 +3,8 @@ import { getAddress, isAddress, isHex, type Hex } from "viem";
 import {
   adminSessionCookie,
   createAdminSession,
-  isCurrentAdmin,
+  isAuthorizedAdmin,
+  resolveAdminAuthorization,
   hashAdminMessage,
   isSameOrigin,
   verifyAdminWalletSignature,
@@ -76,9 +77,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!(await isCurrentAdmin(address))) {
+    if (!(await isAuthorizedAdmin(address))) {
       return Response.json(
-        { error: "Wallet is not a registry or pricing-policy owner" },
+        { error: "Wallet does not have an authorized XDCID administrator role" },
         { status: 403 },
       );
     }
@@ -109,11 +110,14 @@ export async function POST(request: Request) {
     }
 
     const session = createAdminSession(address);
+    const authorization = await resolveAdminAuthorization(address);
     return Response.json(
       {
         authenticated: true,
         address,
         expiresAt: session.expiresAt,
+        roles: authorization.roles,
+        permissions: authorization.permissions,
       },
       {
         headers: {

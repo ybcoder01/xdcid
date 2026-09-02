@@ -10,7 +10,7 @@ import { ApiInputError } from "./apiResponse";
 import { isRegistrationTerm } from "./pricingPolicy";
 import { parseXnsName } from "./names";
 
-export const SIGNED_QUOTE_DOMAIN_NAME = "XDCID Signed Quote Registrar";
+export const SIGNED_QUOTE_DOMAIN_NAME = "XDCID Registrar V2";
 export const SIGNED_QUOTE_DOMAIN_VERSION = "1";
 export const SIGNED_QUOTE_LIFETIME_SECONDS = 10 * 60;
 

@@ -4,6 +4,7 @@ import { zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { verifyPaymentCancellationSignature } from "../frontend/lib/accountSignatures";
 import {
   createPaymentRequestCancellation,
+  PAYMENT_CANCELLATION_CHAIN_ID,
   paymentCancellationTypedData,
   paymentRequestId,
   recoverPaymentCancellationSigner,
@@ -46,6 +47,10 @@ describe("Pay Link cancellation", function () {
     const now = Math.floor(Date.now() / 1000);
     const paymentRequest = request();
     const cancellation = createPaymentRequestCancellation(paymentRequest, now);
+    expect(cancellation.chainId).to.equal(PAYMENT_CANCELLATION_CHAIN_ID);
+    expect(paymentCancellationTypedData(cancellation).domain.chainId).to.equal(
+      PAYMENT_CANCELLATION_CHAIN_ID,
+    );
     expect(validatePaymentRequestCancellation(cancellation, paymentRequest, now)).to.equal(undefined);
     expect(
       validatePaymentRequestCancellation(

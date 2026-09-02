@@ -122,10 +122,12 @@ const pricingPolicyAbi = [
         name: "",
         type: "tuple",
         components: [
+          { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
           { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
           { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
           { name: "standardAnnualUsdMicros", type: "uint64" },
           { name: "subdomainAnnualUsdMicros", type: "uint64" },
+          { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
           { name: "migrationUsdMicros", type: "uint64" },
           { name: "threeYearDiscountBps", type: "uint16" },
           { name: "fiveYearDiscountBps", type: "uint16" },
@@ -398,11 +400,15 @@ async function readBody(request: Request): Promise<unknown> {
 }
 
 function quoteSignerAccount() {
-  const key = process.env.XNS_QUOTE_SIGNER_PRIVATE_KEY?.trim();
+  const configuredKey = process.env.XNS_QUOTE_SIGNER_PRIVATE_KEY?.trim();
+  const key =
+    configuredKey && /^[0-9a-fA-F]{64}$/.test(configuredKey)
+      ? `0x${configuredKey}`
+      : configuredKey;
   if (!key || !isHex(key) || key.length !== 66) {
     throw new ApiServiceError(
       "QUOTE_SIGNING_UNAVAILABLE",
-      "Quote signing is not configured",
+      "Quote signer private key is missing or malformed",
       503,
     );
   }

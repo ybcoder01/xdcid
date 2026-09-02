@@ -1,11 +1,11 @@
-import { requireAdminSession } from "../../../../lib/adminAuth";
+import { requireAdminPermission } from "../../../../lib/adminAuth";
 import { getForwardingRevenueReport } from "../../../../lib/forwardingRecoveryStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const session = await requireAdminSession(request);
+  const session = await requireAdminPermission(request, "revenue:view");
   if (!session) {
     return Response.json(
       { error: "Admin authentication required" },

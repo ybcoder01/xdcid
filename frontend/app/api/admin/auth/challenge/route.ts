@@ -4,7 +4,7 @@ import { getAddress, isAddress } from "viem";
 import {
   ADMIN_CHALLENGE_TTL_MS,
   buildAdminChallenge,
-  isCurrentAdmin,
+  isAuthorizedAdmin,
   hashAdminMessage,
   isSameOrigin,
 } from "../../../../../lib/adminAuth";
@@ -42,9 +42,9 @@ export async function POST(request: Request) {
 
   try {
     const address = getAddress(body.address);
-    if (!(await isCurrentAdmin(address))) {
+    if (!(await isAuthorizedAdmin(address))) {
       return Response.json(
-        { error: "Wallet is not a registry or pricing-policy owner" },
+        { error: "Wallet does not have an authorized XDCID administrator role" },
         { status: 403 },
       );
     }

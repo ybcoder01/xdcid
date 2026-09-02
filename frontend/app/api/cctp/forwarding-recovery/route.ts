@@ -1,12 +1,9 @@
 import {
   createPublicClient,
-  decodeFunctionData,
   fallback,
-  getAddress,
   http,
   type Address,
-  type Hash,
-  type Hex
+  type Hash
 } from "viem";
 import {
   CCTP_FORWARDING_HOOK_DATA,
@@ -15,9 +12,7 @@ import {
   XDCID_FEE_RECIPIENT,
   addressToBytes32,
   calculateXdcidConvenienceFee,
-  isCctpTransactionHash,
-  mainnetTokenMessengerV2Abi,
-  mainnetUsdcAbi
+  isCctpTransactionHash
 } from "../../../../lib/cctpMainnet";
 import {
   FORWARDING_RECOVERY_TTL_SECONDS,
@@ -38,6 +33,9 @@ import {
   CCTP_TOKEN_MESSENGER_V2,
   getPaymentNetwork
 } from "../../../../config/paymentNetworks";
+import { getPaymentRpcUrls } from "../../../../lib/paymentRpcConfig";
+import { findExactUsdcTransferPayer } from "../../../../lib/forwardingFeeVerification";
+import { hasExactCctpForwardingBurn } from "../../../../lib/forwardingBurnVerification";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,13 +54,33 @@ export async function GET(request: Request) {
   if (!feeTransactionHash) {
     try {
       await checkForwardingRecoveryStore();
-      return Response.json(
-        { configured: true },
-        { headers: noStoreHeaders() }
-      );
     } catch {
       return storageUnavailable();
     }
+
+    const sourceChainIdText = requestUrl.searchParams.get("sourceChainId");
+    if (sourceChainIdText !== null) {
+      const sourceChainId = Number(sourceChainIdText);
+      if (!Number.isSafeInteger(sourceChainId) || !getPaymentNetwork(sourceChainId)) {
+        return Response.json(
+          { error: "Payment source network is unavailable" },
+          { status: 400, headers: noStoreHeaders() }
+        );
+      }
+      try {
+        await getPaymentClient(sourceChainId).getBlockNumber();
+      } catch {
+        return Response.json(
+          { error: "Payment source RPC is temporarily unavailable" },
+          { status: 503, headers: noStoreHeaders() }
+        );
+      }
+    }
+
+    return Response.json(
+      { configured: true },
+      { headers: noStoreHeaders() }
+    );
   }
   if (!isCctpTransactionHash(feeTransactionHash)) {
     return Response.json(
@@ -265,34 +283,27 @@ async function verifyFeeTransaction(
 ): Promise<Address> {
   const network = getPaymentNetwork(input.sourceChainId);
   if (!network) throw new Error("Payment source network is unavailable");
-  const client = getPaymentClient(input.sourceChainId);
-  const [transaction, receipt] = await Promise.all([
-    client.getTransaction({ hash: input.feeTransactionHash }),
-    client.getTransactionReceipt({ hash: input.feeTransactionHash })
-  ]);
-  if (
-    receipt.status !== "success" ||
-    !transaction.to ||
-    getAddress(transaction.to) !== getAddress(network.usdcAddress)
-  ) {
-    throw new Error("Fee transaction is not a successful source-network USDC transfer");
+
+  const receipt = await getPaymentClient(
+    input.sourceChainId
+  ).getTransactionReceipt({ hash: input.feeTransactionHash });
+  if (receipt.status !== "success") {
+    throw new Error(
+      "Fee transaction is not a successful source-network USDC transfer"
+    );
   }
 
-  const decoded = decodeFunctionData({
-    abi: mainnetUsdcAbi,
-    data: transaction.input
+  const payer = findExactUsdcTransferPayer(receipt.logs, {
+    usdcAddress: network.usdcAddress,
+    feeRecipient: XDCID_FEE_RECIPIENT,
+    feeAmount: calculateXdcidConvenienceFee(input.recipientAmount)
   });
-  const args = decoded.args as readonly unknown[];
-  if (
-    decoded.functionName !== "transfer" ||
-    typeof args[0] !== "string" ||
-    typeof args[1] !== "bigint" ||
-    getAddress(args[0]) !== getAddress(XDCID_FEE_RECIPIENT) ||
-    args[1] !== calculateXdcidConvenienceFee(input.recipientAmount)
-  ) {
-    throw new Error("Fee transaction does not match the XDCID convenience fee");
+  if (!payer) {
+    throw new Error(
+      "Fee transaction does not contain one exact XDCID convenience-fee transfer"
+    );
   }
-  return getAddress(transaction.from);
+  return payer;
 }
 
 async function verifyForwardedBurn(
@@ -305,89 +316,34 @@ async function verifyForwardedBurn(
     throw new Error("Recovery route is no longer supported");
   }
 
-  const client = getPaymentClient(record.sourceChainId);
-  const [transaction, receipt] = await Promise.all([
-    client.getTransaction({ hash: burnTransactionHash }),
-    client.getTransactionReceipt({ hash: burnTransactionHash })
-  ]);
-  if (
-    receipt.status !== "success" ||
-    !transaction.to ||
-    getAddress(transaction.to) !== getAddress(CCTP_TOKEN_MESSENGER_V2) ||
-    getAddress(transaction.from) !== getAddress(record.payer)
-  ) {
-    throw new Error("Burn transaction does not match the recovery payer");
+  const receipt = await getPaymentClient(
+    record.sourceChainId
+  ).getTransactionReceipt({ hash: burnTransactionHash });
+  if (receipt.status !== "success") {
+    throw new Error("Burn transaction was not successful");
   }
 
-  const decoded = decodeFunctionData({
-    abi: mainnetTokenMessengerV2Abi,
-    data: transaction.input
+  const matches = hasExactCctpForwardingBurn(receipt.logs, {
+    tokenMessenger: CCTP_TOKEN_MESSENGER_V2,
+    burnToken: source.usdcAddress,
+    depositor: record.payer,
+    recipientAmount: BigInt(record.recipientAmount),
+    destinationDomain: destination.circleDomain,
+    mintRecipient: addressToBytes32(record.recipient),
+    destinationCaller: CCTP_ZERO_BYTES32,
+    minimumFinalityThreshold: CCTP_STANDARD_FINALITY_THRESHOLD,
+    hookData: CCTP_FORWARDING_HOOK_DATA
   });
-  if (decoded.functionName !== "depositForBurnWithHook") {
-    throw new Error("Recovery burn must use Circle forwarding");
-  }
-  const args = decoded.args as readonly unknown[];
-  const [
-    totalBurnAmount,
-    destinationDomain,
-    mintRecipient,
-    burnToken,
-    destinationCaller,
-    maxFee,
-    minimumFinalityThreshold,
-    hookData
-  ] = args;
-  const recipientAmount = BigInt(record.recipientAmount);
-  if (
-    typeof totalBurnAmount !== "bigint" ||
-    typeof maxFee !== "bigint" ||
-    totalBurnAmount <= maxFee ||
-    totalBurnAmount - maxFee !== recipientAmount ||
-    Number(destinationDomain) !== destination.circleDomain ||
-    mintRecipient !== addressToBytes32(record.recipient) ||
-    typeof burnToken !== "string" ||
-    getAddress(burnToken) !== getAddress(source.usdcAddress) ||
-    destinationCaller !== CCTP_ZERO_BYTES32 ||
-    Number(minimumFinalityThreshold) !== CCTP_STANDARD_FINALITY_THRESHOLD ||
-    hookData !== CCTP_FORWARDING_HOOK_DATA
-  ) {
-    throw new Error("Burn transaction does not match the recovery details");
+  if (!matches) {
+    throw new Error(
+      "Burn transaction does not contain one exact Circle forwarding event"
+    );
   }
 }
 
-const PAYMENT_RPC_CONFIG: Record<
-  number,
-  { environment: string; fallbackUrls: string }
-> = {
-  1: {
-    environment: "ETHEREUM_RPC_URLS",
-    fallbackUrls: "https://ethereum-rpc.publicnode.com"
-  },
-  50: {
-    environment: "XDC_RPC_URLS",
-    fallbackUrls: "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
-  },
-  137: {
-    environment: "POLYGON_RPC_URLS",
-    fallbackUrls: "https://polygon-bor-rpc.publicnode.com"
-  },
-  8453: {
-    environment: "BASE_RPC_URLS",
-    fallbackUrls: "https://base-rpc.publicnode.com"
-  },
-  42161: {
-    environment: "ARBITRUM_RPC_URLS",
-    fallbackUrls: "https://arbitrum-one-rpc.publicnode.com"
-  }
-};
-
 function getPaymentClient(chainId: number) {
-  const config = PAYMENT_RPC_CONFIG[chainId];
-  if (!config) throw new Error("Payment source RPC is unavailable");
-  const urls = (process.env[config.environment] || config.fallbackUrls)
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
+  const urls = getPaymentRpcUrls(chainId);
+  if (urls.length === 0) throw new Error("Payment source RPC is unavailable");
   const timeout = Number(process.env.PAYMENT_RPC_TIMEOUT_MS || 3_500);
   return createPublicClient({
     transport: fallback(

@@ -13,15 +13,17 @@ const XDC_CHAIN_ID = 50;
 export function useRegistryStatus(
   name: string | undefined,
   xdcidRegistered: boolean | undefined,
-  enabled = true
+  enabled = true,
+  chainId = XDC_CHAIN_ID
 ) {
+  const checkLegacyRegistry = chainId === XDC_CHAIN_ID;
   const legacyTokenId = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: legacyXdcDomainsAddress,
     abi: legacyXdcDomainsAbi,
     functionName: "_tokenIdMaps",
     args: name ? [name] : undefined,
-    query: { enabled: enabled && !!name }
+    query: { enabled: enabled && checkLegacyRegistry && !!name }
   });
 
   const legacy = useReadContract({
@@ -31,26 +33,40 @@ export function useRegistryStatus(
     functionName: "exists",
     args:
       legacyTokenId.data !== undefined ? [legacyTokenId.data] : undefined,
-    query: { enabled: enabled && legacyTokenId.data !== undefined }
+    query: {
+      enabled:
+        enabled && checkLegacyRegistry && legacyTokenId.data !== undefined
+    }
   });
 
   const status = useMemo(() => {
-    if (xdcidRegistered === undefined || legacy.data === undefined) {
+    if (xdcidRegistered === undefined) {
       return undefined;
     }
-
+    if (!checkLegacyRegistry) {
+      return classifyRegistryStatus({
+        xdcidRegistered,
+        legacyRegistered: false
+      });
+    }
+    if (legacy.data === undefined) {
+      return undefined;
+    }
     return classifyRegistryStatus({
       xdcidRegistered,
       legacyRegistered: legacy.data
     });
-  }, [legacy.data, xdcidRegistered]);
+  }, [checkLegacyRegistry, legacy.data, xdcidRegistered]);
 
   return {
     status,
-    legacyTokenId: legacyTokenId.data,
+    legacyTokenId: checkLegacyRegistry ? legacyTokenId.data : undefined,
     isChecking:
       enabled &&
-      (legacyTokenId.isLoading || legacy.isLoading || status === undefined),
-    isError: legacyTokenId.isError || legacy.isError
+      (xdcidRegistered === undefined ||
+        (checkLegacyRegistry &&
+          (legacyTokenId.isLoading || legacy.isLoading || status === undefined))),
+    isError:
+      checkLegacyRegistry && (legacyTokenId.isError || legacy.isError)
   };
 }

@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { formatUnits, type Address, type Hash, type Hex } from "viem";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  formatUnits,
+  type Address,
+  type Hash,
+  type Hex,
+  type PublicClient
+} from "viem";
 import {
   useAccount,
   usePublicClient,
@@ -28,6 +34,10 @@ import {
   automaticForwardingMessage,
   getPaymentRouteCapability
 } from "../lib/paymentRouteCapabilities";
+import {
+  estimateAdaptiveGasFees,
+  isBaseFeeTooLowError
+} from "../lib/gasFeePolicy";
 
 type Phase =
   | "idle"
@@ -49,12 +59,24 @@ type ForwardingQuote = {
   quotedAt: number;
 };
 
+export type PaymentCompletionMetadata = {
+  completionMethod: "standard" | "automatic" | "recovered";
+  xdcidFeeAtomic?: string;
+  circleFeeAtomic?: string;
+};
+
 type MultichainUsdcExecutorProps = {
   sourceChainId: number;
   destinationChainId: number;
   amount: string;
   recipient: Address;
   ready: boolean;
+  paymentReference?: string;
+  onCompleted?: (
+    sourceHash: Hash,
+    destinationHash?: Hash,
+    metadata?: PaymentCompletionMetadata
+  ) => void | Promise<void>;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
 };
 
@@ -72,23 +94,18 @@ const phaseLabels: Record<Phase, string> = {
   complete: "Transfer complete"
 };
 
-const explorerUrls: Record<number, string> = {
-  1: "https://etherscan.io",
-  50: "https://xdcscan.com",
-  137: "https://polygonscan.com",
-  8453: "https://basescan.org",
-  42161: "https://arbiscan.io"
-};
-
 export function MultichainUsdcExecutor({
   sourceChainId,
   destinationChainId,
   amount,
   recipient,
   ready,
+  paymentReference = "",
+  onCompleted,
   requestedTransferMode = "payer-choice"
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
+  const reportedSettlement = useRef("");
   const [burnHash, setBurnHash] = useState("");
   const [receiveHash, setReceiveHash] = useState<Hash | "">("");
   const [attestation, setAttestation] = useState<Attestation | null>(null);
@@ -104,6 +121,8 @@ export function MultichainUsdcExecutor({
   const [feeHash, setFeeHash] = useState<Hash | "">("");
   const [recoveryFeeHash, setRecoveryFeeHash] = useState("");
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveredMode, setRecoveredMode] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
   const [recoveryStatus, setRecoveryStatus] = useState<
     "idle" | "checking" | "ready" | "error"
   >("idle");
@@ -116,6 +135,7 @@ export function MultichainUsdcExecutor({
   const source = getPaymentNetwork(sourceChainId);
   const destination = getPaymentNetwork(destinationChainId);
   const crossChain = sourceChainId !== destinationChainId;
+
   const routeCapability = getPaymentRouteCapability(
     sourceChainId,
     destinationChainId,
@@ -123,10 +143,65 @@ export function MultichainUsdcExecutor({
   );
   const forwardingAvailable =
     routeCapability.automaticForwarding === "mainnet-enabled" ||
-    routeCapability.automaticForwarding === "mainnet-preview";
+    routeCapability.automaticForwarding === "mainnet-preview" ||
+    routeCapability.automaticForwarding === "testnet-enabled";
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
   const transferModeLocked = requestedTransferMode !== "payer-choice";
+
+  useEffect(() => {
+    if (phase !== "complete" || !onCompleted || !receiveHash) return;
+    const sourceHash = crossChain ? burnHash : receiveHash;
+    if (!isCctpTransactionHash(sourceHash)) return;
+    const key = sourceHash + ":" + receiveHash;
+    if (reportedSettlement.current === key) return;
+    reportedSettlement.current = key;
+    let metadata: PaymentCompletionMetadata = {
+      completionMethod: recoveredMode ? "recovered" : "standard"
+    };
+    if (automaticForwarding && forwardingQuote) {
+      const recipientAmount = parseMainnetUsdcAmount(amount);
+      metadata = {
+        completionMethod: recoveredMode ? "recovered" : "automatic",
+        xdcidFeeAtomic: calculateXdcidConvenienceFee(recipientAmount).toString(),
+        circleFeeAtomic: (
+          forwardingQuote.forwardFee +
+          calculateCctpProtocolFee(recipientAmount, forwardingQuote.minimumFeeBps)
+        ).toString()
+      };
+    }
+    void onCompleted(
+      sourceHash as Hash,
+      crossChain ? receiveHash as Hash : undefined,
+      metadata
+    );
+  }, [
+    amount,
+    automaticForwarding,
+    burnHash,
+    crossChain,
+    forwardingQuote,
+    onCompleted,
+    phase,
+    receiveHash,
+    recoveredMode
+  ]);
+
+  async function writeWithAdaptiveFees(
+    request: Record<string, unknown>,
+    client: PublicClient,
+    chainId: number
+  ): Promise<Hash> {
+    const initialFees = await estimateAdaptiveGasFees(client, chainId);
+    try {
+      return await writeContractAsync({ ...request, ...initialFees } as never);
+    } catch (cause) {
+      if (!isBaseFeeTooLowError(cause)) throw cause;
+      const refreshedFees = await estimateAdaptiveGasFees(client, chainId);
+      if (refreshedFees.maxFeePerGas === undefined) throw cause;
+      return writeContractAsync({ ...request, ...refreshedFees } as never);
+    }
+  }
 
   useEffect(() => {
     setTransferMode(
@@ -136,6 +211,8 @@ export function MultichainUsdcExecutor({
 
   useEffect(() => {
     setRecoveryReady(false);
+    setRecoveredMode(false);
+    setRecoveryMessage("");
     setRecoveryStatus("idle");
     setFeeHash("");
   }, [amount, sourceChainId, destinationChainId, recipient]);
@@ -208,7 +285,7 @@ export function MultichainUsdcExecutor({
         throw new Error("Wait for the live Circle forwarding quote");
       }
       if (automaticForwarding && !recoveryReady) {
-        await ensureForwardingRecoveryAvailable();
+        await ensureForwardingRecoveryAvailable(sourceChainId);
       }
       if (
         automaticForwarding &&
@@ -256,7 +333,11 @@ export function MultichainUsdcExecutor({
           recipient
         });
         setPhase("transferring");
-        const transferHash = await writeContractAsync(request as never);
+        const transferHash = await writeWithAdaptiveFees(
+          request,
+          sourceClient,
+          source.chainId
+        );
         setReceiveHash(transferHash);
         await sourceClient.waitForTransactionReceipt({ hash: transferHash });
         setPhase("complete");
@@ -283,7 +364,11 @@ export function MultichainUsdcExecutor({
 
       if (allowance < approvalAmount) {
         setPhase("approving");
-        const approvalHash = await writeContractAsync(plan.approvalRequest as never);
+        const approvalHash = await writeWithAdaptiveFees(
+          plan.approvalRequest,
+          sourceClient,
+          source.chainId
+        );
         await sourceClient.waitForTransactionReceipt({ hash: approvalHash });
       }
 
@@ -295,7 +380,11 @@ export function MultichainUsdcExecutor({
             sourceChainId,
             units
           );
-          const nextFeeHash = await writeContractAsync(feeRequest as never);
+          const nextFeeHash = await writeWithAdaptiveFees(
+            feeRequest,
+            sourceClient,
+            source.chainId
+          );
           setFeeHash(nextFeeHash);
           setRecoveryFeeHash(nextFeeHash);
           await sourceClient.waitForTransactionReceipt({ hash: nextFeeHash });
@@ -317,8 +406,10 @@ export function MultichainUsdcExecutor({
         }
 
         setPhase("burning");
-        const nextBurnHash = await writeContractAsync(
-          forwardedPlan.burnRequest as never
+        const nextBurnHash = await writeWithAdaptiveFees(
+          forwardedPlan.burnRequest,
+          sourceClient,
+          source.chainId
         );
         setBurnHash(nextBurnHash);
         await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
@@ -334,6 +425,10 @@ export function MultichainUsdcExecutor({
             destinationChainId
           });
           setRecoveryReady(false);
+          setRecoveryStatus("ready");
+          setRecoveryMessage(
+            "Burn hash saved. It can be restored later using the XDCID fee hash."
+          );
         } catch {
           setError(
             "The burn succeeded, but recovery cleanup is pending. Do not reuse the fee transaction hash."
@@ -351,7 +446,11 @@ export function MultichainUsdcExecutor({
       }
 
       setPhase("burning");
-      const nextBurnHash = await writeContractAsync(plan.burnRequest as never);
+      const nextBurnHash = await writeWithAdaptiveFees(
+        plan.burnRequest,
+        sourceClient,
+        source.chainId
+      );
       setBurnHash(nextBurnHash);
       await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
 
@@ -401,6 +500,7 @@ export function MultichainUsdcExecutor({
 
   async function recoverPaidForwardingFee() {
     setError("");
+    setRecoveryMessage("");
     setRecoveryStatus("checking");
     if (!isConnected || !address) {
       setRecoveryStatus("error");
@@ -422,18 +522,38 @@ export function MultichainUsdcExecutor({
         recipient,
         destinationChainId
       });
-      if (response.status === "used") {
-        throw new Error("This fee transaction was already used for a burn");
-      }
       if (
         !response.record?.payer ||
         response.record.payer.toLowerCase() !== address.toLowerCase()
       ) {
         throw new Error("Connect the wallet that submitted the fee transaction");
       }
+      setRecoveredMode(true);
+      if (response.status === "used") {
+        const restoredBurnHash = response.burnTransactionHash;
+        if (
+          typeof restoredBurnHash !== "string" ||
+          !isCctpTransactionHash(restoredBurnHash)
+        ) {
+          throw new Error(
+            "The fee was used, but its burn hash could not be restored"
+          );
+        }
+        setFeeHash(recoveryFeeHash);
+        setBurnHash(restoredBurnHash);
+        setRecoveryReady(false);
+        setRecoveryStatus("ready");
+        setRecoveryMessage(
+          "Burn hash restored from the fee record. Continue with attestation lookup."
+        );
+        return;
+      }
       setFeeHash(recoveryFeeHash);
       setRecoveryReady(true);
       setRecoveryStatus("ready");
+      setRecoveryMessage(
+        "Fee verified. The retry will not charge it again."
+      );
     } catch (cause) {
       setRecoveryReady(false);
       setRecoveryStatus("error");
@@ -456,7 +576,11 @@ export function MultichainUsdcExecutor({
       );
       setPhase("minting");
       await switchChainAsync({ chainId: destination.chainId });
-      const nextReceiveHash = await writeContractAsync(request as never);
+      const nextReceiveHash = await writeWithAdaptiveFees(
+        request,
+        destinationClient,
+        destination.chainId
+      );
       setReceiveHash(nextReceiveHash);
       await destinationClient.waitForTransactionReceipt({ hash: nextReceiveHash });
       setPhase("complete");
@@ -546,7 +670,7 @@ export function MultichainUsdcExecutor({
           </p>
           <p className="mt-1 text-xs text-neutral-600">
             Verify the public XDCID fee transaction and retry without paying
-            the convenience fee again. Recovery records expire after 30 days.
+            the convenience fee again. Recovery records expire after 7 days.
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
             <input
@@ -555,6 +679,7 @@ export function MultichainUsdcExecutor({
               onChange={(event) => {
                 setRecoveryFeeHash(event.target.value.trim());
                 setRecoveryReady(false);
+                setRecoveryMessage("");
                 setRecoveryStatus("idle");
               }}
               placeholder="0x XDCID fee transaction hash"
@@ -568,9 +693,9 @@ export function MultichainUsdcExecutor({
               {recoveryStatus === "checking" ? "Verifying..." : "Verify paid fee"}
             </button>
           </div>
-          {recoveryReady ? (
+          {recoveryStatus === "ready" && recoveryMessage ? (
             <p className="mt-2 text-xs font-semibold text-teal-700">
-              Fee verified. The retry will not charge it again.
+              {recoveryMessage}
             </p>
           ) : null}
         </div>
@@ -617,22 +742,28 @@ export function MultichainUsdcExecutor({
         <TransactionLink
           label="XDCID fee"
           hash={feeHash}
-          explorerUrl={explorerUrls[sourceChainId]}
+          explorerUrl={source?.explorerUrl}
         />
       ) : null}
       {burnHash ? (
         <TransactionLink
           label="Burn"
           hash={burnHash}
-          explorerUrl={explorerUrls[sourceChainId]}
+          explorerUrl={source?.explorerUrl}
         />
       ) : null}
       {receiveHash ? (
         <TransactionLink
           label={crossChain ? "Mint" : "Transfer"}
           hash={receiveHash}
-          explorerUrl={explorerUrls[destinationChainId]}
+          explorerUrl={destination?.explorerUrl}
         />
+      ) : null}
+
+      {phase === "complete" && paymentReference ? (
+        <p className="mt-3 rounded-md border border-teal-200 bg-white p-3 text-xs text-neutral-700">
+          Private reference: <strong>{paymentReference}</strong>
+        </p>
       ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
@@ -703,10 +834,16 @@ type RecoveryApiResponse = {
   error?: string;
 };
 
-async function ensureForwardingRecoveryAvailable(): Promise<void> {
-  const response = await fetch("/api/cctp/forwarding-recovery", {
-    cache: "no-store"
+async function ensureForwardingRecoveryAvailable(
+  sourceChainId: number
+): Promise<void> {
+  const query = new URLSearchParams({
+    sourceChainId: String(sourceChainId)
   });
+  const response = await fetch(
+    "/api/cctp/forwarding-recovery?" + query.toString(),
+    { cache: "no-store" }
+  );
   if (!response.ok) {
     throw new Error(
       "Automatic forwarding recovery is unavailable. Select Standard transfer or try again."

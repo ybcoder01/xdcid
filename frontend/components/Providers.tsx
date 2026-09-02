@@ -12,13 +12,24 @@ import {
   walletConnectWallet
 } from "@rainbow-me/rainbowkit/wallets";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { arbitrum, base, mainnet, polygon } from "wagmi/chains";
+import {
+  arbitrum,
+  base,
+  baseSepolia,
+  mainnet,
+  polygon,
+  polygonAmoy,
+  sepolia
+} from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
 import { getRpcTransport } from "../config/rpcTransports";
+import { PAYMENT_NETWORK_ENV } from "../config/paymentNetworks";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
+const defaultWalletChain =
+  PAYMENT_NETWORK_ENV === "testnet" ? xdcApothem : xdcMainnet;
 
 const connectors = walletConnectProjectId
   ? connectorsForWallets(
@@ -49,6 +60,9 @@ const config = createConfig({
     polygon,
     arbitrum,
     base,
+    sepolia,
+    polygonAmoy,
+    baseSepolia,
     arbitrumSepolia,
     xdcApothem
   ],
@@ -60,6 +74,9 @@ const config = createConfig({
     [polygon.id]: getRpcTransport(137),
     [arbitrum.id]: getRpcTransport(42161),
     [base.id]: getRpcTransport(8453),
+    [sepolia.id]: http(sepolia.rpcUrls.default.http[0]),
+    [polygonAmoy.id]: http(polygonAmoy.rpcUrls.default.http[0]),
+    [baseSepolia.id]: http(baseSepolia.rpcUrls.default.http[0]),
     [arbitrumSepolia.id]: http(arbitrumSepolia.rpcUrls.default.http[0]),
     [xdcApothem.id]: http(xdcApothem.rpcUrls.default.http[0])
   },
@@ -72,7 +89,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>{children}</RainbowKitProvider>
+        <RainbowKitProvider initialChain={defaultWalletChain}>
+          {children}
+        </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

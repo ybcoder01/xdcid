@@ -1,5 +1,5 @@
 export const XNS_SUFFIX = ".xdc";
-export const MIN_XNS_LABEL_LENGTH = 3;
+export const MIN_XNS_LABEL_LENGTH = 2;
 export const MAX_XNS_LABEL_LENGTH = 63;
 
 export type ParsedXnsName = {

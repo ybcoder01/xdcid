@@ -2,21 +2,94 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
-import { addresses, registrarAbi } from "../config/contracts";
+import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
 import { WalletButton } from "./WalletButton";
+
+type AdminSessionStatus = {
+  authenticated?: boolean;
+  address?: string;
+};
+
+const ADMIN_SESSION_CHANGED_EVENT = "xdcid:admin-session-changed";
 
 export function Nav() {
   const { address } = useAccount();
-  const owner = useReadContract({
-    address: addresses.registrar,
-    abi: registrarAbi,
+  const [authorizedSessionAddress, setAuthorizedSessionAddress] =
+    useState<string>();
+  const registryOwner = useReadContract({
+    address: addresses.registry,
+    abi: ownableAbi,
     functionName: "owner"
   });
+  const policyOwner = useReadContract({
+    address: addresses.pricingPolicy,
+    abi: ownableAbi,
+    functionName: "owner",
+    query: { enabled: addresses.pricingPolicy !== zeroAddress }
+  });
+  const checkAdminSession = useCallback(async () => {
+    if (!address) {
+      setAuthorizedSessionAddress(undefined);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/auth/session", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const session = (await response.json().catch(() => ({}))) as AdminSessionStatus;
+      if (
+        response.ok &&
+        session.authenticated === true &&
+        session.address?.toLowerCase() === address.toLowerCase()
+      ) {
+        setAuthorizedSessionAddress(session.address);
+        return;
+      }
+
+      const eligibilityResponse = await fetch(
+        `/api/admin/auth/eligibility?address=${encodeURIComponent(address)}`,
+        {
+          cache: "no-store",
+          credentials: "same-origin",
+        },
+      );
+      const eligibility = (await eligibilityResponse
+        .json()
+        .catch(() => ({}))) as { eligible?: boolean };
+      setAuthorizedSessionAddress(
+        eligibilityResponse.ok && eligibility.eligible === true
+          ? address
+          : undefined,
+      );
+    } catch {
+      setAuthorizedSessionAddress(undefined);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    void checkAdminSession();
+
+    const refreshSession = () => void checkAdminSession();
+    window.addEventListener(ADMIN_SESSION_CHANGED_EVENT, refreshSession);
+    window.addEventListener("focus", refreshSession);
+    return () => {
+      window.removeEventListener(ADMIN_SESSION_CHANGED_EVENT, refreshSession);
+      window.removeEventListener("focus", refreshSession);
+    };
+  }, [checkAdminSession]);
+
   const canSeeAdmin = useMemo(
-    () => !!address && !!owner.data && owner.data.toLowerCase() === address.toLowerCase(),
-    [address, owner.data]
+    () =>
+      !!address &&
+      (authorizedSessionAddress?.toLowerCase() === address.toLowerCase() ||
+        [registryOwner.data, policyOwner.data]
+          .filter((candidate): candidate is `0x${string}` => !!candidate)
+          .some((candidate) => candidate.toLowerCase() === address.toLowerCase())),
+    [address, authorizedSessionAddress, policyOwner.data, registryOwner.data],
   );
 
   return (
@@ -43,6 +116,12 @@ export function Nav() {
           </Link>
           <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/dashboard">
             Dashboard
+          </Link>
+          <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/history">
+            History
+          </Link>
+          <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/archive">
+            Archive
           </Link>
           <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/docs">
             Docs
