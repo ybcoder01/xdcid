@@ -316,7 +316,7 @@ export const ownableAbi = [
   }
 ] as const;
 
-export const pricingPolicyAbi = [
+export const pricingPolicyV2Abi = [
   ...ownableAbi,
   {
     type: "function",
@@ -421,3 +421,116 @@ export const pricingPolicyAbi = [
     outputs: []
   }
 ] as const;
+
+export const legacyPricingPolicyAbi = [
+  ...ownableAbi,
+  {
+    type: "function",
+    name: "version",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "priceUsdMicros",
+    stateMutability: "view",
+    inputs: [
+      { name: "product", type: "uint8" },
+      { name: "labelLength", type: "uint256" },
+      { name: "years_", type: "uint256" }
+    ],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "config",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{
+      name: "",
+      type: "tuple",
+      components: [
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }]
+  },
+  {
+    type: "function",
+    name: "hasPendingConfig",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "pendingActivationTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "proposeConfig",
+    stateMutability: "nonpayable",
+    inputs: [{
+      name: "nextConfig",
+      type: "tuple",
+      components: [
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "cancelPendingConfig",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "activatePendingConfig",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  }
+] as const;
+
+export const pricingPolicyGeneration = isTestnetEnvironment ? "v2" : "legacy";
+
+// Both policy generations expose the same operational methods. Keep the
+// environment-specific ABI behind this shared export so dev can use V2 while
+// the current mainnet signed registrar continues to use its legacy policy.
+export const pricingPolicyAbi = (
+  pricingPolicyGeneration === "v2"
+    ? pricingPolicyV2Abi
+    : legacyPricingPolicyAbi
+) as typeof pricingPolicyV2Abi;
