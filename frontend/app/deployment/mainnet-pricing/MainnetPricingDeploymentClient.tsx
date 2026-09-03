@@ -8,6 +8,7 @@ import {
   encodeDeployData,
   getAddress,
   getContractAddress,
+  isAddress,
   type Abi,
   type Address,
   type EIP1193Provider,
@@ -22,7 +23,9 @@ const LEGACY_REGISTRY = getAddress("0x295a7aB79368187a6CD03c464cfaAb04d799784E")
 const USDC = getAddress("0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1");
 const CHAIN_ID = 50;
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920ca78fbf26c0b4956c");
-const CREATE2_SALT = `0x${"00".repeat(32)}` as Hex;
+const CREATE2_SALT = (suffix: number) =>
+  (`0x${suffix.toString(16).padStart(64, "0")}`) as Hex;
+const STORAGE_KEY = "xdcid:mainnet-v2-deployment";
 
 const xdcMainnet = {
   id: CHAIN_ID,
@@ -54,7 +57,9 @@ const erc20MetadataAbi = [
 
 type Deployment = {
   pricingPolicy?: Address;
+  discountAuthorization?: Address;
   registrar?: Address;
+  subdomainRegistrar?: Address;
 };
 
 type Step = {
@@ -67,8 +72,11 @@ type Step = {
 
 const initialSteps: Step[] = [
   { label: "Validate mainnet dependencies", state: "pending" },
-  { label: "Deploy XNSPricingPolicy", state: "pending" },
-  { label: "Deploy XNSSignedQuoteRegistrar", state: "pending" },
+  { label: "Deploy Pricing Policy V2", state: "pending" },
+  { label: "Deploy Discount Authorization", state: "pending" },
+  { label: "Deploy Registrar V2", state: "pending" },
+  { label: "Propose Registrar V2 as discount consumer", state: "pending" },
+  { label: "Deploy standalone Subdomain Registrar", state: "pending" },
   { label: "Validate deployed contracts", state: "pending" },
 ];
 
@@ -77,6 +85,9 @@ export default function MainnetPricingDeploymentClient() {
   const [deployment, setDeployment] = useState<Deployment>({});
   const [steps, setSteps] = useState<Step[]>(initialSteps);
   const [busy, setBusy] = useState(false);
+  const [quoteSigner, setQuoteSigner] = useState("");
+  const [discountSigner, setDiscountSigner] = useState("");
+  const [treasury, setTreasury] = useState("");
   const [message, setMessage] = useState(
     "Connect the current owner wallet to run the read-only preflight.",
   );
@@ -116,6 +127,10 @@ export default function MainnetPricingDeploymentClient() {
 
   async function deploy() {
     if (!account || busy) return;
+    if (![quoteSigner, discountSigner, treasury].every((value) => isAddress(value))) {
+      setMessage("Enter valid quote-signer, discount-signer, and treasury addresses.");
+      return;
+    }
     setBusy(true);
     setDeployment({});
     setSteps((current) => [
@@ -129,19 +144,25 @@ export default function MainnetPricingDeploymentClient() {
       const clients = clientsFor(provider, account);
       await validateDependencies(clients.publicClient, account);
 
+      const configuredQuoteSigner = getAddress(quoteSigner);
+      const configuredDiscountSigner = getAddress(discountSigner);
+      const configuredTreasury = getAddress(treasury);
+
       const pricingConfig = {
+        twoCharacterAnnualUsdMicros: 50_000_000n,
         threeCharacterAnnualUsdMicros: 20_000_000n,
         fourCharacterAnnualUsdMicros: 10_000_000n,
         standardAnnualUsdMicros: 5_000_000n,
         subdomainAnnualUsdMicros: 1_000_000n,
+        premiumSubdomainAnnualUsdMicros: 5_000_000n,
         migrationUsdMicros: 3_000_000n,
         threeYearDiscountBps: 1_000,
         fiveYearDiscountBps: 1_500,
         tenYearDiscountBps: 2_000,
         xdcQuoteBufferBps: 200,
-        quoteSigner: OWNER,
+        quoteSigner: configuredQuoteSigner,
         usdcToken: USDC,
-        treasury: OWNER,
+        treasury: configuredTreasury,
         xdcPaymentsEnabled: true,
         usdcPaymentsEnabled: true,
       };
@@ -151,30 +172,85 @@ export default function MainnetPricingDeploymentClient() {
         clients,
         artifact: mainnetPricingDeploymentArtifacts.pricingPolicy,
         args: [pricingConfig, OWNER],
+        salt: CREATE2_SALT(301),
         updateStep,
       });
       setDeployment({ pricingPolicy });
 
-      const registrar = await deployContract({
+      const discountAuthorization = await deployContract({
         index: 2,
         clients,
-        artifact: mainnetPricingDeploymentArtifacts.registrar,
-        args: [REGISTRY, LEGACY_REGISTRY, pricingPolicy],
+        artifact: mainnetPricingDeploymentArtifacts.discountAuthorization,
+        args: [OWNER, configuredDiscountSigner, OWNER],
+        salt: CREATE2_SALT(302),
         updateStep,
       });
-      const completed = { pricingPolicy, registrar };
-      setDeployment(completed);
+      setDeployment({ pricingPolicy, discountAuthorization });
 
-      updateStep(3, { state: "confirming" });
+      const registrar = await deployContract({
+        index: 3,
+        clients,
+        artifact: mainnetPricingDeploymentArtifacts.registrar,
+        args: [
+          REGISTRY,
+          LEGACY_REGISTRY,
+          pricingPolicy,
+          discountAuthorization,
+          OWNER,
+        ],
+        salt: CREATE2_SALT(303),
+        updateStep,
+      });
+      setDeployment({ pricingPolicy, discountAuthorization, registrar });
+
+      updateStep(4, { state: "wallet" });
+      const proposalHash = await clients.walletClient.writeContract({
+        account,
+        chain: xdcMainnet,
+        address: discountAuthorization,
+        abi: mainnetPricingDeploymentArtifacts.discountAuthorization.abi,
+        functionName: "proposeConfiguration",
+        args: [configuredDiscountSigner, registrar],
+      });
+      updateStep(4, { state: "confirming", hash: proposalHash });
+      const proposalReceipt = await clients.publicClient.waitForTransactionReceipt({
+        hash: proposalHash,
+        confirmations: 2,
+        timeout: 180_000,
+      });
+      if (proposalReceipt.status !== "success") {
+        throw new Error("Discount consumer proposal failed");
+      }
+      updateStep(4, { state: "complete", hash: proposalHash });
+
+      const subdomainRegistrar = await deployContract({
+        index: 5,
+        clients,
+        artifact: mainnetPricingDeploymentArtifacts.subdomainRegistrar,
+        args: [REGISTRY, pricingPolicy, OWNER],
+        salt: CREATE2_SALT(304),
+        updateStep,
+      });
+      const completed = {
+        pricingPolicy,
+        discountAuthorization,
+        registrar,
+        subdomainRegistrar,
+      };
+      setDeployment(completed);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(completed));
+
+      updateStep(6, { state: "confirming" });
       await validateDeployment(
         clients.publicClient,
         completed,
         account,
         pricingConfig,
+        configuredDiscountSigner,
       );
-      updateStep(3, { state: "complete" });
+      updateStep(6, { state: "complete" });
       setMessage(
-        "Both contracts are deployed and validated. Nothing was activated. Save the addresses and transaction hashes for Hardhat verification.",
+        "The V2 and subdomain contracts are deployed and validated. Nothing was activated. Wait 48 hours before activating the discount consumer, then run the separate registrar activation preflight.",
       );
     } catch (cause) {
       setMessage(errorMessage(cause));
@@ -191,22 +267,31 @@ export default function MainnetPricingDeploymentClient() {
             XDC mainnet deployment
           </p>
           <h1 className="mt-3 text-4xl font-semibold">
-            Deploy the XDCID pricing stack
+            Deploy XDCID V2 and subdomains
           </h1>
           <p className="mt-3 text-slate-700">
-            This temporary page deploys exactly two contracts. It cannot activate
-            the registrar and it never reads, transmits, or stores a private key.
+            This temporary page deploys four contracts and proposes the delayed
+            discount-consumer update. It cannot activate the registry registrar
+            and it never reads, transmits, or stores a private key.
           </p>
         </section>
 
         <section className="rounded-3xl border bg-white p-7 shadow-sm">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Allowed wallet, roles, and treasury" value={OWNER} />
+            <Detail label="Allowed deployment and contract-owner wallet" value={OWNER} />
             <Detail label="Existing registry" value={REGISTRY} />
             <Detail label="Legacy collision registry" value={LEGACY_REGISTRY} />
             <Detail label="XDC USDC (6 decimals)" value={USDC} />
             <Detail label="Rabby-compatible deployment proxy" value={CREATE2_DEPLOYER} />
           </dl>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <AddressField label="Quote signer" value={quoteSigner} onChange={setQuoteSigner} />
+            <AddressField label="Discount signer" value={discountSigner} onChange={setDiscountSigner} />
+            <AddressField label="Treasury" value={treasury} onChange={setTreasury} />
+          </div>
+          <p className="mt-3 text-xs text-slate-600">
+            These are public role addresses only. Never enter a private key. Review all three addresses before every wallet confirmation.
+          </p>
           <p className="mt-5 rounded-xl bg-slate-100 p-4">{message}</p>
           <div className="mt-5 flex flex-wrap gap-3">
             <button
@@ -221,7 +306,7 @@ export default function MainnetPricingDeploymentClient() {
               onClick={deploy}
               disabled={!account || busy}
             >
-              {busy ? "Deployment in progress..." : "Deploy and validate two contracts"}
+              {busy ? "Deployment in progress..." : "Deploy and validate V2 stack"}
             </button>
           </div>
         </section>
@@ -280,11 +365,30 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+function AddressField(props: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="text-sm font-medium">
+      {props.label}
+      <input
+        className="mt-2 w-full rounded-xl border p-3 font-mono text-xs"
+        placeholder="0x…"
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 async function deployContract(input: {
   index: number;
   clients: ReturnType<typeof clientsFor>;
   artifact: { abi: readonly unknown[]; bytecode: string };
   args: readonly unknown[];
+  salt: Hex;
   updateStep: (index: number, patch: Partial<Step>) => void;
 }): Promise<Address> {
   input.updateStep(input.index, { state: "wallet" });
@@ -299,7 +403,7 @@ async function deployContract(input: {
         bytecode: data,
         from: CREATE2_DEPLOYER,
         opcode: "CREATE2",
-        salt: CREATE2_SALT,
+        salt: input.salt,
       }),
     );
     const existingCode = await input.clients.publicClient.getCode({ address });
@@ -308,7 +412,7 @@ async function deployContract(input: {
       return address;
     }
 
-    const factoryData = `${CREATE2_SALT}${data.slice(2)}` as Hex;
+    const factoryData = `${input.salt}${data.slice(2)}` as Hex;
     const hash = await input.clients.walletClient.sendTransaction({
       account: input.clients.account,
       chain: xdcMainnet,
@@ -384,11 +488,32 @@ async function validateDeployment(
     usdcToken: Address;
     treasury: Address;
   },
+  expectedDiscountSigner: Address,
 ) {
   const policyAbi = mainnetPricingDeploymentArtifacts.pricingPolicy.abi as Abi;
   const registrarAbi = mainnetPricingDeploymentArtifacts.registrar.abi as Abi;
+  const discountAbi =
+    mainnetPricingDeploymentArtifacts.discountAuthorization.abi as Abi;
+  const subdomainAbi =
+    mainnetPricingDeploymentArtifacts.subdomainRegistrar.abi as Abi;
 
-  const [policyOwner, config, version, registry, legacy, policy] =
+  const [
+    policyOwner,
+    config,
+    version,
+    registry,
+    legacy,
+    policy,
+    authorization,
+    registrarOwner,
+    discountOwner,
+    pendingDiscountSigner,
+    pendingConsumer,
+    hasPendingConfiguration,
+    subdomainOwner,
+    subdomainRegistry,
+    subdomainPolicy,
+  ] =
     await Promise.all([
       publicClient.readContract({
         address: deployment.pricingPolicy,
@@ -420,17 +545,69 @@ async function validateDeployment(
         abi: registrarAbi,
         functionName: "pricingPolicy",
       }),
+      publicClient.readContract({
+        address: deployment.registrar,
+        abi: registrarAbi,
+        functionName: "discountAuthorization",
+      }),
+      publicClient.readContract({
+        address: deployment.registrar,
+        abi: registrarAbi,
+        functionName: "owner",
+      }),
+      publicClient.readContract({
+        address: deployment.discountAuthorization,
+        abi: discountAbi,
+        functionName: "owner",
+      }),
+      publicClient.readContract({
+        address: deployment.discountAuthorization,
+        abi: discountAbi,
+        functionName: "pendingAuthorizationSigner",
+      }),
+      publicClient.readContract({
+        address: deployment.discountAuthorization,
+        abi: discountAbi,
+        functionName: "pendingConsumer",
+      }),
+      publicClient.readContract({
+        address: deployment.discountAuthorization,
+        abi: discountAbi,
+        functionName: "hasPendingConfiguration",
+      }),
+      publicClient.readContract({
+        address: deployment.subdomainRegistrar,
+        abi: subdomainAbi,
+        functionName: "owner",
+      }),
+      publicClient.readContract({
+        address: deployment.subdomainRegistrar,
+        abi: subdomainAbi,
+        functionName: "registry",
+      }),
+      publicClient.readContract({
+        address: deployment.subdomainRegistrar,
+        abi: subdomainAbi,
+        functionName: "pricingPolicy",
+      }),
     ]);
 
-  if (getAddress(policyOwner as Address) !== account || BigInt(version as bigint) !== 1n) {
+  if (
+    [policyOwner, registrarOwner, discountOwner, subdomainOwner].some(
+      (owner) => getAddress(owner as Address) !== account,
+    ) ||
+    BigInt(version as bigint) !== 1n
+  ) {
     throw new Error("Pricing-policy owner or version validation failed");
   }
 
   const values = config as {
+    twoCharacterAnnualUsdMicros: bigint;
     threeCharacterAnnualUsdMicros: bigint;
     fourCharacterAnnualUsdMicros: bigint;
     standardAnnualUsdMicros: bigint;
     subdomainAnnualUsdMicros: bigint;
+    premiumSubdomainAnnualUsdMicros: bigint;
     migrationUsdMicros: bigint;
     threeYearDiscountBps: number;
     fiveYearDiscountBps: number;
@@ -443,10 +620,12 @@ async function validateDeployment(
     usdcPaymentsEnabled: boolean;
   };
   if (
+    values.twoCharacterAnnualUsdMicros !== 50_000_000n ||
     values.threeCharacterAnnualUsdMicros !== 20_000_000n ||
     values.fourCharacterAnnualUsdMicros !== 10_000_000n ||
     values.standardAnnualUsdMicros !== 5_000_000n ||
     values.subdomainAnnualUsdMicros !== 1_000_000n ||
+    values.premiumSubdomainAnnualUsdMicros !== 5_000_000n ||
     values.migrationUsdMicros !== 3_000_000n ||
     values.threeYearDiscountBps !== 1_000 ||
     values.fiveYearDiscountBps !== 1_500 ||
@@ -464,9 +643,15 @@ async function validateDeployment(
   if (
     getAddress(registry as Address) !== REGISTRY ||
     getAddress(legacy as Address) !== LEGACY_REGISTRY ||
-    getAddress(policy as Address) !== deployment.pricingPolicy
+    getAddress(policy as Address) !== deployment.pricingPolicy ||
+    getAddress(authorization as Address) !== deployment.discountAuthorization ||
+    getAddress(pendingDiscountSigner as Address) !== expectedDiscountSigner ||
+    getAddress(pendingConsumer as Address) !== deployment.registrar ||
+    hasPendingConfiguration !== true ||
+    getAddress(subdomainRegistry as Address) !== REGISTRY ||
+    getAddress(subdomainPolicy as Address) !== deployment.pricingPolicy
   ) {
-    throw new Error("Registrar dependency validation failed");
+    throw new Error("V2 deployment dependency validation failed");
   }
 }
 

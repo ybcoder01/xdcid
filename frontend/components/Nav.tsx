@@ -117,6 +117,9 @@ export function Nav() {
           <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/dashboard">
             Dashboard
           </Link>
+          <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/subdomains">
+            Subdomains
+          </Link>
           <Link className="rounded-md px-3 py-2 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950" href="/history">
             History
           </Link>
