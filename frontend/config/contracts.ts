@@ -27,6 +27,9 @@ export const apothemRegistration = {
   pricingPolicy: "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81" as `0x${string}`,
 } as const;
 
+export const apothemSubdomainRegistrar =
+  "0xa2135729ce122ef93158FCc4C69683155e6707d3" as `0x${string}`;
+
 export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
@@ -37,6 +40,10 @@ export const addresses = {
   ) as `0x${string}`,
   pricingPolicy: (
     process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
+    "0x0000000000000000000000000000000000000000"
+  ) as `0x${string}`,
+  subdomainRegistrar: (
+    process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
     "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`
 };
@@ -51,6 +58,9 @@ export const activeRegistryAddress = isTestnetEnvironment
 export const activeRegistrarAddress = isTestnetEnvironment
   ? apothemRegistration.registrar
   : addresses.registrar;
+export const activeSubdomainRegistrarAddress = isTestnetEnvironment
+  ? apothemSubdomainRegistrar
+  : addresses.subdomainRegistrar;
 
 // Apothem currently has the registry and signed registrar, but no separately
 // deployed resolver suite. Dev therefore resolves registered names to their
@@ -59,6 +69,99 @@ export const activeResolverSuiteAvailable = !isTestnetEnvironment;
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
+
+export const subdomainRegistrationEnabled =
+  process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED === "true" &&
+  activeSubdomainRegistrarAddress !==
+    "0x0000000000000000000000000000000000000000";
+
+export const subdomainRegistrarAbi = [
+  {
+    type: "function",
+    name: "available",
+    stateMutability: "view",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
+    ],
+    outputs: [{ type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "nodeFor",
+    stateMutability: "pure",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
+    ],
+    outputs: [{ type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "ownerOf",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
+    name: "registerWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "parentNode", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "subdomainOwner", type: "address" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "parentNode", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "subdomainOwner", type: "address" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
 
 export const signedRegistrarAbi = [
   {

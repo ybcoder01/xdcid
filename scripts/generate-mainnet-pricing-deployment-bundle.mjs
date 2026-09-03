@@ -5,9 +5,13 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const contracts = {
   pricingPolicy:
-    "artifacts/contracts/XNSPricingPolicy.sol/XNSPricingPolicy.json",
+    "artifacts/contracts/XNSPricingPolicyV2.sol/XNSPricingPolicyV2.json",
+  discountAuthorization:
+    "artifacts/contracts/XNSDiscountAuthorization.sol/XNSDiscountAuthorization.json",
   registrar:
-    "artifacts/contracts/XNSSignedQuoteRegistrar.sol/XNSSignedQuoteRegistrar.json",
+    "artifacts/contracts/XNSRegistrarV2.sol/XNSRegistrarV2.json",
+  subdomainRegistrar:
+    "artifacts/contracts/XNSSubdomainRegistrar.sol/XNSSubdomainRegistrar.json",
 };
 
 const bundle = {};
