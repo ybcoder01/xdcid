@@ -242,17 +242,34 @@ async function loadCatalog() {
   catalogRequest = (async () => {
     try {
       const registrars = registrarHistory();
-      const transactionSets = await Promise.all(
+      const transactionSets = await Promise.allSettled(
         registrars.map(fetchRegistrarTransactions)
       );
       const names = new Set<string>();
+      let successfulLookups = 0;
+      let firstFailure: unknown;
 
-      transactionSets.forEach((transactions, index) => {
-        transactions.forEach((transaction) => {
+      transactionSets.forEach((result, index) => {
+        if (result.status === "rejected") {
+          firstFailure ??= result.reason;
+          console.warn(
+            "Unable to read historical registrations for registrar",
+            registrars[index],
+            result.reason
+          );
+          return;
+        }
+
+        successfulLookups += 1;
+        result.value.forEach((transaction) => {
           const name = registeredName(transaction, registrars[index]);
           if (name) names.add(name);
         });
       });
+
+      if (successfulLookups === 0) {
+        throw firstFailure ?? new Error("No registrar history was available");
+      }
 
       catalog = Array.from(names).sort();
       catalogExpiresAt = Date.now() + CATALOG_TTL_MS;
