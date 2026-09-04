@@ -23,7 +23,16 @@ import { parseXnsName } from "./names";
 import { withShortCache } from "./shortCache";
 import { xdcClient } from "./xdcClient";
 
-const LEGACY_REGISTRAR = "0x31c41237A551FCadf22F8B231D8accA2c16f669b";
+// The registry is intentionally non-enumerable, so owned-name discovery must
+// inspect every registrar that has ever been allowed to create names. Keep
+// these addresses even after changing the active registrar; removing one
+// makes names registered through it disappear from the dashboard catalog.
+const MAINNET_REGISTRAR_HISTORY = [
+  "0x31c41237A551FCadf22F8B231D8accA2c16f669b",
+  "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
+  "0xa1584cb17523CEb991155328EdFAD2293b66bd94",
+  "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36"
+] as const;
 const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
 const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
@@ -134,8 +143,8 @@ function registrarHistory(): Address[] {
     .filter(Boolean);
 
   const unique = new Set(
-    [LEGACY_REGISTRAR, addresses.registrar, ...configured].map((value) =>
-      getAddress(value).toLowerCase()
+    [...MAINNET_REGISTRAR_HISTORY, addresses.registrar, ...configured].map(
+      (value) => getAddress(value).toLowerCase()
     )
   );
 
