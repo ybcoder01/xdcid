@@ -30,6 +30,12 @@ export const apothemRegistration = {
 export const apothemSubdomainRegistrar =
   "0xa2135729ce122ef93158FCc4C69683155e6707d3" as `0x${string}`;
 
+// Verified mainnet XNSPricingPolicyV2 deployment. This lets the frontend select
+// the correct tuple ABI immediately after the policy address is switched, while
+// the explicit public generation setting remains available for future policies.
+export const mainnetPricingPolicyV2 =
+  "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94" as `0x${string}`;
+
 export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
@@ -627,7 +633,20 @@ export const legacyPricingPolicyAbi = [
   }
 ] as const;
 
-export const pricingPolicyGeneration = isTestnetEnvironment ? "v2" : "legacy";
+const configuredPricingPolicyGeneration =
+  process.env.NEXT_PUBLIC_XNS_PRICING_POLICY_VERSION?.trim().toLowerCase();
+
+export const pricingPolicyGeneration =
+  configuredPricingPolicyGeneration === "legacy" ||
+  configuredPricingPolicyGeneration === "1"
+    ? "legacy"
+    : configuredPricingPolicyGeneration === "v2" ||
+        configuredPricingPolicyGeneration === "2" ||
+        isTestnetEnvironment ||
+        addresses.pricingPolicy.toLowerCase() ===
+          mainnetPricingPolicyV2.toLowerCase()
+      ? "v2"
+      : "legacy";
 
 // Both policy generations expose the same operational methods. Keep the
 // environment-specific ABI behind this shared export so dev can use V2 while
