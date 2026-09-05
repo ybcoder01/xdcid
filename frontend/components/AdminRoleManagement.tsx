@@ -9,9 +9,10 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
+  adminPricingPolicyAbi,
+  adminPricingPolicyAddress,
   addresses,
   ownableAbi,
-  pricingPolicyAbi,
   zeroAddress as configuredZeroAddress,
 } from "../config/contracts";
 
@@ -36,39 +37,39 @@ type PricingConfig = {
 
 export function AdminRoleManagement() {
   const { address: account } = useAccount();
-  const policyConfigured = addresses.pricingPolicy !== configuredZeroAddress;
+  const policyConfigured = adminPricingPolicyAddress !== configuredZeroAddress;
   const registryOwner = useReadContract({
     address: addresses.registry,
     abi: ownableAbi,
     functionName: "owner",
   });
   const policyOwner = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "owner",
     query: { enabled: policyConfigured },
   });
   const config = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "config",
     query: { enabled: policyConfigured },
   });
   const version = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "version",
     query: { enabled: policyConfigured },
   });
   const pending = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "hasPendingConfig",
     query: { enabled: policyConfigured },
   });
   const activationTime = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "pendingActivationTime",
     query: { enabled: policyConfigured },
   });
@@ -137,8 +138,8 @@ export function AdminRoleManagement() {
   function proposeOperationalConfig() {
     if (!current || !policyFieldsValid || !isPolicyOwner) return;
     write.writeContract({
-      address: addresses.pricingPolicy,
-      abi: pricingPolicyAbi,
+      address: adminPricingPolicyAddress,
+      abi: adminPricingPolicyAbi,
       functionName: "proposeConfig",
       args: [{
         ...current,
@@ -161,7 +162,7 @@ export function AdminRoleManagement() {
       confirmation.trim().toLowerCase() !== next.trim().toLowerCase()
     ) return;
     write.writeContract({
-      address: isRegistry ? addresses.registry : addresses.pricingPolicy,
+      address: isRegistry ? addresses.registry : adminPricingPolicyAddress,
       abi: ownableAbi,
       functionName: "transferOwnership",
       args: [getAddress(next)],
@@ -269,8 +270,8 @@ export function AdminRoleManagement() {
               disabled={!isPolicyOwner || !pending.data || write.isPending}
               onClick={() =>
                 write.writeContract({
-                  address: addresses.pricingPolicy,
-                  abi: pricingPolicyAbi,
+                  address: adminPricingPolicyAddress,
+                  abi: adminPricingPolicyAbi,
                   functionName: "cancelPendingConfig",
                 })
               }
@@ -282,8 +283,8 @@ export function AdminRoleManagement() {
               disabled={!pending.data || !activationTime.data || BigInt(Math.floor(Date.now() / 1_000)) < activationTime.data || write.isPending}
               onClick={() =>
                 write.writeContract({
-                  address: addresses.pricingPolicy,
-                  abi: pricingPolicyAbi,
+                  address: adminPricingPolicyAddress,
+                  abi: adminPricingPolicyAbi,
                   functionName: "activatePendingConfig",
                 })
               }
