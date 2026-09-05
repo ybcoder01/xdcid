@@ -301,10 +301,18 @@ export function AdminDomainPricing() {
         <MoneyField label="5+ character / year" value={form.standard} onChange={(value) => update("standard", value)} />
         <MoneyField label="Subdomain / year" value={form.subdomain} onChange={(value) => update("subdomain", value)} />
         {adminPricingPolicyGeneration === "v2" ? (
-          <MoneyField label="Premium subdomain / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
+          <MoneyField label="Reserved premium rate / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
         ) : null}
         <MoneyField label="Migration (one-time)" value={form.migration} onChange={(value) => update("migration", value)} />
       </div>
+
+      {adminPricingPolicyGeneration === "v2" ? (
+        <p className="mt-3 text-sm text-slate-600">
+          Reserved for a future premium-subdomain policy and not used by the current
+          subdomain registrar. All subdomain registrations currently use the standard
+          subdomain rate.
+        </p>
+      ) : null}
 
       <h3 className="mt-7 font-semibold text-slate-950">Term discounts and quote buffer</h3>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
