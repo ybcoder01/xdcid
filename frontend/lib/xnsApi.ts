@@ -116,6 +116,12 @@ export async function getNameData(input: string, years: number) {
       functionName: "_tokenIdMaps",
       args: [parsed.name]
     });
+    const pricePerYearPromise = xdcClient.readContract({
+      address: addresses.registrar,
+      abi: registrarAbi,
+      functionName: "price",
+      args: [parsed.name]
+    }).catch(() => null);
     const [
       owner,
       expiry,
@@ -143,12 +149,7 @@ export async function getNameData(input: string, years: number) {
         functionName: "available",
         args: [parsed.name]
       }),
-      xdcClient.readContract({
-        address: addresses.registrar,
-        abi: registrarAbi,
-        functionName: "price",
-        args: [parsed.name]
-      }),
+      pricePerYearPromise,
       xdcClient.readContract({
         address: addresses.resolver,
         abi: resolverAbi,
@@ -186,7 +187,9 @@ export async function getNameData(input: string, years: number) {
       xdcidRegistered: registered,
       legacyRegistered
     });
-    const totalPrice = pricePerYear * BigInt(years);
+    const totalPrice = pricePerYear === null
+      ? null
+      : pricePerYear * BigInt(years);
     const profile = Object.fromEntries(
       profileKeys.map((key, index) => [
         key,
@@ -222,18 +225,20 @@ export async function getNameData(input: string, years: number) {
         timestamp: expiry > 0n ? expiry.toString() : null,
         iso: expiry > 0n ? new Date(Number(expiry) * 1000).toISOString() : null
       },
-      pricing: {
-        currency: "XDC",
-        years,
-        perYear: {
-          wei: pricePerYear.toString(),
-          xdc: formatEther(pricePerYear)
-        },
-        total: {
-          wei: totalPrice.toString(),
-          xdc: formatEther(totalPrice)
-        }
-      },
+      pricing: pricePerYear === null || totalPrice === null
+        ? null
+        : {
+            currency: "XDC",
+            years,
+            perYear: {
+              wei: pricePerYear.toString(),
+              xdc: formatEther(pricePerYear)
+            },
+            total: {
+              wei: totalPrice.toString(),
+              xdc: formatEther(totalPrice)
+            }
+          },
       profile
     };
   });
