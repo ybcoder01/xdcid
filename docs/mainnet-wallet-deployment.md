@@ -80,6 +80,7 @@ Configure the V2 quote service and public addresses:
 - `XNS_SUBDOMAIN_REGISTRAR`
 - `NEXT_PUBLIC_XNS_REGISTRAR`
 - `NEXT_PUBLIC_XNS_PRICING_POLICY`
+- `NEXT_PUBLIC_XNS_PRICING_POLICY_VERSION=v2`
 - `NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR`
 - existing chain, RPC, quote-signer, treasury, and USDC variables
 
