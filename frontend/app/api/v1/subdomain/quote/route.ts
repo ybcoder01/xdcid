@@ -19,7 +19,10 @@ import {
   ApiServiceError,
 } from "../../../../../lib/apiResponse";
 import { getCoinGeckoXdcPrice } from "../../../../../lib/coingeckoXdcPrice";
-import { calculateBufferedXdcWeiForPolicy } from "../../../../../lib/signedRegistrarQuotes";
+import {
+  calculateBufferedXdcWeiForPolicy,
+  safeQuoteIssuedAt,
+} from "../../../../../lib/signedRegistrarQuotes";
 import {
   buildSubdomainQuote,
   normalizeSubdomainQuoteRequest,
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
       throw unavailable("Quote RPC is connected to the wrong network");
     }
 
-    const [registrarPolicy, registry, policyVersion, config, nonce] =
+    const [registrarPolicy, registry, policyVersion, config, nonce, latestBlock] =
       await Promise.all([
         client.readContract({
           address: registrar,
@@ -117,6 +120,7 @@ export async function POST(request: Request) {
           functionName: "nonces",
           args: [input.payer],
         }),
+        client.getBlock({ blockTag: "latest" }),
       ]);
 
     if (getAddress(registrarPolicy) !== pricingPolicy) {
@@ -291,7 +295,10 @@ export async function POST(request: Request) {
       paymentAmount = usdMicros;
     }
 
-    const issuedAt = Math.floor(Date.now() / 1_000);
+    const issuedAt = safeQuoteIssuedAt({
+      serverNowSeconds: Math.floor(Date.now() / 1_000),
+      latestBlockTimestamp: latestBlock.timestamp,
+    });
     const quote = buildSubdomainQuote({
       request: input,
       paymentToken,
