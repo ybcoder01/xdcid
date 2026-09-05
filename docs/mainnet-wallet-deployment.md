@@ -81,6 +81,8 @@ Configure the V2 quote service and public addresses:
 - `NEXT_PUBLIC_XNS_REGISTRAR`
 - `NEXT_PUBLIC_XNS_PRICING_POLICY`
 - `NEXT_PUBLIC_XNS_PRICING_POLICY_VERSION=v2`
+- `NEXT_PUBLIC_XNS_ADMIN_PRICING_POLICY` (use the V2 policy during a staged rollout)
+- `NEXT_PUBLIC_XNS_ADMIN_PRICING_POLICY_VERSION=v2`
 - `NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR`
 - existing chain, RPC, quote-signer, treasury, and USDC variables
 
