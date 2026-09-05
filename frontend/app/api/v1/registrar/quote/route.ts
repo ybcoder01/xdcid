@@ -23,6 +23,7 @@ import {
   calculateBufferedXdcWeiForPolicy,
   LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
   normalizeSignedQuoteRequest,
+  safeQuoteIssuedAt,
   SIGNED_QUOTE_DOMAIN_NAME,
   SIGNED_QUOTE_DOMAIN_VERSION,
   signedQuoteTypes,
@@ -251,7 +252,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const [policyVersion, config, nonce] = await Promise.all([
+    const [policyVersion, config, nonce, latestBlock] = await Promise.all([
       client.readContract({
         address: pricingPolicy,
         abi: pricingPolicyAbi,
@@ -268,6 +269,7 @@ export async function POST(request: Request) {
         functionName: "nonces",
         args: [quoteRequest.payer],
       }),
+      client.getBlock({ blockTag: "latest" }),
     ]);
 
     const signerAuthorized = await client.readContract({
@@ -357,7 +359,10 @@ export async function POST(request: Request) {
       paymentAmount = usdMicros;
     }
 
-    const issuedAt = Math.floor(Date.now() / 1_000);
+    const issuedAt = safeQuoteIssuedAt({
+      serverNowSeconds: Math.floor(Date.now() / 1_000),
+      latestBlockTimestamp: latestBlock.timestamp,
+    });
     const quote = buildRegistrarQuote({
       request: quoteRequest,
       paymentToken,
