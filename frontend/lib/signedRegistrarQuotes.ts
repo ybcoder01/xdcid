@@ -14,6 +14,7 @@ export const SIGNED_QUOTE_DOMAIN_NAME = "XDCID Registrar V2";
 export const SIGNED_QUOTE_DOMAIN_VERSION = "1";
 export const LEGACY_SIGNED_QUOTE_DOMAIN_NAME = "XDCID Signed Quote Registrar";
 export const SIGNED_QUOTE_LIFETIME_SECONDS = 10 * 60;
+export const QUOTE_BLOCK_TIME_SAFETY_SECONDS = 30;
 
 export const signedQuoteTypes = {
   Quote: [
@@ -167,6 +168,27 @@ export function calculateBufferedXdcWeiForPolicy(
   return divideRoundingUp(
     totalUsdMicros * 10n ** 18n * (basisPoints + bufferBps),
     xdcUsdMicros * basisPoints,
+  );
+}
+
+export function safeQuoteIssuedAt(input: {
+  serverNowSeconds: number;
+  latestBlockTimestamp: bigint;
+}) {
+  const chainNowSeconds = Number(input.latestBlockTimestamp);
+  if (
+    !Number.isSafeInteger(input.serverNowSeconds) ||
+    input.serverNowSeconds < 0 ||
+    !Number.isSafeInteger(chainNowSeconds) ||
+    chainNowSeconds < 0
+  ) {
+    throw new Error("Quote timestamp inputs must be non-negative safe integers");
+  }
+
+  return Math.max(
+    0,
+    Math.min(input.serverNowSeconds, chainNowSeconds) -
+      QUOTE_BLOCK_TIME_SAFETY_SECONDS,
   );
 }
 
