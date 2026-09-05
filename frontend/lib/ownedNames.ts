@@ -40,6 +40,7 @@ const MAX_PAGES = 10;
 const CATALOG_TTL_MS = 60_000;
 const READ_BATCH_SIZE = 20;
 const MAX_KNOWN_NAMES = 50;
+const EXPLORER_RETRY_DELAYS_MS = [250, 750] as const;
 
 const apothem = defineChain({
   id: 51,
@@ -179,15 +180,46 @@ async function fetchRegistrarTransactions(registrar: Address) {
       apikey: apiKey
     }).toString();
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(8_000),
-      headers: { Accept: "application/json" }
-    });
-    if (!response.ok) {
-      throw new Error("XDCScan request failed with status " + response.status);
+    let body: ExplorerResponse | null = null;
+    let lastError: unknown;
+    for (
+      let attempt = 0;
+      attempt <= EXPLORER_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(8_000),
+          headers: { Accept: "application/json" }
+        });
+        if (!response.ok) {
+          throw new Error(
+            "XDCScan request failed with status " + response.status
+          );
+        }
+
+        const candidate = (await response.json()) as ExplorerResponse;
+        if (
+          Array.isArray(candidate.result) ||
+          candidate.message === "No transactions found"
+        ) {
+          body = candidate;
+          break;
+        }
+        lastError = new Error("XDCScan returned an invalid transaction list");
+      } catch (error) {
+        lastError = error;
+      }
+
+      const retryDelay = EXPLORER_RETRY_DELAYS_MS[attempt];
+      if (retryDelay !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
     }
 
-    const body = (await response.json()) as ExplorerResponse;
+    if (!body) {
+      throw lastError ?? new Error("XDCScan returned an invalid response");
+    }
     if (!Array.isArray(body.result)) {
       if (body.message === "No transactions found") break;
       throw new Error("XDCScan returned an invalid transaction list");
@@ -242,9 +274,20 @@ async function loadCatalog() {
   catalogRequest = (async () => {
     try {
       const registrars = registrarHistory();
-      const transactionSets = await Promise.allSettled(
-        registrars.map(fetchRegistrarTransactions)
-      );
+      // XDCScan applies a shared request budget. Querying every historical
+      // registrar concurrently causes otherwise valid requests to be rejected
+      // as a burst, so keep this deliberately sequential.
+      const transactionSets: PromiseSettledResult<ExplorerTransaction[]>[] = [];
+      for (const registrar of registrars) {
+        try {
+          transactionSets.push({
+            status: "fulfilled",
+            value: await fetchRegistrarTransactions(registrar)
+          });
+        } catch (reason) {
+          transactionSets.push({ status: "rejected", reason });
+        }
+      }
       const names = new Set<string>();
       let successfulLookups = 0;
       let firstFailure: unknown;
