@@ -57,6 +57,15 @@ export const addresses = {
 export const isTestnetEnvironment =
   process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV?.toLowerCase() === "testnet";
 
+// During a staged mainnet rollout, the currently active registrar can continue
+// using the legacy policy while administrators prepare and manage Policy V2.
+// Keep that administrative target separate so changing its UI cannot change
+// live registration quotes or payment behavior.
+export const adminPricingPolicyAddress = (
+  process.env.NEXT_PUBLIC_XNS_ADMIN_PRICING_POLICY ||
+  (isTestnetEnvironment ? addresses.pricingPolicy : mainnetPricingPolicyV2)
+) as `0x${string}`;
+
 export const activeXnsChainId = isTestnetEnvironment ? apothemRegistration.chainId : 50;
 export const activeRegistryAddress = isTestnetEnvironment
   ? apothemRegistration.registry
@@ -653,6 +662,29 @@ export const pricingPolicyGeneration =
 // the current mainnet signed registrar continues to use its legacy policy.
 export const pricingPolicyAbi = (
   pricingPolicyGeneration === "v2"
+    ? pricingPolicyV2Abi
+    : legacyPricingPolicyAbi
+) as typeof pricingPolicyV2Abi;
+
+const configuredAdminPricingPolicyGeneration =
+  process.env.NEXT_PUBLIC_XNS_ADMIN_PRICING_POLICY_VERSION
+    ?.trim()
+    .toLowerCase();
+
+export const adminPricingPolicyGeneration =
+  configuredAdminPricingPolicyGeneration === "legacy" ||
+  configuredAdminPricingPolicyGeneration === "1"
+    ? "legacy"
+    : configuredAdminPricingPolicyGeneration === "v2" ||
+        configuredAdminPricingPolicyGeneration === "2" ||
+        isTestnetEnvironment ||
+        adminPricingPolicyAddress.toLowerCase() ===
+          mainnetPricingPolicyV2.toLowerCase()
+      ? "v2"
+      : "legacy";
+
+export const adminPricingPolicyAbi = (
+  adminPricingPolicyGeneration === "v2"
     ? pricingPolicyV2Abi
     : legacyPricingPolicyAbi
 ) as typeof pricingPolicyV2Abi;

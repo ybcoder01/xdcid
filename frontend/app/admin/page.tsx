@@ -12,6 +12,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
+  adminPricingPolicyAddress,
   addresses,
   ownableAbi,
   registrarAbi,
@@ -63,10 +64,10 @@ export default function AdminPage() {
     functionName: "owner",
   });
   const policyOwner = useReadContract({
-    address: addresses.pricingPolicy,
+    address: adminPricingPolicyAddress,
     abi: ownableAbi,
     functionName: "owner",
-    query: { enabled: addresses.pricingPolicy !== zeroAddress },
+    query: { enabled: adminPricingPolicyAddress !== zeroAddress },
   });
   const balance = useBalance({ address: addresses.registrar });
   const refetchBalance = balance.refetch;
