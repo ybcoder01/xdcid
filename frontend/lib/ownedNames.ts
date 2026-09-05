@@ -271,6 +271,13 @@ async function loadCatalog() {
         throw firstFailure ?? new Error("No registrar history was available");
       }
 
+      // A temporary explorer failure for one historical registrar must not
+      // erase names that this warm instance discovered successfully earlier.
+      // Every candidate is still verified against the registry below.
+      if (successfulLookups < registrars.length && catalog) {
+        catalog.forEach((name) => names.add(name));
+      }
+
       catalog = Array.from(names).sort();
       catalogExpiresAt = Date.now() + CATALOG_TTL_MS;
       return catalog;
@@ -322,12 +329,19 @@ export async function getOwnedNamesData(
     "owned-names:" +
       (isApothem ? "51:" : "50:") +
       address.toLowerCase() +
-      ":" +
+    ":" +
       cacheSuffix,
     async () => {
-      const candidates = Array.from(
-        new Set([...(await loadCatalog()), ...known])
-      );
+      let indexedNames: string[] = [];
+      try {
+        indexedNames = await loadCatalog();
+      } catch (error) {
+        // Browser-known names are only candidates and are verified against the
+        // registry below, so they remain safe to use while the explorer index
+        // is temporarily unavailable.
+        if (known.length === 0) throw error;
+      }
+      const candidates = Array.from(new Set([...indexedNames, ...known]));
       const owned: Array<Omit<OwnedName, "primary">> = [];
       const now = BigInt(Math.floor(Date.now() / 1000));
 
