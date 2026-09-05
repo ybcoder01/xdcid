@@ -22,6 +22,7 @@ import {
 import { AdminArchiveAdministrator } from "../../components/AdminArchiveAdministrator";
 import { AdminArchiveEntitlements } from "../../components/AdminArchiveEntitlements";
 import { AdminArchiveRevenue } from "../../components/AdminArchiveRevenue";
+import { AdminDomainRevenue } from "../../components/AdminDomainRevenue";
 import { AdminDomainPricing } from "../../components/AdminDomainPricing";
 import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPolicy";
 import { AdminOperations } from "../../components/AdminOperations";
@@ -399,6 +400,7 @@ export default function AdminPage() {
 
       {canViewRevenue ? (
         <>
+          <AdminDomainRevenue />
           <AdminArchiveRevenue />
           <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
             <AdminRevenueReport />
