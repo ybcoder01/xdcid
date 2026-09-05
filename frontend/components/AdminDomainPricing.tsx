@@ -9,9 +9,9 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
-  addresses,
-  pricingPolicyAbi,
-  pricingPolicyGeneration,
+  adminPricingPolicyAbi,
+  adminPricingPolicyAddress,
+  adminPricingPolicyGeneration,
   zeroAddress,
 } from "../config/contracts";
 
@@ -91,34 +91,34 @@ function percentToBps(value: string) {
 
 export function AdminDomainPricing() {
   const { address: account } = useAccount();
-  const policyConfigured = addresses.pricingPolicy !== zeroAddress;
+  const policyConfigured = adminPricingPolicyAddress !== zeroAddress;
   const config = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "config",
     query: { enabled: policyConfigured },
   });
   const owner = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "owner",
     query: { enabled: policyConfigured },
   });
   const version = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "version",
     query: { enabled: policyConfigured },
   });
   const pending = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "hasPendingConfig",
     query: { enabled: policyConfigured },
   });
   const activationTime = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "pendingActivationTime",
     query: { enabled: policyConfigured },
   });
@@ -179,7 +179,7 @@ export function AdminDomainPricing() {
       tenYear: percentToBps(form.tenYearDiscount),
       buffer: percentToBps(form.xdcQuoteBuffer),
     };
-    const requiredPrices = pricingPolicyGeneration === "v2"
+    const requiredPrices = adminPricingPolicyGeneration === "v2"
       ? Object.values(prices)
       : [
           prices.threeCharacter,
@@ -214,7 +214,7 @@ export function AdminDomainPricing() {
     if (!current || !parsed.valid || !isPolicyOwner) return;
     const prices = parsed.prices;
     const discounts = parsed.discounts;
-    const nextConfig = pricingPolicyGeneration === "v2"
+    const nextConfig = adminPricingPolicyGeneration === "v2"
       ? {
           ...current,
           twoCharacterAnnualUsdMicros: prices.twoCharacter!,
@@ -246,8 +246,8 @@ export function AdminDomainPricing() {
           usdcPaymentsEnabled: current.usdcPaymentsEnabled,
         };
     write.writeContract({
-      address: addresses.pricingPolicy,
-      abi: pricingPolicyAbi,
+      address: adminPricingPolicyAddress,
+      abi: adminPricingPolicyAbi,
       functionName: "proposeConfig",
       args: [nextConfig as never],
     });
@@ -285,14 +285,14 @@ export function AdminDomainPricing() {
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {pricingPolicyGeneration === "v2" ? (
+        {adminPricingPolicyGeneration === "v2" ? (
           <MoneyField label="2-character / year" value={form.twoCharacter} onChange={(value) => update("twoCharacter", value)} />
         ) : null}
         <MoneyField label="3-character / year" value={form.threeCharacter} onChange={(value) => update("threeCharacter", value)} />
         <MoneyField label="4-character / year" value={form.fourCharacter} onChange={(value) => update("fourCharacter", value)} />
         <MoneyField label="5+ character / year" value={form.standard} onChange={(value) => update("standard", value)} />
         <MoneyField label="Subdomain / year" value={form.subdomain} onChange={(value) => update("subdomain", value)} />
-        {pricingPolicyGeneration === "v2" ? (
+        {adminPricingPolicyGeneration === "v2" ? (
           <MoneyField label="Premium subdomain / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
         ) : null}
         <MoneyField label="Migration (one-time)" value={form.migration} onChange={(value) => update("migration", value)} />
