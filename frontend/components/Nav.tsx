@@ -4,7 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
-import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
+import {
+  adminPricingPolicyAddress,
+  addresses,
+  ownableAbi,
+  zeroAddress,
+} from "../config/contracts";
 import { WalletButton } from "./WalletButton";
 
 type AdminSessionStatus = {
@@ -24,10 +29,10 @@ export function Nav() {
     functionName: "owner"
   });
   const policyOwner = useReadContract({
-    address: addresses.pricingPolicy,
+    address: adminPricingPolicyAddress,
     abi: ownableAbi,
     functionName: "owner",
-    query: { enabled: addresses.pricingPolicy !== zeroAddress }
+    query: { enabled: adminPricingPolicyAddress !== zeroAddress }
   });
   const checkAdminSession = useCallback(async () => {
     if (!address) {
