@@ -279,9 +279,17 @@ export function AdminDomainPricing() {
             and becomes eligible for activation only after 48 hours.
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-          Policy version {version.data?.toString() || "—"}
-        </span>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            Policy contract {adminPricingPolicyGeneration === "v2" ? "V2" : "V1"}
+          </span>
+          <span
+            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+            title="This revision increases whenever a delayed pricing configuration update is activated."
+          >
+            Configuration revision {version.data?.toString() || "—"}
+          </span>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
