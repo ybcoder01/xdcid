@@ -400,9 +400,10 @@ export async function POST(request: Request) {
 }
 
 function configuredPolicyGeneration(chainId: number): "legacy" | "v2" {
-  const configured = process.env.XNS_PRICING_POLICY_VERSION
-    ?.trim()
-    .toLowerCase();
+  const configured = (
+    process.env.XNS_PRICING_POLICY_VERSION ||
+    process.env.NEXT_PUBLIC_XNS_PRICING_POLICY_VERSION
+  )?.trim().toLowerCase();
   if (configured === "legacy" || configured === "1") return "legacy";
   if (configured === "v2" || configured === "2") return "v2";
   return chainId === 51 ? "v2" : "legacy";
