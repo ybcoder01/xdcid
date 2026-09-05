@@ -12,7 +12,12 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
+import {
+  adminPricingPolicyAddress,
+  addresses,
+  ownableAbi,
+  zeroAddress,
+} from "../config/contracts";
 import {
   ERC1271_MAGIC_VALUE,
   erc1271Abi,
@@ -171,12 +176,15 @@ export function parseAdminSession(token: string | undefined): AdminSessionPayloa
 }
 
 export async function currentAdminOwners(): Promise<Address[]> {
-  const targets = [addresses.registry];
+  const targets = new Set<Address>([addresses.registry]);
   if (addresses.pricingPolicy !== zeroAddress) {
-    targets.push(addresses.pricingPolicy);
+    targets.add(addresses.pricingPolicy);
+  }
+  if (adminPricingPolicyAddress !== zeroAddress) {
+    targets.add(adminPricingPolicyAddress);
   }
   const owners = await Promise.all(
-    targets.map((target) =>
+    [...targets].map((target) =>
       xdcClient.readContract({
         address: target,
         abi: ownableAbi,
