@@ -2,29 +2,14 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatEther, isAddress } from "viem";
-import {
-  useAccount,
-  useBalance,
-  useReadContract,
-  useSignMessage,
-  useWaitForTransactionReceipt,
-  useWriteContract,
-} from "wagmi";
-import {
-  adminPricingPolicyAddress,
-  addresses,
-  ownableAbi,
-  registrarAbi,
-  signedRegistrarEnabled,
-  zeroAddress,
-} from "../../config/contracts";
+import { useAccount, useSignMessage } from "wagmi";
 import { AdminArchiveAdministrator } from "../../components/AdminArchiveAdministrator";
 import { AdminArchiveEntitlements } from "../../components/AdminArchiveEntitlements";
 import { AdminArchiveRevenue } from "../../components/AdminArchiveRevenue";
 import { AdminDomainRevenue } from "../../components/AdminDomainRevenue";
 import { AdminDomainPricing } from "../../components/AdminDomainPricing";
 import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPolicy";
+import { AdminLegacyRegistrarRecovery } from "../../components/AdminLegacyRegistrarRecovery";
 import { AdminOperations } from "../../components/AdminOperations";
 import { AdminRevenueReport } from "../../components/AdminRevenueReport";
 import { AdminRoleManagement } from "../../components/AdminRoleManagement";
@@ -51,7 +36,6 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
 
 export default function AdminPage() {
   const { address: account, isConnected } = useAccount();
-  const [recipient, setRecipient] = useState("");
   const [session, setSession] = useState<AdminSession>({
     authenticated: false,
   });
@@ -59,25 +43,6 @@ export default function AdminPage() {
   const [loginPending, setLoginPending] = useState(false);
   const [authError, setAuthError] = useState("");
   const signing = useSignMessage();
-
-  const owner = useReadContract({
-    address: addresses.registry,
-    abi: ownableAbi,
-    functionName: "owner",
-  });
-  const policyOwner = useReadContract({
-    address: adminPricingPolicyAddress,
-    abi: ownableAbi,
-    functionName: "owner",
-    query: { enabled: adminPricingPolicyAddress !== zeroAddress },
-  });
-  const balance = useBalance({ address: addresses.registrar });
-  const refetchBalance = balance.refetch;
-  const withdrawal = useWriteContract();
-  const receipt = useWaitForTransactionReceipt({ hash: withdrawal.data });
-
-  const ownerAddress = owner.data || "";
-  const contractBalance = balance.data?.value;
   const permissions = useMemo(
     () => new Set(session.permissions || []),
     [session.permissions],
@@ -85,31 +50,10 @@ export default function AdminPage() {
   const canManagePlatform = permissions.has("platform:manage");
   const canManageArchive = permissions.has("archive:manage");
   const canViewRevenue = permissions.has("revenue:view");
-  const isRegistryOwner =
-    !!account &&
-    !!ownerAddress &&
-    ownerAddress.toLowerCase() === account.toLowerCase();
   const isAuthenticated =
     session.authenticated &&
     !!session.address &&
     session.address.toLowerCase() === account?.toLowerCase();
-  const canWithdraw =
-    isAuthenticated &&
-    canManagePlatform &&
-    isRegistryOwner &&
-    !signedRegistrarEnabled &&
-    isAddress(recipient) &&
-    !!contractBalance &&
-    contractBalance > 0n &&
-    !withdrawal.isPending &&
-    !receipt.isLoading;
-  const loading = owner.isLoading || policyOwner.isLoading || balance.isLoading;
-  const error =
-    owner.error?.message ||
-    balance.error?.message ||
-    withdrawal.error?.message ||
-    receipt.error?.message ||
-    "";
 
   const checkSession = useCallback(async () => {
     if (!account) {
@@ -136,14 +80,9 @@ export default function AdminPage() {
   }, [account]);
 
   useEffect(() => {
-    setRecipient(account || "");
     setAuthError("");
     void checkSession();
   }, [account, checkSession]);
-
-  useEffect(() => {
-    if (receipt.isSuccess) void refetchBalance();
-  }, [receipt.isSuccess, refetchBalance]);
 
   async function authenticate() {
     if (!account || loginPending) return;
@@ -213,16 +152,6 @@ export default function AdminPage() {
     window.dispatchEvent(new Event(ADMIN_SESSION_CHANGED_EVENT));
   }
 
-  function withdraw() {
-    if (!canWithdraw) return;
-    withdrawal.writeContract({
-      address: addresses.registrar,
-      abi: registrarAbi,
-      functionName: "withdraw",
-      args: [recipient as `0x${string}`],
-    });
-  }
-
   if (!isAuthenticated) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
@@ -283,57 +212,10 @@ export default function AdminPage() {
           </p>
 
           {canManagePlatform ? (
-            <div className="mt-8 grid gap-4">
-              <div className="rounded-md border border-black/10 bg-neutral-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
-                  Registrar balance
-                </p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">
-                  {contractBalance !== undefined
-                    ? `${formatEther(contractBalance)} XDC`
-                    : loading
-                      ? "Loading…"
-                      : "Unavailable"}
-                </p>
-                <p className="mt-2 break-all text-xs text-neutral-500">
-                  {addresses.registrar}
-                </p>
-              </div>
-
-              <label className="grid gap-2 text-sm">
-                <span className="font-semibold text-slate-950">Withdraw to</span>
-                <input
-                  className="rounded-md border border-black/10 bg-white px-3 py-3"
-                  value={recipient}
-                  onChange={(event) => setRecipient(event.target.value)}
-                  placeholder="0x recipient address"
-                />
-              </label>
-
-              <button
-                type="button"
-                className="w-fit rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-                disabled={!canWithdraw}
-                onClick={withdraw}
-              >
-                {withdrawal.isPending
-                  ? "Confirm in wallet…"
-                  : receipt.isLoading
-                    ? "Withdrawing…"
-                    : "Withdraw all funds"}
-              </button>
-              {withdrawal.data ? (
-                <p className="break-all text-xs text-neutral-500">
-                  Transaction sent: {withdrawal.data}
-                </p>
-              ) : null}
-              {receipt.isSuccess ? (
-                <p className="text-xs text-teal-700">Withdrawal confirmed.</p>
-              ) : null}
-            </div>
+            <AdminLegacyRegistrarRecovery />
           ) : (
             <div className="mt-8 rounded-xl border border-teal-200 bg-teal-50 p-5 text-sm text-teal-950">
-              This wallet has delegated access. Contract ownership and withdrawal controls remain hidden.
+              This wallet has delegated access. Platform ownership controls remain hidden.
             </div>
           )}
 
@@ -351,9 +233,6 @@ export default function AdminPage() {
               End admin session
             </button>
           </div>
-          {error && canManagePlatform ? (
-            <p className="mt-4 break-words text-xs text-red-600">{error}</p>
-          ) : null}
         </div>
 
         <aside className="rounded-md border border-black/10 bg-slate-950 p-6 text-white shadow-sm">
