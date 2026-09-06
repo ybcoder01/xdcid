@@ -30,8 +30,15 @@ export function getCctpReceiveGasLimit(chainId: number): bigint | undefined {
 export const XDCID_CONVENIENCE_FEE_BPS = 10n;
 export const XDCID_MIN_CONVENIENCE_FEE = 100_000n;
 export const XDCID_MAX_CONVENIENCE_FEE = 5_000_000n;
-export const XDCID_FEE_RECIPIENT =
+const DEFAULT_XDCID_FEE_RECIPIENT =
   "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A" as const;
+const configuredFeeRecipient = process.env.NEXT_PUBLIC_XDCID_FEE_RECIPIENT;
+export const XDCID_FEE_RECIPIENT =
+  configuredFeeRecipient &&
+  isAddress(configuredFeeRecipient) &&
+  configuredFeeRecipient !== zeroAddress
+    ? getAddress(configuredFeeRecipient)
+    : DEFAULT_XDCID_FEE_RECIPIENT;
 export const CCTP_MAX_TRANSFER_AMOUNT = 10_000_000n * 10n ** 6n;
 export const CCTP_ZERO_BYTES32 =
   "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
