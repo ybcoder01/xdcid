@@ -33,7 +33,8 @@ The operations view provides:
 - all 25 same-chain and cross-chain route configurations;
 - Standard/direct and Automatic forwarding availability;
 - configured USDC, Circle CCTP, convenience-fee, and fee-recipient values;
-- the existing registrar balance and owner-only withdrawal transaction;
+- an owner-only legacy registrar recovery control, shown only when that
+  historical contract still holds native XDC;
 - authenticated, read-only Pay Link and forwarding recovery search by Pay Link ID, payer wallet, fee transaction hash, or burn transaction hash;
 - a read-only forwarding monitor that classifies fee-paid flows without a recorded burn as in progress (under 15 minutes), delayed (15–59 minutes), needs attention (60 minutes or more), or recovery expired;
 - verified forwarding revenue, recipient volume, fee count, burn-recorded ratio, route breakdown, and 7/30/90-day trends.
@@ -51,3 +52,11 @@ The recovery search reports only states persisted by XDCID. A recorded burn does
 Revenue reporting uses a separate minimal ledger populated only after the source-chain convenience-fee transaction is verified. It retains the fee transaction hash, route, recipient amount, XDCID fee amount, timestamp, and burn-recorded timestamp. It does not retain payer or recipient wallet addresses beyond the existing short-lived recovery records. Circle fees are excluded because they are not XDCID revenue.
 
 Feature flags, pricing, discounts, whitelists, migration controls, privileged mutations, and audit trails remain separate phases.
+
+Current Registrar V2, subdomain, archive-subscription, and cross-chain revenue
+is forwarded directly to the configured treasury. The Admin dashboard does not
+offer a general withdrawal action for current revenue. Production checks the
+known original mainnet registrar by default; `NEXT_PUBLIC_XNS_LEGACY_REGISTRAR`
+can override that address for another environment. Its recovery control remains
+hidden from every wallet except that contract's owner and is automatically
+hidden after the balance reaches zero.

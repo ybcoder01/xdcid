@@ -77,6 +77,17 @@ export const activeSubdomainRegistrarAddress = isTestnetEnvironment
   ? apothemSubdomainRegistrar
   : addresses.subdomainRegistrar;
 
+// The original mainnet registrar retained native XDC until its owner withdrew
+// it. Current registrars forward revenue directly to the configured treasury.
+// Keep this address separate so the Admin dashboard can expose a narrowly
+// scoped recovery control without treating the active registrar as a vault.
+export const legacyRegistrarAddress = (
+  process.env.NEXT_PUBLIC_XNS_LEGACY_REGISTRAR ||
+  (isTestnetEnvironment
+    ? "0x0000000000000000000000000000000000000000"
+    : xnsAddresses.registrar)
+) as `0x${string}`;
+
 // Apothem currently has the registry and signed registrar, but no separately
 // deployed resolver suite. Dev therefore resolves registered names to their
 // registry owner as the safe EVM-wide fallback and never calls mainnet resolvers.
