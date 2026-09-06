@@ -28,6 +28,7 @@ import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPol
 import { AdminOperations } from "../../components/AdminOperations";
 import { AdminRevenueReport } from "../../components/AdminRevenueReport";
 import { AdminRoleManagement } from "../../components/AdminRoleManagement";
+import { AdminTreasuryDestinations } from "../../components/AdminTreasuryDestinations";
 
 type AdminPermission =
   | "platform:manage"
@@ -400,6 +401,7 @@ export default function AdminPage() {
 
       {canViewRevenue ? (
         <>
+          <AdminTreasuryDestinations />
           <AdminDomainRevenue />
           <AdminArchiveRevenue />
           <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
