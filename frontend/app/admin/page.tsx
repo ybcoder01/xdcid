@@ -8,6 +8,7 @@ import { AdminArchiveEntitlements } from "../../components/AdminArchiveEntitleme
 import { AdminArchiveRevenue } from "../../components/AdminArchiveRevenue";
 import { AdminDomainRevenue } from "../../components/AdminDomainRevenue";
 import { AdminDomainPricing } from "../../components/AdminDomainPricing";
+import { AdminDomainDiscountGrants } from "../../components/AdminDomainDiscountGrants";
 import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPolicy";
 import { AdminLegacyRegistrarRecovery } from "../../components/AdminLegacyRegistrarRecovery";
 import { AdminOperations } from "../../components/AdminOperations";
@@ -18,7 +19,8 @@ import { AdminTreasuryDestinations } from "../../components/AdminTreasuryDestina
 type AdminPermission =
   | "platform:manage"
   | "archive:manage"
-  | "revenue:view";
+  | "revenue:view"
+  | "discount:issue";
 
 const ADMIN_SESSION_CHANGED_EVENT = "xdcid:admin-session-changed";
 
@@ -26,7 +28,7 @@ type AdminSession = {
   authenticated: boolean;
   address?: string;
   expiresAt?: string;
-  roles?: Array<"platform-owner" | "archive-administrator" | "treasury">;
+  roles?: Array<"platform-owner" | "archive-administrator" | "treasury" | "discount-signer">;
   permissions?: AdminPermission[];
 };
 
@@ -50,6 +52,7 @@ export default function AdminPage() {
   const canManagePlatform = permissions.has("platform:manage");
   const canManageArchive = permissions.has("archive:manage");
   const canViewRevenue = permissions.has("revenue:view");
+  const canIssueDiscounts = permissions.has("discount:issue");
   const isAuthenticated =
     session.authenticated &&
     !!session.address &&
@@ -163,7 +166,9 @@ export default function AdminPage() {
             Verify an authorized wallet
           </h1>
           <p className="mt-2 text-sm text-neutral-600">
-            Platform owners, the archive administrator, and the configured treasury wallet can sign in. Each role sees only its authorized controls.
+            Platform owners, the archive administrator, the configured treasury
+            wallet, and the active domain-discount signer can sign in. Each role
+            sees only its authorized controls.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <ConnectButton
@@ -277,6 +282,8 @@ export default function AdminPage() {
       ) : null}
 
       {canManageArchive ? <AdminArchiveEntitlements /> : null}
+
+      {canIssueDiscounts ? <AdminDomainDiscountGrants /> : null}
 
       {canViewRevenue ? (
         <>
