@@ -6,6 +6,7 @@ import {
   formatUnits,
   getAddress,
   isAddress,
+  isHex,
   zeroAddress,
   type Address,
   type Hex,
@@ -20,11 +21,16 @@ import {
 } from "wagmi";
 import {
   addresses,
+  discountedRegistrarAbi,
   erc20ApprovalAbi,
   pricingPolicyAbi,
   signedRegistrarAbi,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
+import {
+  deserializeDomainDiscountAuthorization,
+  type SerializedDomainDiscountAuthorization,
+} from "../lib/domainDiscounts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 
 type Currency = "XDC" | "USDC";
@@ -55,6 +61,11 @@ type QuoteResponse = {
     paymentCurrency: Currency;
     quote: SerializedQuote;
     signature: Hex;
+    discount?: {
+      authorizationContract: Address;
+      authorization: SerializedDomainDiscountAuthorization;
+      signature: Hex;
+    };
   };
   error?: { code?: string; message?: string };
 };
@@ -172,7 +183,28 @@ export function SignedRegistrationControls(props: {
         throw new Error("The quote expired; request a new quote");
       }
 
-      if (quote.paymentToken !== zeroAddress) {
+      const discount = payload.data.discount;
+      if (
+        discount &&
+        (!isAddress(discount.authorizationContract) || !isHex(discount.signature))
+      ) {
+        throw new Error("The discount grant response is invalid");
+      }
+      const discountAuthorization = discount
+        ? deserializeDomainDiscountAuthorization(discount.authorization)
+        : undefined;
+      if (
+        discountAuthorization &&
+        (getAddress(discountAuthorization.beneficiary) !== getAddress(address) ||
+          discountAuthorization.node !== quote.node ||
+          discountAuthorization.product !== quote.product ||
+          discountAuthorization.termYears !== quote.termYears ||
+          discountAuthorization.deadline < BigInt(Math.floor(Date.now() / 1_000)))
+      ) {
+        throw new Error("The discount grant does not match this registration");
+      }
+
+      if (quote.paymentToken !== zeroAddress && quote.paymentAmount > 0n) {
         if (!isAddress(quote.paymentToken)) {
           throw new Error("The quote contains an invalid payment token");
         }
@@ -202,7 +234,9 @@ export function SignedRegistrationControls(props: {
       }
 
       setStatus(
-        currency === "XDC"
+        quote.paymentAmount === 0n
+          ? "Confirm the gas-only registration in your wallet…"
+          : currency === "XDC"
           ? "Confirm payment of " +
               formatEther(quote.paymentAmount) +
               " " +
@@ -215,14 +249,29 @@ export function SignedRegistrationControls(props: {
         expectedChainId,
         XDC_WRITE_GAS_LIMITS.registration,
       );
-      const transactionHash = await writeContractAsync({
-        address: registrarAddress,
-        abi: signedRegistrarAbi,
-        functionName: "registerWithQuote",
-        args: [props.name, quote, payload.data.signature],
-        value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
-        ...registrationGas,
-      });
+      const transactionHash = discountAuthorization && discount
+        ? await writeContractAsync({
+            address: registrarAddress,
+            abi: discountedRegistrarAbi,
+            functionName: "registerWithDiscountQuote",
+            args: [
+              props.name,
+              quote,
+              payload.data.signature,
+              discountAuthorization,
+              discount.signature,
+            ],
+            value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+            ...registrationGas,
+          })
+        : await writeContractAsync({
+            address: registrarAddress,
+            abi: signedRegistrarAbi,
+            functionName: "registerWithQuote",
+            args: [props.name, quote, payload.data.signature],
+            value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+            ...registrationGas,
+          });
       const receipt = await client.waitForTransactionReceipt({
         hash: transactionHash,
       });

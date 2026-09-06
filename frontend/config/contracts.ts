@@ -248,6 +248,53 @@ export const signedRegistrarAbi = [
   }
 ] as const;
 
+export const discountedRegistrarAbi = [
+  {
+    type: "function",
+    name: "registerWithDiscountQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "nameOwner", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "quoteSignature", type: "bytes" },
+      {
+        name: "authorization",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "beneficiary", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "discountBps", type: "uint16" },
+          { name: "maxUses", type: "uint32" },
+          { name: "validAfter", type: "uint64" },
+          { name: "deadline", type: "uint64" },
+          { name: "nonce", type: "uint256" }
+        ]
+      },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
+
 export const erc20ApprovalAbi = [
   {
     type: "function",
