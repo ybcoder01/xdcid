@@ -21,7 +21,9 @@ import { getCoinGeckoXdcPrice } from "../../../../../lib/coingeckoXdcPrice";
 import {
   buildRegistrarQuote,
   calculateBufferedXdcWeiForPolicy,
+  LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
   normalizeSignedQuoteRequest,
+  safeQuoteIssuedAt,
   SIGNED_QUOTE_DOMAIN_NAME,
   SIGNED_QUOTE_DOMAIN_VERSION,
   signedQuoteTypes,
@@ -83,7 +85,7 @@ const registryAbi = [
   },
 ] as const;
 
-const pricingPolicyAbi = [
+const pricingPolicyV2Abi = [
   {
     type: "function",
     name: "version",
@@ -144,6 +146,65 @@ const pricingPolicyAbi = [
   },
 ] as const;
 
+const legacyPricingPolicyAbi = [
+  {
+    type: "function",
+    name: "version",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "priceUsdMicros",
+    stateMutability: "view",
+    inputs: [
+      { name: "product", type: "uint8" },
+      { name: "labelLength", type: "uint256" },
+      { name: "termYears", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "isQuoteAuthorizationValid",
+    stateMutability: "view",
+    inputs: [
+      { name: "signer", type: "address" },
+      { name: "quoteVersion", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "config",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+          { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+          { name: "standardAnnualUsdMicros", type: "uint64" },
+          { name: "subdomainAnnualUsdMicros", type: "uint64" },
+          { name: "migrationUsdMicros", type: "uint64" },
+          { name: "threeYearDiscountBps", type: "uint16" },
+          { name: "fiveYearDiscountBps", type: "uint16" },
+          { name: "tenYearDiscountBps", type: "uint16" },
+          { name: "xdcQuoteBufferBps", type: "uint16" },
+          { name: "quoteSigner", type: "address" },
+          { name: "usdcToken", type: "address" },
+          { name: "treasury", type: "address" },
+          { name: "xdcPaymentsEnabled", type: "bool" },
+          { name: "usdcPaymentsEnabled", type: "bool" },
+        ],
+      },
+    ],
+  },
+] as const;
+
 export async function POST(request: Request) {
   try {
     enforceRateLimit(request);
@@ -173,6 +234,10 @@ export async function POST(request: Request) {
         503,
       );
     }
+    const policyGeneration = configuredPolicyGeneration(expectedChainId);
+    const pricingPolicyAbi = policyGeneration === "v2"
+      ? pricingPolicyV2Abi
+      : legacyPricingPolicyAbi;
 
     const registrarPolicy = await client.readContract({
       address: registrar,
@@ -187,7 +252,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const [policyVersion, config, nonce] = await Promise.all([
+    const [policyVersion, config, nonce, latestBlock] = await Promise.all([
       client.readContract({
         address: pricingPolicy,
         abi: pricingPolicyAbi,
@@ -204,6 +269,7 @@ export async function POST(request: Request) {
         functionName: "nonces",
         args: [quoteRequest.payer],
       }),
+      client.getBlock({ blockTag: "latest" }),
     ]);
 
     const signerAuthorized = await client.readContract({
@@ -293,7 +359,10 @@ export async function POST(request: Request) {
       paymentAmount = usdMicros;
     }
 
-    const issuedAt = Math.floor(Date.now() / 1_000);
+    const issuedAt = safeQuoteIssuedAt({
+      serverNowSeconds: Math.floor(Date.now() / 1_000),
+      latestBlockTimestamp: latestBlock.timestamp,
+    });
     const quote = buildRegistrarQuote({
       request: quoteRequest,
       paymentToken,
@@ -305,7 +374,10 @@ export async function POST(request: Request) {
     });
     const signature = await account.signTypedData({
       domain: {
-        name: SIGNED_QUOTE_DOMAIN_NAME,
+        name:
+          policyGeneration === "v2"
+            ? SIGNED_QUOTE_DOMAIN_NAME
+            : LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
         version: SIGNED_QUOTE_DOMAIN_VERSION,
         chainId,
         verifyingContract: registrar,
@@ -330,6 +402,16 @@ export async function POST(request: Request) {
   } catch (error) {
     return handleApiError(error, "Signed registrar quote failed");
   }
+}
+
+function configuredPolicyGeneration(chainId: number): "legacy" | "v2" {
+  const configured = (
+    process.env.XNS_PRICING_POLICY_VERSION ||
+    process.env.NEXT_PUBLIC_XNS_PRICING_POLICY_VERSION
+  )?.trim().toLowerCase();
+  if (configured === "legacy" || configured === "1") return "legacy";
+  if (configured === "v2" || configured === "2") return "v2";
+  return chainId === 51 ? "v2" : "legacy";
 }
 
 async function validateNameState(input: {

@@ -79,6 +79,7 @@ The deploy script writes contract addresses to `frontend/config/addresses.ts`. Y
 ```bash
 NEXT_PUBLIC_XNS_REGISTRY=
 NEXT_PUBLIC_XNS_REGISTRAR=
+NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=
 NEXT_PUBLIC_XNS_RESOLVER=
 NEXT_PUBLIC_XNS_REVERSE_RESOLVER=
 ```

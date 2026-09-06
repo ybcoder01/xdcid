@@ -3,13 +3,24 @@ import { zeroAddress } from "viem";
 import {
   buildRegistrarQuote,
   calculateBufferedXdcWeiForPolicy,
+  LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
   normalizeSignedQuoteRequest,
+  QUOTE_BLOCK_TIME_SAFETY_SECONDS,
+  safeQuoteIssuedAt,
+  SIGNED_QUOTE_DOMAIN_NAME,
   SIGNED_QUOTE_LIFETIME_SECONDS,
 } from "../frontend/lib/signedRegistrarQuotes";
 
 describe("signed registrar quote helpers", function () {
   const payer = "0x0000000000000000000000000000000000000001";
   const nameOwner = "0x0000000000000000000000000000000000000002";
+
+  it("keeps legacy and v2 EIP-712 domains distinct", function () {
+    expect(LEGACY_SIGNED_QUOTE_DOMAIN_NAME).to.equal(
+      "XDCID Signed Quote Registrar",
+    );
+    expect(SIGNED_QUOTE_DOMAIN_NAME).to.equal("XDCID Registrar V2");
+  });
 
   it("canonicalizes and validates quote requests", function () {
     const request = normalizeSignedQuoteRequest({
@@ -76,6 +87,21 @@ describe("signed registrar quote helpers", function () {
     expect(() =>
       calculateBufferedXdcWeiForPolicy(5_000_000n, 25_000n, 2_001n),
     ).to.throw("outside the policy limit");
+  });
+
+  it("backdates quote issuance from the older of server and chain time", function () {
+    expect(
+      safeQuoteIssuedAt({
+        serverNowSeconds: 1_050,
+        latestBlockTimestamp: 1_040n,
+      }),
+    ).to.equal(1_040 - QUOTE_BLOCK_TIME_SAFETY_SECONDS);
+    expect(
+      safeQuoteIssuedAt({
+        serverNowSeconds: 1_030,
+        latestBlockTimestamp: 1_040n,
+      }),
+    ).to.equal(1_030 - QUOTE_BLOCK_TIME_SAFETY_SECONDS);
   });
 
   it("rejects unsupported products, currencies, terms, and addresses", function () {

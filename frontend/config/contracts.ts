@@ -27,6 +27,15 @@ export const apothemRegistration = {
   pricingPolicy: "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81" as `0x${string}`,
 } as const;
 
+export const apothemSubdomainRegistrar =
+  "0xa2135729ce122ef93158FCc4C69683155e6707d3" as `0x${string}`;
+
+// Verified mainnet XNSPricingPolicyV2 deployment. This lets the frontend select
+// the correct tuple ABI immediately after the policy address is switched, while
+// the explicit public generation setting remains available for future policies.
+export const mainnetPricingPolicyV2 =
+  "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94" as `0x${string}`;
+
 export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
@@ -38,11 +47,24 @@ export const addresses = {
   pricingPolicy: (
     process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
     "0x0000000000000000000000000000000000000000"
+  ) as `0x${string}`,
+  subdomainRegistrar: (
+    process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
+    "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`
 };
 
 export const isTestnetEnvironment =
   process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV?.toLowerCase() === "testnet";
+
+// During a staged mainnet rollout, the currently active registrar can continue
+// using the legacy policy while administrators prepare and manage Policy V2.
+// Keep that administrative target separate so changing its UI cannot change
+// live registration quotes or payment behavior.
+export const adminPricingPolicyAddress = (
+  process.env.NEXT_PUBLIC_XNS_ADMIN_PRICING_POLICY ||
+  (isTestnetEnvironment ? addresses.pricingPolicy : mainnetPricingPolicyV2)
+) as `0x${string}`;
 
 export const activeXnsChainId = isTestnetEnvironment ? apothemRegistration.chainId : 50;
 export const activeRegistryAddress = isTestnetEnvironment
@@ -51,6 +73,9 @@ export const activeRegistryAddress = isTestnetEnvironment
 export const activeRegistrarAddress = isTestnetEnvironment
   ? apothemRegistration.registrar
   : addresses.registrar;
+export const activeSubdomainRegistrarAddress = isTestnetEnvironment
+  ? apothemSubdomainRegistrar
+  : addresses.subdomainRegistrar;
 
 // Apothem currently has the registry and signed registrar, but no separately
 // deployed resolver suite. Dev therefore resolves registered names to their
@@ -59,6 +84,99 @@ export const activeResolverSuiteAvailable = !isTestnetEnvironment;
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
+
+export const subdomainRegistrationEnabled =
+  process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED === "true" &&
+  activeSubdomainRegistrarAddress !==
+    "0x0000000000000000000000000000000000000000";
+
+export const subdomainRegistrarAbi = [
+  {
+    type: "function",
+    name: "available",
+    stateMutability: "view",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
+    ],
+    outputs: [{ type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "nodeFor",
+    stateMutability: "pure",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
+    ],
+    outputs: [{ type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "ownerOf",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
+    name: "registerWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "parentNode", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "subdomainOwner", type: "address" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "parentNode", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "subdomainOwner", type: "address" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
 
 export const signedRegistrarAbi = [
   {
@@ -316,7 +434,7 @@ export const ownableAbi = [
   }
 ] as const;
 
-export const pricingPolicyAbi = [
+export const pricingPolicyV2Abi = [
   ...ownableAbi,
   {
     type: "function",
@@ -421,3 +539,152 @@ export const pricingPolicyAbi = [
     outputs: []
   }
 ] as const;
+
+export const legacyPricingPolicyAbi = [
+  ...ownableAbi,
+  {
+    type: "function",
+    name: "version",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "priceUsdMicros",
+    stateMutability: "view",
+    inputs: [
+      { name: "product", type: "uint8" },
+      { name: "labelLength", type: "uint256" },
+      { name: "years_", type: "uint256" }
+    ],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "config",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{
+      name: "",
+      type: "tuple",
+      components: [
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }]
+  },
+  {
+    type: "function",
+    name: "hasPendingConfig",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "pendingActivationTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "proposeConfig",
+    stateMutability: "nonpayable",
+    inputs: [{
+      name: "nextConfig",
+      type: "tuple",
+      components: [
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "cancelPendingConfig",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "activatePendingConfig",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  }
+] as const;
+
+const configuredPricingPolicyGeneration =
+  process.env.NEXT_PUBLIC_XNS_PRICING_POLICY_VERSION?.trim().toLowerCase();
+
+export const pricingPolicyGeneration =
+  configuredPricingPolicyGeneration === "legacy" ||
+  configuredPricingPolicyGeneration === "1"
+    ? "legacy"
+    : configuredPricingPolicyGeneration === "v2" ||
+        configuredPricingPolicyGeneration === "2" ||
+        isTestnetEnvironment ||
+        addresses.pricingPolicy.toLowerCase() ===
+          mainnetPricingPolicyV2.toLowerCase()
+      ? "v2"
+      : "legacy";
+
+// Both policy generations expose the same operational methods. Keep the
+// environment-specific ABI behind this shared export so dev can use V2 while
+// the current mainnet signed registrar continues to use its legacy policy.
+export const pricingPolicyAbi = (
+  pricingPolicyGeneration === "v2"
+    ? pricingPolicyV2Abi
+    : legacyPricingPolicyAbi
+) as typeof pricingPolicyV2Abi;
+
+const configuredAdminPricingPolicyGeneration =
+  process.env.NEXT_PUBLIC_XNS_ADMIN_PRICING_POLICY_VERSION
+    ?.trim()
+    .toLowerCase();
+
+export const adminPricingPolicyGeneration =
+  configuredAdminPricingPolicyGeneration === "legacy" ||
+  configuredAdminPricingPolicyGeneration === "1"
+    ? "legacy"
+    : configuredAdminPricingPolicyGeneration === "v2" ||
+        configuredAdminPricingPolicyGeneration === "2" ||
+        isTestnetEnvironment ||
+        adminPricingPolicyAddress.toLowerCase() ===
+          mainnetPricingPolicyV2.toLowerCase()
+      ? "v2"
+      : "legacy";
+
+export const adminPricingPolicyAbi = (
+  adminPricingPolicyGeneration === "v2"
+    ? pricingPolicyV2Abi
+    : legacyPricingPolicyAbi
+) as typeof pricingPolicyV2Abi;

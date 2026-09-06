@@ -9,18 +9,19 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
-  addresses,
-  pricingPolicyAbi,
+  adminPricingPolicyAbi,
+  adminPricingPolicyAddress,
+  adminPricingPolicyGeneration,
   zeroAddress,
 } from "../config/contracts";
 
 type PricingConfig = {
-  twoCharacterAnnualUsdMicros: bigint;
+  twoCharacterAnnualUsdMicros?: bigint;
   threeCharacterAnnualUsdMicros: bigint;
   fourCharacterAnnualUsdMicros: bigint;
   standardAnnualUsdMicros: bigint;
   subdomainAnnualUsdMicros: bigint;
-  premiumSubdomainAnnualUsdMicros: bigint;
+  premiumSubdomainAnnualUsdMicros?: bigint;
   migrationUsdMicros: bigint;
   threeYearDiscountBps: number;
   fiveYearDiscountBps: number;
@@ -90,34 +91,34 @@ function percentToBps(value: string) {
 
 export function AdminDomainPricing() {
   const { address: account } = useAccount();
-  const policyConfigured = addresses.pricingPolicy !== zeroAddress;
+  const policyConfigured = adminPricingPolicyAddress !== zeroAddress;
   const config = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "config",
     query: { enabled: policyConfigured },
   });
   const owner = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "owner",
     query: { enabled: policyConfigured },
   });
   const version = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "version",
     query: { enabled: policyConfigured },
   });
   const pending = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "hasPendingConfig",
     query: { enabled: policyConfigured },
   });
   const activationTime = useReadContract({
-    address: addresses.pricingPolicy,
-    abi: pricingPolicyAbi,
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
     functionName: "pendingActivationTime",
     query: { enabled: policyConfigured },
   });
@@ -134,12 +135,18 @@ export function AdminDomainPricing() {
   useEffect(() => {
     if (!current) return;
     setForm({
-      twoCharacter: microsToUsd(current.twoCharacterAnnualUsdMicros),
+      twoCharacter:
+        current.twoCharacterAnnualUsdMicros === undefined
+          ? ""
+          : microsToUsd(current.twoCharacterAnnualUsdMicros),
       threeCharacter: microsToUsd(current.threeCharacterAnnualUsdMicros),
       fourCharacter: microsToUsd(current.fourCharacterAnnualUsdMicros),
       standard: microsToUsd(current.standardAnnualUsdMicros),
       subdomain: microsToUsd(current.subdomainAnnualUsdMicros),
-      premiumSubdomain: microsToUsd(current.premiumSubdomainAnnualUsdMicros),
+      premiumSubdomain:
+        current.premiumSubdomainAnnualUsdMicros === undefined
+          ? ""
+          : microsToUsd(current.premiumSubdomainAnnualUsdMicros),
       migration: microsToUsd(current.migrationUsdMicros),
       threeYearDiscount: (current.threeYearDiscountBps / 100).toString(),
       fiveYearDiscount: (current.fiveYearDiscountBps / 100).toString(),
@@ -172,7 +179,16 @@ export function AdminDomainPricing() {
       tenYear: percentToBps(form.tenYearDiscount),
       buffer: percentToBps(form.xdcQuoteBuffer),
     };
-    const validPrices = Object.values(prices).every((value) => value !== null);
+    const requiredPrices = adminPricingPolicyGeneration === "v2"
+      ? Object.values(prices)
+      : [
+          prices.threeCharacter,
+          prices.fourCharacter,
+          prices.standard,
+          prices.subdomain,
+          prices.migration,
+        ];
+    const validPrices = requiredPrices.every((value) => value !== null);
     const validDiscounts =
       discounts.threeYear !== null &&
       discounts.fiveYear !== null &&
@@ -198,24 +214,42 @@ export function AdminDomainPricing() {
     if (!current || !parsed.valid || !isPolicyOwner) return;
     const prices = parsed.prices;
     const discounts = parsed.discounts;
+    const nextConfig = adminPricingPolicyGeneration === "v2"
+      ? {
+          ...current,
+          twoCharacterAnnualUsdMicros: prices.twoCharacter!,
+          threeCharacterAnnualUsdMicros: prices.threeCharacter!,
+          fourCharacterAnnualUsdMicros: prices.fourCharacter!,
+          standardAnnualUsdMicros: prices.standard!,
+          subdomainAnnualUsdMicros: prices.subdomain!,
+          premiumSubdomainAnnualUsdMicros: prices.premiumSubdomain!,
+          migrationUsdMicros: prices.migration!,
+          threeYearDiscountBps: discounts.threeYear!,
+          fiveYearDiscountBps: discounts.fiveYear!,
+          tenYearDiscountBps: discounts.tenYear!,
+          xdcQuoteBufferBps: discounts.buffer!,
+        }
+      : {
+          threeCharacterAnnualUsdMicros: prices.threeCharacter!,
+          fourCharacterAnnualUsdMicros: prices.fourCharacter!,
+          standardAnnualUsdMicros: prices.standard!,
+          subdomainAnnualUsdMicros: prices.subdomain!,
+          migrationUsdMicros: prices.migration!,
+          threeYearDiscountBps: discounts.threeYear!,
+          fiveYearDiscountBps: discounts.fiveYear!,
+          tenYearDiscountBps: discounts.tenYear!,
+          xdcQuoteBufferBps: discounts.buffer!,
+          quoteSigner: current.quoteSigner,
+          usdcToken: current.usdcToken,
+          treasury: current.treasury,
+          xdcPaymentsEnabled: current.xdcPaymentsEnabled,
+          usdcPaymentsEnabled: current.usdcPaymentsEnabled,
+        };
     write.writeContract({
-      address: addresses.pricingPolicy,
-      abi: pricingPolicyAbi,
+      address: adminPricingPolicyAddress,
+      abi: adminPricingPolicyAbi,
       functionName: "proposeConfig",
-      args: [{
-        ...current,
-        twoCharacterAnnualUsdMicros: prices.twoCharacter!,
-        threeCharacterAnnualUsdMicros: prices.threeCharacter!,
-        fourCharacterAnnualUsdMicros: prices.fourCharacter!,
-        standardAnnualUsdMicros: prices.standard!,
-        subdomainAnnualUsdMicros: prices.subdomain!,
-        premiumSubdomainAnnualUsdMicros: prices.premiumSubdomain!,
-        migrationUsdMicros: prices.migration!,
-        threeYearDiscountBps: discounts.threeYear!,
-        fiveYearDiscountBps: discounts.fiveYear!,
-        tenYearDiscountBps: discounts.tenYear!,
-        xdcQuoteBufferBps: discounts.buffer!,
-      }],
+      args: [nextConfig as never],
     });
   }
 
@@ -245,20 +279,40 @@ export function AdminDomainPricing() {
             and becomes eligible for activation only after 48 hours.
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-          Policy version {version.data?.toString() || "—"}
-        </span>
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+            Policy contract {adminPricingPolicyGeneration === "v2" ? "V2" : "V1"}
+          </span>
+          <span
+            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+            title="This revision increases whenever a delayed pricing configuration update is activated."
+          >
+            Configuration revision {version.data?.toString() || "—"}
+          </span>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MoneyField label="2-character / year" value={form.twoCharacter} onChange={(value) => update("twoCharacter", value)} />
+        {adminPricingPolicyGeneration === "v2" ? (
+          <MoneyField label="2-character / year" value={form.twoCharacter} onChange={(value) => update("twoCharacter", value)} />
+        ) : null}
         <MoneyField label="3-character / year" value={form.threeCharacter} onChange={(value) => update("threeCharacter", value)} />
         <MoneyField label="4-character / year" value={form.fourCharacter} onChange={(value) => update("fourCharacter", value)} />
         <MoneyField label="5+ character / year" value={form.standard} onChange={(value) => update("standard", value)} />
         <MoneyField label="Subdomain / year" value={form.subdomain} onChange={(value) => update("subdomain", value)} />
-        <MoneyField label="Premium subdomain / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
+        {adminPricingPolicyGeneration === "v2" ? (
+          <MoneyField label="Reserved premium rate / year" value={form.premiumSubdomain} onChange={(value) => update("premiumSubdomain", value)} />
+        ) : null}
         <MoneyField label="Migration (one-time)" value={form.migration} onChange={(value) => update("migration", value)} />
       </div>
+
+      {adminPricingPolicyGeneration === "v2" ? (
+        <p className="mt-3 text-sm text-slate-600">
+          Reserved for a future premium-subdomain policy and not used by the current
+          subdomain registrar. All subdomain registrations currently use the standard
+          subdomain rate.
+        </p>
+      ) : null}
 
       <h3 className="mt-7 font-semibold text-slate-950">Term discounts and quote buffer</h3>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

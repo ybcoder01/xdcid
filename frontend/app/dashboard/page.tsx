@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
-import { loadNames } from "../../config/localNames";
+import { loadNames, saveName } from "../../config/localNames";
 import {
   useAccount,
   useReadContract,
@@ -126,11 +126,9 @@ export default function Dashboard() {
 
     try {
       const params = new URLSearchParams();
-      if (isTestnetDashboard) {
-        loadNames(address)
-          .slice(0, 50)
-          .forEach((name) => params.append("known", name));
-      }
+      loadNames(address)
+        .slice(0, 50)
+        .forEach((name) => params.append("known", name));
       const query = params.size > 0 ? "?" + params.toString() : "";
       const response = await fetch(
         "/api/v1/addresses/" + address + "/names" + query,
@@ -141,6 +139,7 @@ export default function Dashboard() {
         throw new Error(body.error?.message || "Unable to load wallet names");
       }
 
+      body.data.names.forEach((record) => saveName(address, record.name));
       setNames(body.data.names);
       setPrimaryName(body.data.primaryName);
       setSelectedPrimary(
@@ -150,9 +149,6 @@ export default function Dashboard() {
       setLookupError(
         error instanceof Error ? error.message : "Unable to load wallet names"
       );
-      setNames([]);
-      setPrimaryName(null);
-      setSelectedPrimary("");
     } finally {
       setIsLoading(false);
     }
@@ -203,6 +199,15 @@ export default function Dashboard() {
             ? "Test names created in this browser are verified directly against the Apothem registry."
             : "Names are indexed from XDCScan and ownership is verified directly against the XDCID registry."}
         </p>
+        {isConnected && (
+          <button
+            className="mt-4 rounded-md border border-black/20 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+            disabled={isLoading}
+            onClick={() => void loadOwnedNames()}
+          >
+            {isLoading ? "Refreshing…" : "Refresh names"}
+          </button>
+        )}
       </section>
 
       {isConnected && names.length > 0 && !isTestnetDashboard && (

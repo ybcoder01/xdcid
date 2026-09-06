@@ -23,7 +23,16 @@ import { parseXnsName } from "./names";
 import { withShortCache } from "./shortCache";
 import { xdcClient } from "./xdcClient";
 
-const LEGACY_REGISTRAR = "0x31c41237A551FCadf22F8B231D8accA2c16f669b";
+// The registry is intentionally non-enumerable, so owned-name discovery must
+// inspect every registrar that has ever been allowed to create names. Keep
+// these addresses even after changing the active registrar; removing one
+// makes names registered through it disappear from the dashboard catalog.
+const MAINNET_REGISTRAR_HISTORY = [
+  "0x31c41237A551FCadf22F8B231D8accA2c16f669b",
+  "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
+  "0xa1584cb17523CEb991155328EdFAD2293b66bd94",
+  "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36"
+] as const;
 const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
 const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
@@ -31,6 +40,7 @@ const MAX_PAGES = 10;
 const CATALOG_TTL_MS = 60_000;
 const READ_BATCH_SIZE = 20;
 const MAX_KNOWN_NAMES = 50;
+const EXPLORER_RETRY_DELAYS_MS = [250, 750] as const;
 
 const apothem = defineChain({
   id: 51,
@@ -134,8 +144,8 @@ function registrarHistory(): Address[] {
     .filter(Boolean);
 
   const unique = new Set(
-    [LEGACY_REGISTRAR, addresses.registrar, ...configured].map((value) =>
-      getAddress(value).toLowerCase()
+    [...MAINNET_REGISTRAR_HISTORY, addresses.registrar, ...configured].map(
+      (value) => getAddress(value).toLowerCase()
     )
   );
 
@@ -170,15 +180,46 @@ async function fetchRegistrarTransactions(registrar: Address) {
       apikey: apiKey
     }).toString();
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(8_000),
-      headers: { Accept: "application/json" }
-    });
-    if (!response.ok) {
-      throw new Error("XDCScan request failed with status " + response.status);
+    let body: ExplorerResponse | null = null;
+    let lastError: unknown;
+    for (
+      let attempt = 0;
+      attempt <= EXPLORER_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(8_000),
+          headers: { Accept: "application/json" }
+        });
+        if (!response.ok) {
+          throw new Error(
+            "XDCScan request failed with status " + response.status
+          );
+        }
+
+        const candidate = (await response.json()) as ExplorerResponse;
+        if (
+          Array.isArray(candidate.result) ||
+          candidate.message === "No transactions found"
+        ) {
+          body = candidate;
+          break;
+        }
+        lastError = new Error("XDCScan returned an invalid transaction list");
+      } catch (error) {
+        lastError = error;
+      }
+
+      const retryDelay = EXPLORER_RETRY_DELAYS_MS[attempt];
+      if (retryDelay !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      }
     }
 
-    const body = (await response.json()) as ExplorerResponse;
+    if (!body) {
+      throw lastError ?? new Error("XDCScan returned an invalid response");
+    }
     if (!Array.isArray(body.result)) {
       if (body.message === "No transactions found") break;
       throw new Error("XDCScan returned an invalid transaction list");
@@ -233,17 +274,52 @@ async function loadCatalog() {
   catalogRequest = (async () => {
     try {
       const registrars = registrarHistory();
-      const transactionSets = await Promise.all(
-        registrars.map(fetchRegistrarTransactions)
-      );
+      // XDCScan applies a shared request budget. Querying every historical
+      // registrar concurrently causes otherwise valid requests to be rejected
+      // as a burst, so keep this deliberately sequential.
+      const transactionSets: PromiseSettledResult<ExplorerTransaction[]>[] = [];
+      for (const registrar of registrars) {
+        try {
+          transactionSets.push({
+            status: "fulfilled",
+            value: await fetchRegistrarTransactions(registrar)
+          });
+        } catch (reason) {
+          transactionSets.push({ status: "rejected", reason });
+        }
+      }
       const names = new Set<string>();
+      let successfulLookups = 0;
+      let firstFailure: unknown;
 
-      transactionSets.forEach((transactions, index) => {
-        transactions.forEach((transaction) => {
+      transactionSets.forEach((result, index) => {
+        if (result.status === "rejected") {
+          firstFailure ??= result.reason;
+          console.warn(
+            "Unable to read historical registrations for registrar",
+            registrars[index],
+            result.reason
+          );
+          return;
+        }
+
+        successfulLookups += 1;
+        result.value.forEach((transaction) => {
           const name = registeredName(transaction, registrars[index]);
           if (name) names.add(name);
         });
       });
+
+      if (successfulLookups === 0) {
+        throw firstFailure ?? new Error("No registrar history was available");
+      }
+
+      // A temporary explorer failure for one historical registrar must not
+      // erase names that this warm instance discovered successfully earlier.
+      // Every candidate is still verified against the registry below.
+      if (successfulLookups < registrars.length && catalog) {
+        catalog.forEach((name) => names.add(name));
+      }
 
       catalog = Array.from(names).sort();
       catalogExpiresAt = Date.now() + CATALOG_TTL_MS;
@@ -296,12 +372,19 @@ export async function getOwnedNamesData(
     "owned-names:" +
       (isApothem ? "51:" : "50:") +
       address.toLowerCase() +
-      ":" +
+    ":" +
       cacheSuffix,
     async () => {
-      const candidates = Array.from(
-        new Set([...(await loadCatalog()), ...known])
-      );
+      let indexedNames: string[] = [];
+      try {
+        indexedNames = await loadCatalog();
+      } catch (error) {
+        // Browser-known names are only candidates and are verified against the
+        // registry below, so they remain safe to use while the explorer index
+        // is temporarily unavailable.
+        if (known.length === 0) throw error;
+      }
+      const candidates = Array.from(new Set([...indexedNames, ...known]));
       const owned: Array<Omit<OwnedName, "primary">> = [];
       const now = BigInt(Math.floor(Date.now() / 1000));
 

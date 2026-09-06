@@ -31,6 +31,7 @@
     "activate:signed-registrar:xdc": "hardhat run scripts/activate-signed-quote-registrar.ts --network xdc",
     "rollback:signed-registrar:xdc": "hardhat run scripts/rollback-signed-quote-registrar.ts --network xdc",
     "verify:pricing-stack:xdc": "hardhat run scripts/verify-mainnet-pricing-stack.ts --network xdc",
+    "verify:v2-stack:xdc": "hardhat run scripts/verify-mainnet-v2-stack.ts --network xdc",
     "generate:apothem-subdomain-deployment": "hardhat compile && node scripts/generate-apothem-subdomain-deployment-bundle.mjs",
     "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem"
   },

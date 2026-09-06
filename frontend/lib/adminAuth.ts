@@ -12,13 +12,20 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { addresses, ownableAbi, zeroAddress } from "../config/contracts";
+import {
+  adminPricingPolicyAddress,
+  addresses,
+  ownableAbi,
+  pricingPolicyAbi,
+  zeroAddress,
+} from "../config/contracts";
 import {
   ERC1271_MAGIC_VALUE,
   erc1271Abi,
 } from "./accountSignatures";
 import { xdcClient } from "./xdcClient";
 import { isArchiveAccessAdministratorWallet } from "./archiveAccessAdministrator";
+import { authorizedTreasuryAddresses } from "./treasuryAuthorization";
 
 export const ADMIN_SESSION_COOKIE = "xdcid_admin_session";
 export const ADMIN_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
@@ -171,12 +178,15 @@ export function parseAdminSession(token: string | undefined): AdminSessionPayloa
 }
 
 export async function currentAdminOwners(): Promise<Address[]> {
-  const targets = [addresses.registry];
+  const targets = new Set<Address>([addresses.registry]);
   if (addresses.pricingPolicy !== zeroAddress) {
-    targets.push(addresses.pricingPolicy);
+    targets.add(addresses.pricingPolicy);
+  }
+  if (adminPricingPolicyAddress !== zeroAddress) {
+    targets.add(adminPricingPolicyAddress);
   }
   const owners = await Promise.all(
-    targets.map((target) =>
+    [...targets].map((target) =>
       xdcClient.readContract({
         address: target,
         abi: ownableAbi,
@@ -196,6 +206,20 @@ export async function isCurrentAdmin(address: Address): Promise<boolean> {
   return admins.includes(getAddress(address));
 }
 
+export async function currentRegistrationTreasury(): Promise<Address | null> {
+  if (addresses.pricingPolicy === zeroAddress) return null;
+
+  const config = await xdcClient.readContract({
+    address: addresses.pricingPolicy,
+    abi: pricingPolicyAbi,
+    functionName: "config",
+  });
+
+  return isAddress(config.treasury) && config.treasury !== zeroAddress
+    ? getAddress(config.treasury)
+    : null;
+}
+
 export async function resolveAdminAuthorization(
   address: Address,
 ): Promise<AdminAuthorization> {
@@ -203,10 +227,12 @@ export async function resolveAdminAuthorization(
   const roles: AdminRole[] = [];
   const permissions = new Set<AdminPermission>();
 
-  const [ownersResult, archiveResult] = await Promise.allSettled([
-    currentAdminOwners(),
-    isArchiveAccessAdministratorWallet(normalized),
-  ]);
+  const [ownersResult, archiveResult, registrationTreasuryResult] =
+    await Promise.allSettled([
+      currentAdminOwners(),
+      isArchiveAccessAdministratorWallet(normalized),
+      currentRegistrationTreasury(),
+    ]);
 
   if (
     ownersResult.status === "fulfilled" &&
@@ -223,12 +249,15 @@ export async function resolveAdminAuthorization(
     permissions.add("archive:manage");
   }
 
-  const configuredTreasury =
-    process.env.ARCHIVE_SUBSCRIPTION_TREASURY_ADDRESS || "";
-  if (
-    isAddress(configuredTreasury) &&
-    getAddress(configuredTreasury) === normalized
-  ) {
+  const treasuryAddresses = authorizedTreasuryAddresses({
+    archiveTreasury:
+      process.env.ARCHIVE_SUBSCRIPTION_TREASURY_ADDRESS || null,
+    registrationTreasury:
+      registrationTreasuryResult.status === "fulfilled"
+        ? registrationTreasuryResult.value
+        : null,
+  });
+  if (treasuryAddresses.includes(normalized)) {
     roles.push("treasury");
     permissions.add("revenue:view");
   }

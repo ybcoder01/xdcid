@@ -12,6 +12,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
+  adminPricingPolicyAddress,
   addresses,
   ownableAbi,
   registrarAbi,
@@ -21,11 +22,13 @@ import {
 import { AdminArchiveAdministrator } from "../../components/AdminArchiveAdministrator";
 import { AdminArchiveEntitlements } from "../../components/AdminArchiveEntitlements";
 import { AdminArchiveRevenue } from "../../components/AdminArchiveRevenue";
+import { AdminDomainRevenue } from "../../components/AdminDomainRevenue";
 import { AdminDomainPricing } from "../../components/AdminDomainPricing";
 import { AdminHistoryAccessPolicy } from "../../components/AdminHistoryAccessPolicy";
 import { AdminOperations } from "../../components/AdminOperations";
 import { AdminRevenueReport } from "../../components/AdminRevenueReport";
 import { AdminRoleManagement } from "../../components/AdminRoleManagement";
+import { AdminTreasuryDestinations } from "../../components/AdminTreasuryDestinations";
 
 type AdminPermission =
   | "platform:manage"
@@ -63,10 +66,10 @@ export default function AdminPage() {
     functionName: "owner",
   });
   const policyOwner = useReadContract({
-    address: addresses.pricingPolicy,
+    address: adminPricingPolicyAddress,
     abi: ownableAbi,
     functionName: "owner",
-    query: { enabled: addresses.pricingPolicy !== zeroAddress },
+    query: { enabled: adminPricingPolicyAddress !== zeroAddress },
   });
   const balance = useBalance({ address: addresses.registrar });
   const refetchBalance = balance.refetch;
@@ -398,6 +401,8 @@ export default function AdminPage() {
 
       {canViewRevenue ? (
         <>
+          <AdminTreasuryDestinations />
+          <AdminDomainRevenue />
           <AdminArchiveRevenue />
           <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
             <AdminRevenueReport />

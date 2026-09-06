@@ -1,5 +1,9 @@
 # XDC mainnet pricing rollout
 
+> This document describes the already-deployed legacy pricing stack. For the
+> V2 rollout with two-character names and regular-account subdomains, use
+> `docs/mainnet-wallet-deployment.md`.
+
 This procedure replaces only the active registrar. The existing registry,
 resolver, reverse resolver, records, and registered names remain in place.
 
