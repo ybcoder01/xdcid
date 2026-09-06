@@ -158,8 +158,8 @@ export async function getDomainRevenueReport(
         FROM domain_revenue_events
         WHERE chain_id = ${activeXnsChainId}
           AND occurred_at >= now() - (${trendDays} * interval '1 day')
-        GROUP BY date_trunc(${trendInterval}, occurred_at)
-        ORDER BY date_trunc(${trendInterval}, occurred_at)
+        GROUP BY 1
+        ORDER BY 1
       `,
       client`
         SELECT event_id, category, token_symbol, token_decimals,
