@@ -1,8 +1,25 @@
 import { expect } from "chai";
 import { legacyXdcDomainsAbi } from "../frontend/config/legacyDomains";
-import { classifyRegistryStatus } from "../frontend/lib/registryStatus";
+import {
+  classifyRegistryStatus,
+  xdcidRegistrationFromOwner
+} from "../frontend/lib/registryStatus";
 
 describe("registry-aware name status", () => {
+  it("derives XDCID registration from registry ownership, not registrar availability", () => {
+    expect(xdcidRegistrationFromOwner(undefined)).to.equal(undefined);
+    expect(
+      xdcidRegistrationFromOwner(
+        "0x0000000000000000000000000000000000000000"
+      )
+    ).to.equal(false);
+    expect(
+      xdcidRegistrationFromOwner(
+        "0x2DaC2bB1cF00C5f9bbcf3A8Bf62E77DbDd69FCe5"
+      )
+    ).to.equal(true);
+  });
+
   it("uses the legacy registry name-to-token ID mapping", () => {
     const lookup = legacyXdcDomainsAbi.find(
       (entry) => entry.name === "_tokenIdMaps"
