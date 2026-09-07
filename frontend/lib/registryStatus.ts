@@ -1,3 +1,5 @@
+import { zeroAddress } from "viem";
+
 export type RegistryState =
   | "unregistered"
   | "xdcid"
@@ -11,6 +13,13 @@ export type RegistryStatus = {
   requiresMigration: boolean;
   requiresReview: boolean;
 };
+
+export function xdcidRegistrationFromOwner(
+  owner: string | undefined
+): boolean | undefined {
+  if (owner === undefined) return undefined;
+  return owner.toLowerCase() !== zeroAddress;
+}
 
 export function classifyRegistryStatus(input: {
   xdcidRegistered: boolean;
