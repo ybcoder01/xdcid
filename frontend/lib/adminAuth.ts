@@ -25,6 +25,7 @@ import {
 } from "./accountSignatures";
 import { xdcClient } from "./xdcClient";
 import { isArchiveAccessAdministratorWallet } from "./archiveAccessAdministrator";
+import { currentDomainDiscountContext } from "./domainDiscountContext";
 import { authorizedTreasuryAddresses } from "./treasuryAuthorization";
 
 export const ADMIN_SESSION_COOKIE = "xdcid_admin_session";
@@ -34,9 +35,14 @@ export const ADMIN_SESSION_TTL_SECONDS = 15 * 60;
 export type AdminPermission =
   | "platform:manage"
   | "archive:manage"
-  | "revenue:view";
+  | "revenue:view"
+  | "discount:issue";
 
-export type AdminRole = "platform-owner" | "archive-administrator" | "treasury";
+export type AdminRole =
+  | "platform-owner"
+  | "archive-administrator"
+  | "treasury"
+  | "discount-signer";
 
 export type AdminAuthorization = {
   roles: AdminRole[];
@@ -227,11 +233,12 @@ export async function resolveAdminAuthorization(
   const roles: AdminRole[] = [];
   const permissions = new Set<AdminPermission>();
 
-  const [ownersResult, archiveResult, registrationTreasuryResult] =
+  const [ownersResult, archiveResult, registrationTreasuryResult, discountResult] =
     await Promise.allSettled([
       currentAdminOwners(),
       isArchiveAccessAdministratorWallet(normalized),
       currentRegistrationTreasury(),
+      currentDomainDiscountContext(),
     ]);
 
   if (
@@ -260,6 +267,14 @@ export async function resolveAdminAuthorization(
   if (treasuryAddresses.includes(normalized)) {
     roles.push("treasury");
     permissions.add("revenue:view");
+  }
+
+  if (
+    discountResult.status === "fulfilled" &&
+    discountResult.value.authorizationSigner === normalized
+  ) {
+    roles.push("discount-signer");
+    permissions.add("discount:issue");
   }
 
   return { roles, permissions: [...permissions] };

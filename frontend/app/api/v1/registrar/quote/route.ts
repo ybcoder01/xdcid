@@ -19,6 +19,16 @@ import {
 } from "../../../../../lib/apiResponse";
 import { getCoinGeckoXdcPrice } from "../../../../../lib/coingeckoXdcPrice";
 import {
+  applyDomainDiscount,
+  domainDiscountAuthorizationAbi,
+  registrarDiscountContextAbi,
+  serializeDomainDiscountAuthorization,
+} from "../../../../../lib/domainDiscounts";
+import {
+  findDomainDiscountGrants,
+  type StoredDomainDiscountGrant,
+} from "../../../../../lib/domainDiscountGrantStore";
+import {
   buildRegistrarQuote,
   calculateBufferedXdcWeiForPolicy,
   LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
@@ -302,7 +312,7 @@ export async function POST(request: Request) {
       request: quoteRequest,
     });
 
-    const usdMicros = await client.readContract({
+    const grossUsdMicros = await client.readContract({
       address: pricingPolicy,
       abi: pricingPolicyAbi,
       functionName: "priceUsdMicros",
@@ -312,6 +322,20 @@ export async function POST(request: Request) {
         BigInt(quoteRequest.termYears),
       ],
     });
+    const discountGrant = policyGeneration === "v2"
+      ? await usableDiscountGrant({
+          client,
+          chainId,
+          registrar,
+          request: quoteRequest,
+        })
+      : undefined;
+    const usdMicros = discountGrant
+      ? applyDomainDiscount(
+          grossUsdMicros,
+          discountGrant.authorization.discountBps,
+        )
+      : grossUsdMicros;
 
     let paymentToken: Address;
     let paymentAmount: bigint;
@@ -325,7 +349,12 @@ export async function POST(request: Request) {
         }
       | undefined;
 
-    if (quoteRequest.paymentCurrency === "XDC") {
+    if (usdMicros === 0n) {
+      paymentToken = quoteRequest.paymentCurrency === "XDC"
+        ? zeroAddress
+        : getAddress(config.usdcToken);
+      paymentAmount = 0n;
+    } else if (quoteRequest.paymentCurrency === "XDC") {
       if (!config.xdcPaymentsEnabled) {
         throw new ApiServiceError(
           "QUOTE_SIGNING_UNAVAILABLE",
@@ -397,11 +426,59 @@ export async function POST(request: Request) {
       paymentCurrency: quoteRequest.paymentCurrency,
       quote: serializeQuote(quote),
       signature,
+      discount: discountGrant
+        ? {
+            authorizationContract: discountGrant.authorizationContract,
+            authorization: serializeDomainDiscountAuthorization(
+              discountGrant.authorization,
+            ),
+            signature: discountGrant.signature,
+          }
+        : undefined,
       market,
     });
   } catch (error) {
     return handleApiError(error, "Signed registrar quote failed");
   }
+}
+
+async function usableDiscountGrant(input: {
+  client: ReturnType<typeof quoteClient>;
+  chainId: number;
+  registrar: Address;
+  request: ReturnType<typeof normalizeSignedQuoteRequest>;
+}): Promise<StoredDomainDiscountGrant | undefined> {
+  try {
+    const authorizationContract = await input.client.readContract({
+      address: input.registrar,
+      abi: registrarDiscountContextAbi,
+      functionName: "discountAuthorization",
+    });
+    if (!isAddress(authorizationContract) || authorizationContract === zeroAddress) {
+      return undefined;
+    }
+    const candidates = await findDomainDiscountGrants({
+      chainId: input.chainId,
+      registrar: input.registrar,
+      authorizationContract: getAddress(authorizationContract),
+      beneficiary: input.request.nameOwner,
+      name: input.request.name,
+      product: input.request.productId,
+      termYears: input.request.termYears,
+    });
+    for (const candidate of candidates) {
+      const usable = await input.client.readContract({
+        address: candidate.authorizationContract,
+        abi: domainDiscountAuthorizationAbi,
+        functionName: "isUsable",
+        args: [candidate.authorization, candidate.signature],
+      });
+      if (usable) return candidate;
+    }
+  } catch {
+    // Discount lookup must never prevent a regular-price registration quote.
+  }
+  return undefined;
 }
 
 function configuredPolicyGeneration(chainId: number): "legacy" | "v2" {
