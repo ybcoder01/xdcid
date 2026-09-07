@@ -87,8 +87,8 @@ export default function AdminPage() {
     void checkSession();
   }, [account, checkSession]);
 
-  async function authenticate() {
-    if (!account || loginPending) return;
+  async function authenticate(): Promise<boolean> {
+    if (!account || loginPending) return false;
     setLoginPending(true);
     setAuthError("");
 
@@ -136,11 +136,12 @@ export default function AdminPage() {
       }
       setSession(verified as AdminSession);
       window.dispatchEvent(new Event(ADMIN_SESSION_CHANGED_EVENT));
+      return true;
     } catch (cause) {
-      setSession({ authenticated: false });
       setAuthError(
         cause instanceof Error ? cause.message : "Admin login failed",
       );
+      return false;
     } finally {
       setLoginPending(false);
     }
@@ -283,7 +284,12 @@ export default function AdminPage() {
 
       {canManageArchive ? <AdminArchiveEntitlements /> : null}
 
-      {canIssueDiscounts ? <AdminDomainDiscountGrants /> : null}
+      {canIssueDiscounts ? (
+        <AdminDomainDiscountGrants
+          onReauthenticate={authenticate}
+          reauthenticationPending={loginPending || signing.isPending}
+        />
+      ) : null}
 
       {canViewRevenue ? (
         <>

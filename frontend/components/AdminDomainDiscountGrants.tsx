@@ -31,7 +31,21 @@ type GrantsResponse = {
   error?: string;
 };
 
-export function AdminDomainDiscountGrants() {
+type AdminDomainDiscountGrantsProps = {
+  onReauthenticate: () => Promise<boolean>;
+  reauthenticationPending: boolean;
+};
+
+type AdminSessionResponse = {
+  authenticated?: boolean;
+  address?: string;
+  permissions?: string[];
+};
+
+export function AdminDomainDiscountGrants({
+  onReauthenticate,
+  reauthenticationPending,
+}: AdminDomainDiscountGrantsProps) {
   const { address } = useAccount();
   const signing = useSignTypedData();
   const [context, setContext] = useState<DiscountContext>();
@@ -43,8 +57,15 @@ export function AdminDomainDiscountGrants() {
   const [maxUses, setMaxUses] = useState(1);
   const [validDays, setValidDays] = useState(7);
   const [loading, setLoading] = useState(true);
+  const [reauthenticationRequired, setReauthenticationRequired] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  const requireReauthentication = useCallback(() => {
+    setReauthenticationRequired(true);
+    setStatus("");
+    setError("");
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -56,8 +77,13 @@ export function AdminDomainDiscountGrants() {
       });
       const body = (await response.json()) as GrantsResponse;
       if (!response.ok || !body.context) {
+        if (response.status === 401 || response.status === 403) {
+          requireReauthentication();
+          return;
+        }
         throw new Error(body.error || "Discount grants could not be loaded");
       }
+      setReauthenticationRequired(false);
       setContext(body.context);
       setGrants(body.grants || []);
     } catch (cause) {
@@ -65,14 +91,14 @@ export function AdminDomainDiscountGrants() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [requireReauthentication]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   async function issueGrant() {
-    if (!context || !address || signing.isPending) return;
+    if (!context || !address || signing.isPending || reauthenticationRequired) return;
     setError("");
     setStatus("");
     try {
@@ -81,6 +107,10 @@ export function AdminDomainDiscountGrants() {
       }
       if (!isAddress(beneficiary)) {
         throw new Error("Enter a valid beneficiary wallet address");
+      }
+      if (!(await hasActiveDiscountSignerSession(address))) {
+        requireReauthentication();
+        return;
       }
       const now = Math.floor(Date.now() / 1_000);
       const built = buildDomainDiscountAuthorization({
@@ -115,6 +145,10 @@ export function AdminDomainDiscountGrants() {
       });
       const body = (await response.json()) as { grant?: Grant; error?: string };
       if (!response.ok || !body.grant) {
+        if (response.status === 401 || response.status === 403) {
+          requireReauthentication();
+          return;
+        }
         throw new Error(body.error || "Discount grant could not be saved");
       }
       setGrants((current) => [body.grant as Grant, ...current.filter((grant) => grant.id !== body.grant?.id)]);
@@ -128,6 +162,18 @@ export function AdminDomainDiscountGrants() {
       setStatus("");
       setError(cause instanceof Error ? cause.message : "Discount grant failed");
     }
+  }
+
+  async function reauthenticate() {
+    setError("");
+    const authenticated = await onReauthenticate();
+    if (!authenticated) {
+      setError("Discount-signer re-verification did not complete");
+      return;
+    }
+    setReauthenticationRequired(false);
+    setStatus("Discount-signer session renewed. You can now issue the grant.");
+    await refresh();
   }
 
   return (
@@ -178,14 +224,32 @@ export function AdminDomainDiscountGrants() {
         <NumberField label="Expires after (days)" value={validDays} min={1} max={31} step={1} onChange={setValidDays} />
       </div>
 
-      <button
-        type="button"
-        className="mt-5 rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-        disabled={loading || !context || signing.isPending}
-        onClick={() => void issueGrant()}
-      >
-        {signing.isPending ? "Confirm in wallet…" : "Sign and issue grant"}
-      </button>
+      {reauthenticationRequired ? (
+        <div
+          className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+          role="status"
+        >
+          <p className="font-semibold">Your discount-signer session has expired.</p>
+          <p className="mt-1">Re-verify this wallet to continue. Your grant details will remain in the form.</p>
+          <button
+            type="button"
+            className="mt-3 rounded-md bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+            disabled={reauthenticationPending}
+            onClick={() => void reauthenticate()}
+          >
+            {reauthenticationPending ? "Confirm in wallet…" : "Re-verify discount signer"}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="mt-5 rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+          disabled={loading || !context || signing.isPending}
+          onClick={() => void issueGrant()}
+        >
+          {signing.isPending ? "Confirm in wallet…" : "Sign and issue grant"}
+        </button>
+      )}
       {status ? <p className="mt-4 text-sm text-teal-700">{status}</p> : null}
       {error ? <p className="mt-4 break-words text-sm text-red-600">{error}</p> : null}
 
@@ -222,6 +286,22 @@ export function AdminDomainDiscountGrants() {
       </div>
     </section>
   );
+}
+
+async function hasActiveDiscountSignerSession(address: Address): Promise<boolean> {
+  const response = await fetch("/api/admin/auth/session", {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  if (response.status === 401 || response.status === 403) return false;
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || "Discount-signer session could not be checked");
+  }
+  const session = (await response.json().catch(() => ({}))) as AdminSessionResponse;
+  return session.authenticated === true
+    && session.address?.toLowerCase() === address.toLowerCase()
+    && session.permissions?.includes("discount:issue") === true;
 }
 
 function NumberField(props: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
