@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { isHex, keccak256, stringToHex, zeroAddress, type Hash, type Hex } from "viem";
 import { useParams, useSearchParams } from "next/navigation";
 import {
@@ -425,22 +426,69 @@ export default function PayRequestPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-xl items-start px-4 py-8 sm:items-center sm:px-6 sm:py-12">
-      <section className="w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 print:border-0 print:shadow-none sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-teal-700">XDCID Pay Link</p>
-        <p className="mt-4 text-sm text-slate-500">Payment requested by</p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">{parsedName.name}</h1>
-        <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white print:border print:border-slate-300 print:bg-white print:text-slate-950 sm:p-6">
-          <p className="text-sm text-slate-300 print:text-slate-500">Amount due</p>
-          <p className="mt-1 text-3xl font-semibold">{amount || "—"} {token}</p>
-          {sourceNetwork && destinationNetwork && (
-            <p className="mt-3 text-sm text-slate-300 print:text-slate-600">
-              {sourceNetwork.name} → {destinationNetwork.name}
-            </p>
-          )}
-          {reference && <p className="mt-4 border-t border-white/15 pt-4 text-sm print:border-slate-200">Reference: {reference}</p>}
-          {memo && <p className="mt-2 text-slate-200 print:text-slate-700">{memo}</p>}
-        </div>
+    <main className="relative mx-auto flex min-h-[calc(100vh-5rem)] max-w-lg items-start px-4 py-10 sm:items-center sm:px-6 sm:py-16">
+      <div className="pointer-events-none absolute inset-x-0 top-20 -z-10 h-96 rounded-full bg-gradient-to-br from-teal-200/60 via-white to-orange-200/60 blur-3xl print:hidden" />
+      <section className="pay-receipt relative w-full border-x border-slate-200 shadow-2xl shadow-slate-400/30 print:border print:shadow-none">
+        <div className="pay-receipt-edge pay-receipt-edge-top" />
+        <div className="pay-receipt-edge pay-receipt-edge-bottom" />
+        <div className="absolute inset-y-3 left-0 w-2 bg-gradient-to-b from-teal-700 via-cyan-400 to-orange-400 print:hidden" />
+        <div className="p-7 pb-10 pl-9 pt-10 sm:p-10 sm:pb-12 sm:pl-12 sm:pt-12">
+        <header>
+          <div className="flex items-center justify-between gap-4">
+            <span className="relative block h-9 w-32 overflow-hidden" aria-label="XDCID">
+              <Image
+                alt=""
+                className="absolute left-[-22px] top-[-25px] h-[86px] w-[160px] max-w-none"
+                height={914}
+                priority
+                src="/XDCID.png"
+                width={1714}
+              />
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.34em] text-slate-600">Pay Link</span>
+          </div>
+          <p className="mt-3 text-[10px] font-medium uppercase leading-5 tracking-[0.3em] text-slate-500">
+            Real identities · Real payments
+          </p>
+          <div className="mt-7 border-t border-dashed border-slate-300 pt-8 text-center">
+            <p className="text-xl font-medium text-slate-700">Pay</p>
+            <h1 className="mt-1 text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl">
+              {amount || "—"} <span className="text-3xl font-medium text-slate-500 sm:text-4xl">{token}</span>
+            </h1>
+            <p className="mt-3 text-lg text-slate-600">to <strong className="font-semibold text-teal-800">{parsedName.name}</strong></p>
+          </div>
+        </header>
+
+        {sourceNetwork && destinationNetwork ? (
+          <div className="mt-7 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-white/70 px-4 py-4 text-center shadow-sm">
+            <div className="min-w-0">
+              <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-teal-800 text-xs font-bold text-white">X</span>
+              <p className="mt-2 truncate text-xs font-semibold text-slate-700">{sourceNetwork.name}</p>
+            </div>
+            <span className="text-2xl font-light text-teal-700" aria-hidden="true">→</span>
+            <div className="min-w-0">
+              <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-xs font-bold text-cyan-300">X</span>
+              <p className="mt-2 truncate text-xs font-semibold text-slate-700">{destinationNetwork.name}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {reference || memo ? (
+          <dl className="mt-6 divide-y divide-dashed divide-slate-200 border-y border-slate-200 text-sm">
+            {reference ? (
+              <div className="flex items-start justify-between gap-4 py-3.5">
+                <dt className="flex items-center gap-2 text-slate-500"><span aria-hidden="true">▤</span> Reference</dt>
+                <dd className="max-w-[62%] break-words text-right font-semibold text-slate-900">{reference}</dd>
+              </div>
+            ) : null}
+            {memo ? (
+              <div className="flex items-start justify-between gap-4 py-3.5">
+                <dt className="flex items-center gap-2 text-slate-500"><span aria-hidden="true">◇</span> Note</dt>
+                <dd className="max-w-[62%] break-words text-right text-slate-700">{memo}</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
 
         {shortLinkLoading && (
           <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -504,6 +552,7 @@ export default function PayRequestPage() {
                     ? "standard"
                     : "payer-choice"
               }
+              presentation="checkout"
             />
           </div>
         )}
@@ -613,9 +662,23 @@ export default function PayRequestPage() {
           </section>
         )}
 
-        <p className="mt-7 text-xs leading-5 text-slate-500 print:hidden">
-          Check the amount, token, and resolved address before signing. The reference and description are not written into the payment transaction.
-        </p>
+        <footer className="mt-7 border-t border-dashed border-slate-300 pt-6 text-center print:hidden">
+          <div className="inline-flex items-center gap-3 text-left">
+            <span className="grid h-10 w-10 place-items-center rounded-full border-2 border-teal-700 text-lg font-bold text-teal-700" aria-hidden="true">✓</span>
+            <span>
+              <strong className="block text-xs text-slate-800">
+                {signedRequest && signatureVerification?.valid && cancellationStatus === "active"
+                  ? "Verified Pay Link"
+                  : "On-chain checkout"}
+              </strong>
+              <span className="text-xs text-slate-500">Secured by XDCID</span>
+            </span>
+          </div>
+          <p className="mt-5 text-[11px] leading-5 text-slate-400">
+            Check the amount, token, and resolved address before signing. Private notes are not written into the payment transaction.
+          </p>
+        </footer>
+        </div>
       </section>
     </main>
   );
