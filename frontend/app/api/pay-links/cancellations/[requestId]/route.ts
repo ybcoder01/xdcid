@@ -28,6 +28,7 @@ import {
   cancelPaymentRequest,
   isPayLinkStoreConfigured,
   isPaymentRequestCancelled,
+  isPaymentRequestPaid,
 } from "../../../../../lib/payLinkStore";
 import { decodePaymentRequest } from "../../../../../lib/paymentRequests";
 
@@ -46,7 +47,16 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   try {
-    return json({ requestId, cancelled: await isPaymentRequestCancelled(requestId) });
+    const [cancelled, paid] = await Promise.all([
+      isPaymentRequestCancelled(requestId),
+      isPaymentRequestPaid(requestId)
+    ]);
+    return json({
+      requestId,
+      cancelled,
+      paid,
+      status: paid ? "paid" : cancelled ? "cancelled" : "active"
+    });
   } catch {
     return storageUnavailable();
   }
@@ -94,6 +104,9 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   try {
+    if (await isPaymentRequestPaid(requestId)) {
+      return json({ error: "This Pay Link has already been paid" }, 409);
+    }
     const paymentRequest = decodePaymentRequest(encodedRequest);
     const expectedRequestId = paymentRequestId(paymentRequest);
     if (expectedRequestId.toLowerCase() !== requestId.toLowerCase()) {

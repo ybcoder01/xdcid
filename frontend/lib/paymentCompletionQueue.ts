@@ -16,6 +16,8 @@ export type PaymentCompletionPayload = {
   reference?: string;
   description?: string;
   paymentChannel: "send" | "pay_link";
+  payLinkId?: string;
+  payLinkRequestId?: Hash;
   completionMethod?: "direct" | "standard" | "automatic" | "recovered";
   xdcidFeeAtomic?: string;
   circleFeeAtomic?: string;
@@ -89,6 +91,8 @@ function rememberCompletion(payload: PaymentCompletionPayload): void {
     sourceTransactionHash: payload.sourceTransactionHash,
     destinationTransactionHash: payload.destinationTransactionHash,
     paymentChannel: payload.paymentChannel,
+    payLinkId: payload.payLinkId,
+    payLinkRequestId: payload.payLinkRequestId,
     completionMethod: payload.completionMethod,
     xdcidFeeAtomic: payload.xdcidFeeAtomic,
     circleFeeAtomic: payload.circleFeeAtomic

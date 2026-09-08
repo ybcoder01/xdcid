@@ -43,6 +43,7 @@ export default function PayLinksPage() {
   const [shortId, setShortId] = useState("");
   const [shortLinkExpiresAt, setShortLinkExpiresAt] = useState("");
   const [shortLinkNotice, setShortLinkNotice] = useState("");
+  const [shortLinkStatus, setShortLinkStatus] = useState<"active" | "paid">("active");
   const [cancellationLink, setCancellationLink] = useState("");
   const [revoking, setRevoking] = useState(false);
   const [revoked, setRevoked] = useState(false);
@@ -132,6 +133,7 @@ export default function PayLinksPage() {
     setShortId("");
     setShortLinkExpiresAt("");
     setShortLinkNotice("");
+    setShortLinkStatus("active");
     setRevoked(false);
     setCopied(false);
     setCreateError("");
@@ -147,6 +149,35 @@ export default function PayLinksPage() {
     payer,
     expiresAt
   ]);
+
+  useEffect(() => {
+    if (!shortId) return;
+    let current = true;
+    const checkStatus = () => fetch(
+      "/api/pay-links/" + encodeURIComponent(shortId),
+      { cache: "no-store" }
+    ).then(async (response) => {
+      const body = await response.json() as {
+        status?: string;
+        paidAt?: string;
+      };
+      if (!current || body.status !== "paid") return;
+      setShortLinkStatus("paid");
+      setShortLinkNotice(
+        "Payment confirmed" +
+        (body.paidAt ? " at " + new Date(body.paidAt).toLocaleString() : "") +
+        ". This Pay Link is now closed and cannot be paid again."
+      );
+    }).catch(() => {
+      // A later poll retries transient status-check failures.
+    });
+    void checkStatus();
+    const interval = window.setInterval(checkStatus, 3_000);
+    return () => {
+      current = false;
+      window.clearInterval(interval);
+    };
+  }, [shortId]);
 
   async function createSignedLink() {
     if (!canCreate || !address) return;
@@ -437,7 +468,9 @@ export default function PayLinksPage() {
         {payLink && (
           <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50 p-5">
             <p className="text-sm font-semibold text-teal-900">
-              {shortId ? "Short signed payment request" : "Portable signed payment request"}
+              {shortLinkStatus === "paid"
+                ? "Paid payment request"
+                : shortId ? "Short signed payment request" : "Portable signed payment request"}
             </p>
             <p className="mt-2 break-all text-sm text-teal-800">{payLink}</p>
             {shortLinkExpiresAt && (
@@ -451,9 +484,11 @@ export default function PayLinksPage() {
               </p>
             )}
             <div className="mt-5 flex flex-wrap gap-3">
-              <button type="button" onClick={copyLink} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white">{copied ? "Copied" : "Copy payment link"}</button>
-              <a className="rounded-xl border border-teal-300 px-5 py-3 font-semibold text-teal-900" href={payLink}>Preview request</a>
-              {!revoked && (
+              <button type="button" disabled={shortLinkStatus === "paid"} onClick={copyLink} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{copied ? "Copied" : "Copy payment link"}</button>
+              {shortLinkStatus === "active" && (
+                <a className="rounded-xl border border-teal-300 px-5 py-3 font-semibold text-teal-900" href={payLink}>Preview request</a>
+              )}
+              {!revoked && shortLinkStatus === "active" && (
                 <button type="button" disabled={revoking || wrongNetwork} onClick={cancelPaymentRequest} className="rounded-xl border border-red-300 px-5 py-3 font-semibold text-red-700 disabled:opacity-50">
                   {revoking ? "Waiting for cancellation..." : "Cancel entire request"}
                 </button>

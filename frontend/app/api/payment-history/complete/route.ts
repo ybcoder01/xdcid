@@ -6,6 +6,7 @@ import {
   saveCompletedPayment
 } from "../../../../lib/paymentHistory";
 import { verifySettlement } from "../../../../lib/paymentSettlementVerification";
+import { settleStoredPayLink } from "../../../../lib/payLinkStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,8 @@ type CompletionBody = {
   reference?: unknown;
   description?: unknown;
   paymentChannel?: unknown;
+  payLinkId?: unknown;
+  payLinkRequestId?: unknown;
   completionMethod?: unknown;
 };
 
@@ -66,9 +69,28 @@ export async function POST(request: Request) {
         ? body.completionMethod === "recovered" ? "recovered" : "automatic"
         : "standard";
     const id = "pm_" + sourceHash.slice(2, 39).toLowerCase();
+    const paymentChannel = body.paymentChannel === "pay_link" ? "pay_link" : "send";
+    if (paymentChannel === "pay_link") {
+      await settleStoredPayLink({
+        payLinkId: typeof body.payLinkId === "string" ? body.payLinkId : undefined,
+        requestId: body.payLinkRequestId as Hash,
+        paymentId: id,
+        name: (body.name as string).trim(),
+        sourceChainId: body.sourceChainId as number,
+        destinationChainId: body.destinationChainId as number,
+        token,
+        amountAtomic: amountAtomic.toString(),
+        payer: verified.payer,
+        sourceTransactionHash: verified.sourceTransactionHash,
+        destinationTransactionHash: verified.destinationTransactionHash,
+        paidAt: new Date()
+      });
+    }
     await saveCompletedPayment({
       id,
-      requestId: sourceHash.toLowerCase(),
+      requestId: paymentChannel === "pay_link"
+        ? (body.payLinkRequestId as string).toLowerCase()
+        : sourceHash.toLowerCase(),
       name: (body.name as string).trim() || recipient,
       creator: recipient,
       payer: verified.payer,
@@ -80,7 +102,7 @@ export async function POST(request: Request) {
       tokenDecimals: token === "USDC" ? USDC_DECIMALS : 18,
       transactionType,
       completionMethod,
-      paymentChannel: body.paymentChannel === "pay_link" ? "pay_link" : "send",
+      paymentChannel,
       xdcidFeeAtomic: forwarded
         ? calculateXdcidConvenienceFee(amountAtomic).toString()
         : undefined,
@@ -149,6 +171,15 @@ function validate(body: CompletionBody): string | undefined {
     body.paymentChannel !== "send" &&
     body.paymentChannel !== "pay_link"
   ) return "Payment channel is invalid";
+  if (body.paymentChannel === "pay_link") {
+    if (typeof body.payLinkRequestId !== "string" || !isHash(body.payLinkRequestId)) {
+      return "Pay Link request ID is required";
+    }
+    if (
+      body.payLinkId !== undefined &&
+      (typeof body.payLinkId !== "string" || !/^rq_[A-Za-z0-9_-]{20}$/.test(body.payLinkId))
+    ) return "Pay Link ID is invalid";
+  }
   if (
     body.completionMethod !== undefined &&
     !["direct", "standard", "automatic", "recovered"].includes(body.completionMethod as string)

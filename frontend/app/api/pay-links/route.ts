@@ -21,6 +21,7 @@ import {
   isPayLinkStoreConfigured
 } from "../../../lib/payLinkStore";
 import { decodePaymentRequest } from "../../../lib/paymentRequests";
+import { paymentRequestId } from "../../../lib/paymentCancellation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
       name: paymentRequest.name,
       encodedRequest,
       signature,
+      requestId: paymentRequestId(paymentRequest),
       requestExpires: paymentRequest.expires
     });
     return json(
