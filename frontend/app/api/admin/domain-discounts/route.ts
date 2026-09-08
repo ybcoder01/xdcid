@@ -1,8 +1,8 @@
 import { getAddress, isHex, type Hex } from "viem";
 import {
-  isSameOrigin,
   requireAdminPermission,
 } from "../../../../lib/adminAuth";
+import { isSameOrigin } from "../../../../lib/adminSecurity";
 import { currentDomainDiscountContext } from "../../../../lib/domainDiscountContext";
 import {
   buildDomainDiscountAuthorization,

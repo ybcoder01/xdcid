@@ -6,12 +6,18 @@ import {
   isAuthorizedAdmin,
   resolveAdminAuthorization,
   hashAdminMessage,
-  isSameOrigin,
   verifyAdminWalletSignature,
 } from "../../../../../lib/adminAuth";
 import { getDatabase, isDatabaseConfigured } from "../../../../../lib/db/client";
 import { adminAuthChallenges } from "../../../../../lib/db/schema";
 import { ensureAdminAuthSchema } from "../../../../../lib/adminAuthStore";
+import {
+  adminRateLimitResponse,
+  adminClientBinding,
+  checkAdminRateLimit,
+  isSameOrigin,
+  recordAdminSecurityEvent,
+} from "../../../../../lib/adminSecurity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +30,28 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "Admin authentication is not configured" },
       { status: 503 },
+    );
+  }
+
+  try {
+    const rateLimit = await checkAdminRateLimit({
+      request,
+      scope: "verify-ip",
+      limit: 30,
+      windowSeconds: 5 * 60,
+    });
+    if (!rateLimit.allowed) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-verification",
+        outcome: "rate-limited",
+      });
+      return adminRateLimitResponse(rateLimit);
+    }
+  } catch {
+    return Response.json(
+      { error: "Admin authentication is temporarily unavailable" },
+      { status: 503, headers: { "cache-control": "no-store" } },
     );
   }
 
@@ -56,6 +84,22 @@ export async function POST(request: Request) {
   try {
     const now = new Date();
     const address = getAddress(body.address);
+    const challengeRateLimit = await checkAdminRateLimit({
+      request,
+      scope: "verify-challenge",
+      limit: 10,
+      windowSeconds: 5 * 60,
+      subject: body.challengeId,
+    });
+    if (!challengeRateLimit.allowed) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-verification",
+        outcome: "rate-limited",
+        address,
+      });
+      return adminRateLimitResponse(challengeRateLimit);
+    }
     await ensureAdminAuthSchema();
     const database = getDatabase();
     const [challenge] = await database
@@ -71,6 +115,12 @@ export async function POST(request: Request) {
       getAddress(challenge.address) !== address ||
       challenge.messageHash !== hashAdminMessage(body.message)
     ) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-verification",
+        outcome: "denied",
+        address,
+      });
       return Response.json(
         { error: "Login challenge is invalid, expired, or already used" },
         { status: 401 },
@@ -78,6 +128,12 @@ export async function POST(request: Request) {
     }
 
     if (!(await isAuthorizedAdmin(address))) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-verification",
+        outcome: "denied",
+        address,
+      });
       return Response.json(
         { error: "Wallet does not have an authorized XDCID administrator role" },
         { status: 403 },
@@ -90,6 +146,12 @@ export async function POST(request: Request) {
       address,
     );
     if (!valid) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-verification",
+        outcome: "denied",
+        address,
+      });
       return Response.json({ error: "Wallet signature is invalid" }, { status: 401 });
     }
 
@@ -106,11 +168,23 @@ export async function POST(request: Request) {
       .returning({ id: adminAuthChallenges.id });
 
     if (consumed.length !== 1) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-verification",
+        outcome: "denied",
+        address,
+      });
       return Response.json({ error: "Login challenge was already used" }, { status: 401 });
     }
 
-    const session = createAdminSession(address);
+    const session = createAdminSession(address, adminClientBinding(request));
     const authorization = await resolveAdminAuthorization(address);
+    await recordAdminSecurityEvent({
+      request,
+      eventType: "admin-verification",
+      outcome: "succeeded",
+      address,
+    });
     return Response.json(
       {
         authenticated: true,
@@ -127,6 +201,12 @@ export async function POST(request: Request) {
       },
     );
   } catch {
+    await recordAdminSecurityEvent({
+      request,
+      eventType: "admin-verification",
+      outcome: "failed",
+      address: typeof body.address === "string" ? body.address : undefined,
+    });
     return Response.json(
       { error: "Unable to verify admin login" },
       { status: 503 },

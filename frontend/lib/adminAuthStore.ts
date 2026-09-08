@@ -41,4 +41,32 @@ async function createSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS admin_auth_challenges_expires_at_idx
     ON admin_auth_challenges (expires_at)
   `;
+  await client`
+    CREATE TABLE IF NOT EXISTS admin_auth_rate_limits (
+      scope varchar(32) NOT NULL,
+      identifier_hash varchar(64) NOT NULL,
+      window_started_at timestamptz NOT NULL,
+      hit_count integer NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (scope, identifier_hash)
+    )
+  `;
+  await client`
+    CREATE INDEX IF NOT EXISTS admin_auth_rate_limits_updated_at_idx
+    ON admin_auth_rate_limits (updated_at)
+  `;
+  await client`
+    CREATE TABLE IF NOT EXISTS admin_security_events (
+      id varchar(32) PRIMARY KEY NOT NULL,
+      event_type varchar(48) NOT NULL,
+      outcome varchar(24) NOT NULL,
+      address_fingerprint varchar(64),
+      client_fingerprint varchar(64) NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await client`
+    CREATE INDEX IF NOT EXISTS admin_security_events_created_at_idx
+    ON admin_security_events (created_at)
+  `;
 }

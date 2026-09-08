@@ -1,7 +1,7 @@
 import {
   clearAdminSessionCookie,
-  isSameOrigin,
 } from "../../../../../lib/adminAuth";
+import { isSameOrigin } from "../../../../../lib/adminSecurity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

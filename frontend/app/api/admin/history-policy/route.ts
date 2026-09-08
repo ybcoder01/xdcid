@@ -1,4 +1,5 @@
 import { requireAdminSession } from "../../../../lib/adminAuth";
+import { isSameOrigin } from "../../../../lib/adminSecurity";
 import {
   getHistoryAccessPolicy,
   updateHistoryAccessPolicy
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  if (!isSameOrigin(request)) return json({ error: "Invalid request origin" }, 403);
   const session = await requireAdminSession(request);
   if (!session) return json({ error: "Admin authentication required" }, 401);
   try {

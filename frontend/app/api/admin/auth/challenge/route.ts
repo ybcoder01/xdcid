@@ -6,11 +6,16 @@ import {
   buildAdminChallenge,
   isAuthorizedAdmin,
   hashAdminMessage,
-  isSameOrigin,
 } from "../../../../../lib/adminAuth";
 import { getDatabase, isDatabaseConfigured } from "../../../../../lib/db/client";
 import { adminAuthChallenges } from "../../../../../lib/db/schema";
 import { ensureAdminAuthSchema } from "../../../../../lib/adminAuthStore";
+import {
+  adminRateLimitResponse,
+  checkAdminRateLimit,
+  isSameOrigin,
+  recordAdminSecurityEvent,
+} from "../../../../../lib/adminSecurity";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +35,28 @@ export async function POST(request: Request) {
     );
   }
 
+  try {
+    const rateLimit = await checkAdminRateLimit({
+      request,
+      scope: "challenge-ip",
+      limit: 15,
+      windowSeconds: 5 * 60,
+    });
+    if (!rateLimit.allowed) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-challenge",
+        outcome: "rate-limited",
+      });
+      return adminRateLimitResponse(rateLimit);
+    }
+  } catch {
+    return Response.json(
+      { error: "Admin authentication is temporarily unavailable" },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
+
   let body: { address?: unknown };
   try {
     body = await request.json();
@@ -42,7 +69,29 @@ export async function POST(request: Request) {
 
   try {
     const address = getAddress(body.address);
+    const walletRateLimit = await checkAdminRateLimit({
+      request,
+      scope: "challenge-wallet",
+      limit: 5,
+      windowSeconds: 5 * 60,
+      subject: address,
+    });
+    if (!walletRateLimit.allowed) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-challenge",
+        outcome: "rate-limited",
+        address,
+      });
+      return adminRateLimitResponse(walletRateLimit);
+    }
     if (!(await isAuthorizedAdmin(address))) {
+      await recordAdminSecurityEvent({
+        request,
+        eventType: "admin-challenge",
+        outcome: "denied",
+        address,
+      });
       return Response.json(
         { error: "Wallet does not have an authorized XDCID administrator role" },
         { status: 403 },
@@ -67,12 +116,24 @@ export async function POST(request: Request) {
       messageHash: hashAdminMessage(message),
       expiresAt,
     });
+    await recordAdminSecurityEvent({
+      request,
+      eventType: "admin-challenge",
+      outcome: "succeeded",
+      address,
+    });
 
     return Response.json(
       { challengeId: id, message, expiresAt: expiresAt.toISOString() },
       { headers: { "cache-control": "no-store" } },
     );
   } catch {
+    await recordAdminSecurityEvent({
+      request,
+      eventType: "admin-challenge",
+      outcome: "failed",
+      address: typeof body.address === "string" ? body.address : undefined,
+    });
     return Response.json(
       { error: "Unable to create an admin login challenge" },
       { status: 503 },

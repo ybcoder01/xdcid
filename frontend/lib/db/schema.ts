@@ -152,6 +152,34 @@ export const adminAuthChallenges = pgTable(
   ]
 );
 
+export const adminAuthRateLimits = pgTable(
+  "admin_auth_rate_limits",
+  {
+    scope: varchar("scope", { length: 32 }).notNull(),
+    identifierHash: varchar("identifier_hash", { length: 64 }).notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true, mode: "date" }).notNull(),
+    hitCount: integer("hit_count").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [
+    primaryKey({ columns: [table.scope, table.identifierHash] }),
+    index("admin_auth_rate_limits_updated_at_idx").on(table.updatedAt)
+  ]
+);
+
+export const adminSecurityEvents = pgTable(
+  "admin_security_events",
+  {
+    id: varchar("id", { length: 32 }).primaryKey(),
+    eventType: varchar("event_type", { length: 48 }).notNull(),
+    outcome: varchar("outcome", { length: 24 }).notNull(),
+    addressFingerprint: varchar("address_fingerprint", { length: 64 }),
+    clientFingerprint: varchar("client_fingerprint", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [index("admin_security_events_created_at_idx").on(table.createdAt)]
+);
+
 
 export const paymentRecords = pgTable(
   "payment_records",
