@@ -78,6 +78,7 @@ type MultichainUsdcExecutorProps = {
     metadata?: PaymentCompletionMetadata
   ) => void | Promise<void>;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
+  presentation?: "default" | "checkout";
 };
 
 const phaseLabels: Record<Phase, string> = {
@@ -102,7 +103,8 @@ export function MultichainUsdcExecutor({
   ready,
   paymentReference = "",
   onCompleted,
-  requestedTransferMode = "payer-choice"
+  requestedTransferMode = "payer-choice",
+  presentation = "default"
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const reportedSettlement = useRef("");
@@ -148,6 +150,7 @@ export function MultichainUsdcExecutor({
   const automaticForwarding =
     forwardingAvailable && transferMode === "forwarded";
   const transferModeLocked = requestedTransferMode !== "payer-choice";
+  const checkout = presentation === "checkout";
 
   useEffect(() => {
     if (phase !== "complete" || !onCompleted || !receiveHash) return;
@@ -591,22 +594,31 @@ export function MultichainUsdcExecutor({
   }
 
   return (
-    <section className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
-        Wallet execution
-      </p>
-      <p className="mt-2 text-sm font-semibold text-slate-950">
-        {phaseLabels[phase]}
-      </p>
-      <p className="mt-1 text-xs text-neutral-600">
-        {crossChain
-          ? "USDC will be burned on " +
-            (source?.name || "the source") +
-            " and minted to the XNS-resolved address on " +
-            (destination?.name || "the destination") +
-            "."
-          : "USDC will be transferred directly to the XNS-resolved address."}
-      </p>
+    <section className={checkout ? "mt-6" : "mt-5 rounded-md border border-teal-200 bg-teal-50 p-4"}>
+      {!checkout ? (
+        <>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
+            Wallet execution
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-950">
+            {phaseLabels[phase]}
+          </p>
+          <p className="mt-1 text-xs text-neutral-600">
+            {crossChain
+              ? "USDC will be burned on " +
+                (source?.name || "the source") +
+                " and minted to the XNS-resolved address on " +
+                (destination?.name || "the destination") +
+                "."
+              : "USDC will be transferred directly to the XNS-resolved address."}
+          </p>
+        </>
+      ) : phase !== "idle" ? (
+        <div className="mb-4 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-teal-600" />
+          {phaseLabels[phase]}
+        </div>
+      ) : null}
 
       {crossChain ? (
         <p className="mt-3 rounded-md border border-black/10 bg-white p-3 text-xs text-neutral-600">
@@ -703,7 +715,11 @@ export function MultichainUsdcExecutor({
 
       {phase === "idle" ? (
         <button
-          className="mt-4 w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+          className={
+            checkout
+              ? "w-full rounded-2xl bg-slate-950 px-5 py-4 text-base font-semibold text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
+              : "mt-4 w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+          }
           disabled={
             !ready ||
             !isConnected ||
@@ -716,8 +732,10 @@ export function MultichainUsdcExecutor({
               ? recoveryReady
                 ? "Resume automatic forwarding"
                 : "Pay fee and forward USDC"
-              : "Review and send USDC"
-            : "Connect wallet to continue"}
+              : crossChain
+                ? "Continue with " + amount + " USDC"
+                : "Pay " + amount + " USDC"
+            : "Connect wallet to pay"}
         </button>
       ) : null}
 
