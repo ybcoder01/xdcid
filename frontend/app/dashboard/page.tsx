@@ -17,6 +17,7 @@ import {
   reverseResolverAbi,
   signedRegistrarEnabled
 } from "../../config/contracts";
+import { PRIMARY_NAME_CHANGED_EVENT } from "../../components/WalletButton";
 
 type OwnedName = {
   name: string;
@@ -168,7 +169,12 @@ export default function Dashboard() {
         primary: record.name === selectedPrimary
       }))
     );
-  }, [primaryReceipt.isSuccess, selectedPrimary]);
+    if (address) {
+      window.dispatchEvent(new CustomEvent(PRIMARY_NAME_CHANGED_EVENT, {
+        detail: { address, name: selectedPrimary }
+      }));
+    }
+  }, [address, primaryReceipt.isSuccess, selectedPrimary]);
 
   const selectedRecord = names.find(
     (record) => record.name === selectedPrimary
