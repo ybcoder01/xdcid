@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import {
@@ -20,6 +21,7 @@ type AdminSessionStatus = {
 const ADMIN_SESSION_CHANGED_EVENT = "xdcid:admin-session-changed";
 
 export function Nav() {
+  const pathname = usePathname();
   const { address } = useAccount();
   const [authorizedSessionAddress, setAuthorizedSessionAddress] =
     useState<string>();
@@ -96,6 +98,8 @@ export function Nav() {
           .some((candidate) => candidate.toLowerCase() === address.toLowerCase())),
     [address, authorizedSessionAddress, policyOwner.data, registryOwner.data],
   );
+
+  if (/^\/pay\/[^/]+/.test(pathname)) return null;
 
   return (
     <header className="sticky top-0 z-20 border-b border-black/10 bg-white/80 backdrop-blur">
