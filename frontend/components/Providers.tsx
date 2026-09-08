@@ -53,19 +53,12 @@ const connectors = walletConnectProjectId
     )
   : [injected()];
 
+const walletChains = PAYMENT_NETWORK_ENV === "testnet"
+  ? [xdcApothem, sepolia, polygonAmoy, arbitrumSepolia, baseSepolia] as const
+  : [xdcMainnet, mainnet, polygon, arbitrum, base] as const;
+
 const config = createConfig({
-  chains: [
-    xdcMainnet,
-    mainnet,
-    polygon,
-    arbitrum,
-    base,
-    sepolia,
-    polygonAmoy,
-    baseSepolia,
-    arbitrumSepolia,
-    xdcApothem
-  ],
+  chains: walletChains,
   connectors,
   multiInjectedProviderDiscovery: false,
   transports: {
