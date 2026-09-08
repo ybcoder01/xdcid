@@ -36,6 +36,8 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../../components/MultichainUsdcExecutor";
+import { TokenLogo, nativeTokenForChain } from "../../../components/TokenLogo";
+import { WalletButton } from "../../../components/WalletButton";
 import { parseXnsName } from "../../../lib/names";
 import { paymentRequestId } from "../../../lib/paymentCancellation";
 import { selectPaymentDestination } from "../../../lib/paymentPreparation";
@@ -426,15 +428,15 @@ export default function PayRequestPage() {
   }
 
   return (
-    <main className="relative mx-auto flex min-h-[calc(100vh-5rem)] max-w-lg items-start px-4 py-10 sm:items-center sm:px-6 sm:py-16">
-      <div className="pointer-events-none absolute inset-x-0 top-20 -z-10 h-96 rounded-full bg-gradient-to-br from-teal-200/60 via-white to-orange-200/60 blur-3xl print:hidden" />
+    <main className="relative mx-auto flex min-h-screen max-w-md items-start px-4 py-5 sm:items-center sm:px-6 sm:py-8">
+      <div className="pointer-events-none absolute inset-x-0 top-14 -z-10 h-72 rounded-full bg-gradient-to-br from-teal-200/60 via-white to-orange-200/60 blur-3xl print:hidden" />
       <section className="pay-receipt relative w-full border-x border-slate-200 shadow-2xl shadow-slate-400/30 print:border print:shadow-none">
         <div className="pay-receipt-edge pay-receipt-edge-top" />
         <div className="pay-receipt-edge pay-receipt-edge-bottom" />
         <div className="absolute inset-y-3 left-0 w-2 bg-gradient-to-b from-teal-700 via-cyan-400 to-orange-400 print:hidden" />
-        <div className="p-7 pb-10 pl-9 pt-10 sm:p-10 sm:pb-12 sm:pl-12 sm:pt-12">
+        <div className="p-5 pb-8 pl-7 pt-7 sm:p-7 sm:pb-9 sm:pl-9 sm:pt-9">
         <header>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="relative block h-9 w-32 overflow-hidden" aria-label="XDCID">
               <Image
                 alt=""
@@ -445,36 +447,36 @@ export default function PayRequestPage() {
                 width={1714}
               />
             </span>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.34em] text-slate-600">Pay Link</span>
+            <div className="print:hidden"><WalletButton /></div>
           </div>
-          <p className="mt-3 text-[10px] font-medium uppercase leading-5 tracking-[0.3em] text-slate-500">
-            Real identities · Real payments
-          </p>
-          <div className="mt-7 border-t border-dashed border-slate-300 pt-8 text-center">
-            <p className="text-xl font-medium text-slate-700">Pay</p>
-            <h1 className="mt-1 text-5xl font-bold tracking-tight text-slate-950 sm:text-6xl">
-              {amount || "—"} <span className="text-3xl font-medium text-slate-500 sm:text-4xl">{token}</span>
-            </h1>
-            <p className="mt-3 text-lg text-slate-600">to <strong className="font-semibold text-teal-800">{parsedName.name}</strong></p>
+          <div className="mt-5 border-t border-dashed border-slate-300 pt-5 text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Pay Link</p>
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <TokenLogo symbol={token} size={44} />
+              <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+                {amount || "—"} <span className="text-2xl font-medium text-slate-500 sm:text-3xl">{token}</span>
+              </h1>
+            </div>
+            <p className="mt-2 text-base text-slate-600">to <strong className="font-semibold text-teal-800">{parsedName.name}</strong></p>
           </div>
         </header>
 
         {sourceNetwork && destinationNetwork ? (
-          <div className="mt-7 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-slate-200 bg-white/70 px-4 py-4 text-center shadow-sm">
+          <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-3 text-center shadow-sm">
             <div className="min-w-0">
-              <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-teal-800 text-xs font-bold text-white">X</span>
-              <p className="mt-2 truncate text-xs font-semibold text-slate-700">{sourceNetwork.name}</p>
+              <span className="flex justify-center"><TokenLogo symbol={nativeTokenForChain(route.sourceChainId)} size={30} /></span>
+              <p className="mt-1 truncate text-[11px] font-semibold text-slate-700">{sourceNetwork.name}</p>
             </div>
-            <span className="text-2xl font-light text-teal-700" aria-hidden="true">→</span>
+            <span className="text-xl font-light text-teal-700" aria-hidden="true">→</span>
             <div className="min-w-0">
-              <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-xs font-bold text-cyan-300">X</span>
-              <p className="mt-2 truncate text-xs font-semibold text-slate-700">{destinationNetwork.name}</p>
+              <span className="flex justify-center"><TokenLogo symbol={nativeTokenForChain(route.destinationChainId)} size={30} /></span>
+              <p className="mt-1 truncate text-[11px] font-semibold text-slate-700">{destinationNetwork.name}</p>
             </div>
           </div>
         ) : null}
 
         {reference || memo ? (
-          <dl className="mt-6 divide-y divide-dashed divide-slate-200 border-y border-slate-200 text-sm">
+          <dl className="mt-4 divide-y divide-dashed divide-slate-200 border-y border-slate-200 text-sm">
             {reference ? (
               <div className="flex items-start justify-between gap-4 py-3.5">
                 <dt className="flex items-center gap-2 text-slate-500"><span aria-hidden="true">▤</span> Reference</dt>
@@ -491,52 +493,52 @@ export default function PayRequestPage() {
         ) : null}
 
         {shortLinkLoading && (
-          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
             Loading and verifying the short Pay Link...
           </p>
         )}
         {legacyRequest && !shortId && (
-          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 print:hidden">
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 print:hidden">
             Unsigned legacy request: verify the amount and recipient independently before paying.
           </p>
         )}
         {requestError && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{requestError}</p>
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{requestError}</p>
         )}
         {wrongNetwork && (
-          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             This XDC payment requires XDC Network (chain ID 50). Switch networks in your wallet.
           </p>
         )}
-        {signatureError && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{signatureError}</p>}
+        {signatureError && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{signatureError}</p>}
         {signedRequest && cancellationStatus === "checking" && (
-          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
             Checking whether this payment request is still active...
           </p>
         )}
         {signedRequest && cancellationStatus === "cancelled" && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
             This payment request was cancelled by its creator. Payment is disabled.
           </p>
         )}
         {signedRequest && cancellationStatus === "paid" && (
-          <p className="mt-6 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm font-semibold text-teal-800">
+          <p className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-800">
             This Pay Link has been paid and is no longer available for another payment.
           </p>
         )}
         {signedRequest && cancellationStatus === "unavailable" && (
-          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             Cancellation status cannot be verified right now. Payment is temporarily disabled for safety.
           </p>
         )}
         {signedRequest && signedRequest.payer !== zeroAddress && isConnected && !payerAllowed && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             This request is designated for a different payer wallet.
           </p>
         )}
 
         {token === "USDC" && paymentAddress && (
-          <div className="mt-5 print:hidden">
+          <div className="print:hidden">
             <MultichainUsdcExecutor
               sourceChainId={route.sourceChainId}
               destinationChainId={route.destinationChainId}
@@ -557,14 +559,14 @@ export default function PayRequestPage() {
           </div>
         )}
 
-        {token === "XDC" && (
+        {token === "XDC" && isConnected && (
           <button type="button" disabled={!canPay} onClick={pay} className="mt-5 w-full rounded-xl bg-slate-950 px-5 py-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 print:hidden">
-            {pending ? "Waiting for confirmation..." : isConnected ? "Review " + (amount || "") + " XDC in wallet" : "Connect wallet to pay"}
+            {pending ? "Waiting for confirmation..." : "Review " + (amount || "") + " XDC in wallet"}
           </button>
         )}
 
         {!requestError && (
-          <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 print:hidden">
+          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 print:hidden">
             <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">
               Payment details
             </summary>
@@ -662,7 +664,7 @@ export default function PayRequestPage() {
           </section>
         )}
 
-        <footer className="mt-7 border-t border-dashed border-slate-300 pt-6 text-center print:hidden">
+        <footer className="mt-5 border-t border-dashed border-slate-300 pt-4 text-center print:hidden">
           <div className="inline-flex items-center gap-3 text-left">
             <span className="grid h-10 w-10 place-items-center rounded-full border-2 border-teal-700 text-lg font-bold text-teal-700" aria-hidden="true">✓</span>
             <span>
@@ -674,7 +676,7 @@ export default function PayRequestPage() {
               <span className="text-xs text-slate-500">Secured by XDCID</span>
             </span>
           </div>
-          <p className="mt-5 text-[11px] leading-5 text-slate-400">
+          <p className="mt-3 text-[11px] leading-4 text-slate-400">
             Check the amount, token, and resolved address before signing. Private notes are not written into the payment transaction.
           </p>
         </footer>
