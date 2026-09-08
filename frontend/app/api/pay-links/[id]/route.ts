@@ -22,9 +22,20 @@ export async function GET(_request: Request, context: RouteContext) {
     if (record.status === "expired") {
       return json({ error: "This Pay Link has expired" }, 410);
     }
+    if (record.status === "paid") {
+      return json({
+        id: record.id,
+        name: record.name,
+        status: "paid",
+        paidAt: record.paidAt,
+        paymentId: record.paymentId,
+        error: "This Pay Link has already been paid"
+      }, 410);
+    }
     return json({
       id: record.id,
       name: record.name,
+      status: "active",
       request: record.encodedRequest,
       signature: record.signature,
       expiresAt: record.expiresAt

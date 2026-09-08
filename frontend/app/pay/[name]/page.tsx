@@ -137,7 +137,7 @@ export default function PayRequestPage() {
     [signedRequest],
   );
   const [cancellationStatus, setCancellationStatus] = useState<
-    "not-applicable" | "checking" | "active" | "cancelled" | "unavailable"
+    "not-applicable" | "checking" | "active" | "cancelled" | "paid" | "unavailable"
   >("not-applicable");
   const legacyRequest = !encodedRequest && !encodedSignature;
   const awaitingShortLink = Boolean(shortId && !shortPayload && !shortLinkError);
@@ -171,28 +171,36 @@ export default function PayRequestPage() {
     }
 
     setCancellationStatus("checking");
-    fetch(
-      "/api/pay-links/cancellations/" + encodeURIComponent(signedRequestId),
-      { cache: "no-store" },
-    )
+    const checkStatus = () => fetch(
+        "/api/pay-links/cancellations/" + encodeURIComponent(signedRequestId),
+        { cache: "no-store" },
+      )
       .then(async (response) => {
         const body = await response.json() as {
           cancelled?: boolean;
+          paid?: boolean;
           error?: string;
         };
-        if (!response.ok || typeof body.cancelled !== "boolean") {
+        if (
+          !response.ok ||
+          typeof body.cancelled !== "boolean" ||
+          typeof body.paid !== "boolean"
+        ) {
           throw new Error(body.error || "Cancellation status could not be verified.");
         }
         if (current) {
-          setCancellationStatus(body.cancelled ? "cancelled" : "active");
+          setCancellationStatus(body.paid ? "paid" : body.cancelled ? "cancelled" : "active");
         }
       })
       .catch(() => {
         if (current) setCancellationStatus("unavailable");
       });
+    void checkStatus();
+    const interval = window.setInterval(checkStatus, 3_000);
 
     return () => {
       current = false;
+      window.clearInterval(interval);
     };
   }, [signedRequestId]);
 
@@ -377,11 +385,14 @@ export default function PayRequestPage() {
           reference: reference.trim(),
           description: memo.trim(),
           paymentChannel: "pay_link",
+          payLinkId: shortId || undefined,
+          payLinkRequestId: signedRequestId,
           completionMethod: metadata?.completionMethod ||
             (route.sourceChainId === route.destinationChainId ? "direct" : "standard"),
           xdcidFeeAtomic: metadata?.xdcidFeeAtomic,
           circleFeeAtomic: metadata?.circleFeeAtomic
       });
+      setCancellationStatus("paid");
       setHistoryStatus("Payment added to private history.");
     } catch (cause) {
       recordingHashes.current.delete(key);
@@ -398,6 +409,8 @@ export default function PayRequestPage() {
     reference,
     route.destinationChainId,
     route.sourceChainId,
+    shortId,
+    signedRequestId,
     token,
     value
   ]);
@@ -451,6 +464,11 @@ export default function PayRequestPage() {
         {signedRequest && cancellationStatus === "cancelled" && (
           <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
             This payment request was cancelled by its creator. Payment is disabled.
+          </p>
+        )}
+        {signedRequest && cancellationStatus === "paid" && (
+          <p className="mt-6 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm font-semibold text-teal-800">
+            This Pay Link has been paid and is no longer available for another payment.
           </p>
         )}
         {signedRequest && cancellationStatus === "unavailable" && (
