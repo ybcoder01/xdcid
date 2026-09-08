@@ -736,7 +736,7 @@ export function MultichainUsdcExecutor({
         <div>
           {phase === "ready" && !automaticForwarding ? (
             <button
-              className="h-12 w-full rounded-xl bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800"
+              className="h-12 w-full rounded-2xl bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800"
               onClick={mintOnDestination}
             >
               Continue on {destination?.name || "destination"}
@@ -744,7 +744,7 @@ export function MultichainUsdcExecutor({
           ) : (
             <button
               className={
-                "h-12 w-full rounded-xl px-5 text-sm font-semibold text-white " +
+                "h-12 w-full rounded-2xl px-5 text-sm font-semibold text-white " +
                 (phase === "complete" ? "bg-teal-700" : "bg-slate-950 hover:bg-teal-800")
               }
               disabled={
@@ -765,8 +765,8 @@ export function MultichainUsdcExecutor({
                   : automaticForwarding
                     ? recoveryReady
                       ? "Resume automatic forwarding"
-                      : "Pay and forward " + amount + " USDC"
-                    : "Pay " + amount + " USDC"}
+                      : "Pay automatically"
+                    : "Pay"}
             </button>
           )}
           <p

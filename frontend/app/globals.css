@@ -41,30 +41,3 @@ textarea:focus {
     linear-gradient(90deg, rgba(15, 118, 110, 0.025), transparent 35%, rgba(249, 115, 88, 0.025));
   background-size: 5px 5px, 100% 100%;
 }
-
-.pay-receipt-edge {
-  position: absolute;
-  right: 0;
-  left: 0;
-  z-index: 2;
-  height: 13px;
-  pointer-events: none;
-  background-size: 20px 13px;
-  background-repeat: repeat-x;
-}
-
-.pay-receipt-edge-top {
-  top: -1px;
-  background-image: radial-gradient(circle at 10px 0, transparent 7px, #fffdf8 7.5px);
-}
-
-.pay-receipt-edge-bottom {
-  bottom: -1px;
-  background-image: radial-gradient(circle at 10px 13px, transparent 7px, #fffdf8 7.5px);
-}
-
-@media print {
-  .pay-receipt-edge {
-    display: none;
-  }
-}

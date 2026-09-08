@@ -31,7 +31,7 @@ function CompactWalletButton() {
           return (
             <button
               type="button"
-              className="h-10 whitespace-nowrap rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+              className="h-11 w-[8.75rem] whitespace-nowrap rounded-2xl bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm disabled:opacity-50 sm:w-44"
               disabled={!ready}
               onClick={openConnectModal}
             >
@@ -42,10 +42,10 @@ function CompactWalletButton() {
 
         const iconUrl = typeof chain.iconUrl === "string" ? chain.iconUrl : undefined;
         return (
-          <div className="inline-flex h-10 max-w-full flex-nowrap items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="inline-flex h-11 w-[8.75rem] flex-nowrap items-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:w-44">
             <button
               type="button"
-              className="grid h-10 w-10 shrink-0 place-items-center hover:bg-slate-50"
+              className="grid h-11 w-11 shrink-0 place-items-center hover:bg-slate-50"
               onClick={openChainModal}
               aria-label={"Change network from " + chain.name}
             >
@@ -62,7 +62,7 @@ function CompactWalletButton() {
             <span className="h-5 w-px shrink-0 bg-slate-200" aria-hidden="true" />
             <button
               type="button"
-              className="min-w-0 max-w-[9rem] truncate px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+              className="h-11 min-w-0 flex-1 truncate px-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 sm:px-3"
               onClick={openAccountModal}
               title={account.address}
             >
