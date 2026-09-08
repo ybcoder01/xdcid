@@ -54,7 +54,14 @@ export function TokenLogo({
 }
 
 export function nativeTokenForChain(chainId: number): Exclude<TokenLogoSymbol, "USDC"> {
-  if (chainId === 137) return "POL";
-  if (chainId === 1 || chainId === 8453 || chainId === 42161) return "ETH";
+  if (chainId === 137 || chainId === 80002) return "POL";
+  if (
+    chainId === 1 ||
+    chainId === 11155111 ||
+    chainId === 8453 ||
+    chainId === 84532 ||
+    chainId === 42161 ||
+    chainId === 421614
+  ) return "ETH";
   return "XDC";
 }
