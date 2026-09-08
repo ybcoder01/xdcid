@@ -594,7 +594,7 @@ export function MultichainUsdcExecutor({
   }
 
   return (
-    <section className={checkout ? "mt-6" : "mt-5 rounded-md border border-teal-200 bg-teal-50 p-4"}>
+    <section className={checkout ? "mt-4" : "mt-5 rounded-md border border-teal-200 bg-teal-50 p-4"}>
       {!checkout ? (
         <>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
@@ -713,7 +713,7 @@ export function MultichainUsdcExecutor({
         </div>
       ) : null}
 
-      {phase === "idle" ? (
+      {phase === "idle" && (!checkout || isConnected) ? (
         <button
           className={
             checkout
