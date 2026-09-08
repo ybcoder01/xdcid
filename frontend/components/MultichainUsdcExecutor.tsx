@@ -594,7 +594,7 @@ export function MultichainUsdcExecutor({
   }
 
   return (
-    <section className={checkout ? "mt-4" : "mt-5 rounded-md border border-teal-200 bg-teal-50 p-4"}>
+    <section className={checkout ? "mt-3" : "mt-5 rounded-md border border-teal-200 bg-teal-50 p-4"}>
       {!checkout ? (
         <>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
@@ -613,50 +613,45 @@ export function MultichainUsdcExecutor({
               : "USDC will be transferred directly to the XNS-resolved address."}
           </p>
         </>
-      ) : phase !== "idle" ? (
-        <div className="mb-4 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
-          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-teal-600" />
-          {phaseLabels[phase]}
-        </div>
       ) : null}
 
-      {crossChain ? (
+      {crossChain && !checkout ? (
         <p className="mt-3 rounded-md border border-black/10 bg-white p-3 text-xs text-neutral-600">
           {automaticForwardingMessage(routeCapability.automaticForwarding)}
         </p>
       ) : null}
 
       {forwardingAvailable && !transferModeLocked ? (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className={checkout ? "mb-2 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" : "mt-4 grid gap-2 sm:grid-cols-2"}>
           <button
             type="button"
             className={
-              "rounded-md border p-3 text-left text-sm " +
+              (checkout ? "rounded-lg px-2 py-2 text-center text-xs " : "rounded-md border p-3 text-left text-sm ") +
               (transferMode === "standard"
-                ? "border-teal-700 bg-white text-slate-950"
-                : "border-black/10 bg-white/60 text-neutral-600")
+                ? "border-teal-700 bg-white font-semibold text-slate-950 shadow-sm"
+                : "border-black/10 bg-transparent text-neutral-600")
             }
             onClick={() => setTransferMode("standard")}
             disabled={working}
           >
-            <span className="block font-semibold">Standard transfer</span>
-            <span className="mt-1 block text-xs">
+            <span className="block font-semibold">Standard</span>
+            <span className={checkout ? "sr-only" : "mt-1 block text-xs"}>
               No XDCID fee. You switch networks and submit the destination mint.
             </span>
           </button>
           <button
             type="button"
             className={
-              "rounded-md border p-3 text-left text-sm " +
+              (checkout ? "rounded-lg px-2 py-2 text-center text-xs " : "rounded-md border p-3 text-left text-sm ") +
               (transferMode === "forwarded"
-                ? "border-teal-700 bg-white text-slate-950"
-                : "border-black/10 bg-white/60 text-neutral-600")
+                ? "border-teal-700 bg-white font-semibold text-slate-950 shadow-sm"
+                : "border-black/10 bg-transparent text-neutral-600")
             }
             onClick={() => setTransferMode("forwarded")}
             disabled={working}
           >
-            <span className="block font-semibold">Automatic forwarding</span>
-            <span className="mt-1 block text-xs">
+            <span className="block font-semibold">Automatic</span>
+            <span className={checkout ? "sr-only" : "mt-1 block text-xs"}>
               Circle submits the destination mint; no destination gas is needed.
             </span>
           </button>
@@ -667,7 +662,7 @@ export function MultichainUsdcExecutor({
         </p>
       ) : null}
 
-      {automaticForwarding ? (
+      {automaticForwarding && !checkout ? (
         <ForwardingCostBreakdown
           amount={amount}
           quote={forwardingQuote}
@@ -676,7 +671,7 @@ export function MultichainUsdcExecutor({
       ) : null}
 
       {automaticForwarding ? (
-        <div className="mt-3 rounded-md border border-teal-200 bg-white p-3">
+        <div className={checkout ? "hidden" : "mt-3 rounded-md border border-teal-200 bg-white p-3"}>
           <p className="text-xs font-semibold text-slate-950">
             Fee paid but the burn did not complete?
           </p>
@@ -713,12 +708,10 @@ export function MultichainUsdcExecutor({
         </div>
       ) : null}
 
-      {phase === "idle" && (!checkout || isConnected) ? (
+      {!checkout && phase === "idle" ? (
         <button
           className={
-            checkout
-              ? "w-full rounded-2xl bg-slate-950 px-5 py-4 text-base font-semibold text-white shadow-lg shadow-slate-950/10 transition hover:-translate-y-0.5 hover:bg-teal-800 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40"
-              : "mt-4 w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+            "mt-4 w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           }
           disabled={
             !ready ||
@@ -739,7 +732,64 @@ export function MultichainUsdcExecutor({
         </button>
       ) : null}
 
-      {working ? (
+      {checkout ? (
+        <div>
+          {phase === "ready" && !automaticForwarding ? (
+            <button
+              className="h-12 w-full rounded-xl bg-teal-700 px-5 text-sm font-semibold text-white hover:bg-teal-800"
+              onClick={mintOnDestination}
+            >
+              Continue on {destination?.name || "destination"}
+            </button>
+          ) : (
+            <button
+              className={
+                "h-12 w-full rounded-xl px-5 text-sm font-semibold text-white " +
+                (phase === "complete" ? "bg-teal-700" : "bg-slate-950 hover:bg-teal-800")
+              }
+              disabled={
+                working ||
+                phase === "complete" ||
+                !ready ||
+                !isConnected ||
+                (automaticForwarding && quoteStatus !== "ready")
+              }
+              onClick={startTransfer}
+            >
+              {working
+                ? receiveHash
+                  ? "Payment submitted · Confirming"
+                  : phaseLabels[phase]
+                : phase === "complete"
+                  ? "✓ Payment confirmed"
+                  : automaticForwarding
+                    ? recoveryReady
+                      ? "Resume automatic forwarding"
+                      : "Pay and forward " + amount + " USDC"
+                    : "Pay " + amount + " USDC"}
+            </button>
+          )}
+          <p
+            className={
+              "min-h-5 pt-1.5 text-center text-xs " +
+              (error ? "text-red-600" : phase === "complete" ? "text-teal-700" : "text-slate-500")
+            }
+            aria-live="polite"
+          >
+            {error
+              ? checkoutError(error)
+              : phase === "complete"
+                ? "Confirmed on " + (destination?.name || "the destination network")
+                : working && (receiveHash || burnHash || feeHash)
+                  ? "Wallet approved this step. Waiting for network confirmation."
+                : working
+                  ? "Approve or reject the request in your wallet."
+                  : " "}
+          </p>
+        </div>
+      ) : null}
+
+      {working && !checkout ? (
         <div className="mt-4 rounded-md border border-teal-200 bg-white p-3 text-xs text-neutral-600">
           {automaticForwarding
             ? "Keep this tab open. The XDCID fee and Circle burn use separate wallet confirmations."
@@ -747,7 +797,7 @@ export function MultichainUsdcExecutor({
         </div>
       ) : null}
 
-      {phase === "ready" && !automaticForwarding ? (
+      {phase === "ready" && !automaticForwarding && !checkout ? (
         <button
           className="mt-4 w-full rounded-md bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800"
           onClick={mintOnDestination}
@@ -756,21 +806,21 @@ export function MultichainUsdcExecutor({
         </button>
       ) : null}
 
-      {feeHash ? (
+      {feeHash && !checkout ? (
         <TransactionLink
           label="XDCID fee"
           hash={feeHash}
           explorerUrl={source?.explorerUrl}
         />
       ) : null}
-      {burnHash ? (
+      {burnHash && !checkout ? (
         <TransactionLink
           label="Burn"
           hash={burnHash}
           explorerUrl={source?.explorerUrl}
         />
       ) : null}
-      {receiveHash ? (
+      {receiveHash && !checkout ? (
         <TransactionLink
           label={crossChain ? "Mint" : "Transfer"}
           hash={receiveHash}
@@ -778,15 +828,15 @@ export function MultichainUsdcExecutor({
         />
       ) : null}
 
-      {phase === "complete" && paymentReference ? (
+      {phase === "complete" && paymentReference && !checkout ? (
         <p className="mt-3 rounded-md border border-teal-200 bg-white p-3 text-xs text-neutral-700">
           Private reference: <strong>{paymentReference}</strong>
         </p>
       ) : null}
 
-      {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+      {error && !checkout ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
 
-      {crossChain && phase !== "complete" ? (
+      {crossChain && phase !== "complete" && !checkout ? (
         <div className="mt-5 border-t border-teal-200 pt-4">
           <p className="text-sm font-semibold text-slate-950">
             Resume after closing or reloading
@@ -1091,6 +1141,21 @@ function delay(milliseconds: number): Promise<void> {
 }
 
 function readError(cause: unknown): string {
-  if (cause instanceof Error && cause.message) return cause.message;
+  if (cause instanceof Error && cause.message) {
+    const message = cause.message.toLowerCase();
+    if (
+      message.includes("rejected") ||
+      message.includes("denied") ||
+      message.includes("user cancelled")
+    ) {
+      return "Payment rejected in your wallet. No funds were sent.";
+    }
+    return cause.message;
+  }
   return "The transfer could not continue";
+}
+
+function checkoutError(error: string): string {
+  if (error.length <= 96) return error;
+  return "Payment could not continue. Review your wallet and try again.";
 }
