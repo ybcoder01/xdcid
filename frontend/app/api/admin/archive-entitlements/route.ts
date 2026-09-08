@@ -1,5 +1,6 @@
 import { isAddress } from "viem";
 import { requireAdminPermission } from "../../../../lib/adminAuth";
+import { isSameOrigin } from "../../../../lib/adminSecurity";
 import {
   grantWalletArchiveEntitlement,
   revokeArchiveEntitlement
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return json({ error: "Invalid request origin" }, 403);
   const session = await requireAdminPermission(request, "archive:manage");
   if (!session) return json({ error: "Admin authentication required" }, 401);
   try {
@@ -44,6 +46,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!isSameOrigin(request)) return json({ error: "Invalid request origin" }, 403);
   const session = await requireAdminPermission(request, "archive:manage");
   if (!session) return json({ error: "Admin authentication required" }, 401);
   try {
