@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 type TokenLogoSymbol = "USDC" | "XDC" | "ETH" | "POL";
 
 export function TokenLogo({
@@ -48,12 +50,7 @@ export function TokenLogo({
     );
   }
 
-  return (
-    <svg {...shared} viewBox="0 0 40 40">
-      <circle cx="20" cy="20" r="20" fill="#183E72" />
-      <path d="m10 12 6.4 8L10 28h5.5l6.3-8-6.3-8H10Zm14.5 0-6.3 8 6.3 8H30l-6.4-8 6.4-8h-5.5Z" fill="white" />
-    </svg>
-  );
+  return <Image alt={label} className="shrink-0" height={size} src="/xdc-primary-icon.png" width={size} />;
 }
 
 export function nativeTokenForChain(chainId: number): Exclude<TokenLogoSymbol, "USDC"> {

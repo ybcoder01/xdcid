@@ -11,7 +11,7 @@ export const supportedMultichainNetworks = SUPPORTED_MULTICHAIN_NETWORKS;
 export const xdcMainnet = {
   id: 50,
   name: "XDC Network",
-  iconUrl: "/xdc-network-icon.svg",
+  iconUrl: "/xdc-primary-icon.png",
   iconBackground: "#183E72",
   nativeCurrency: { name: "XDC", symbol: "XDC", decimals: 18 },
   rpcUrls: {

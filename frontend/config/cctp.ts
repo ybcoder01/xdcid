@@ -6,7 +6,7 @@ export { arbitrumSepolia };
 export const xdcApothem = defineChain({
   id: 51,
   name: "XDC Apothem",
-  iconUrl: "/xdc-network-icon.svg",
+  iconUrl: "/xdc-primary-icon.png",
   iconBackground: "#183E72",
   nativeCurrency: { name: "Test XDC", symbol: "TXDC", decimals: 18 },
   rpcUrls: {
