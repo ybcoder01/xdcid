@@ -448,50 +448,31 @@ export default function PayRequestPage() {
     }
   }
 
-  if (!isConnected) {
-    return (
-      <main className="mx-auto flex min-h-[100svh] max-w-sm items-center px-4 py-4">
-        <section className="w-full rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-xl shadow-slate-300/30">
-          <XdcidMark className="mx-auto" />
-          <p className="mt-5 text-xs font-semibold uppercase tracking-[0.24em] text-teal-700">Secure payment</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">Connect to continue</h1>
-          <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
-            Connect your wallet to review the amount, network, and verified recipient before paying.
-          </p>
-          <div className="mt-5 flex justify-center"><WalletButton compact /></div>
-          <p className="mt-5 text-xs text-slate-400">No transaction is sent when you connect.</p>
-        </section>
-      </main>
-    );
-  }
-
   return (
-    <main className="relative mx-auto flex min-h-[100svh] max-w-[420px] items-start px-3 py-2 sm:items-center sm:px-4 sm:py-3">
+    <main className="relative mx-auto flex min-h-[100svh] w-full max-w-[520px] items-start px-3 py-3 sm:items-center sm:px-5 sm:py-5">
       <div className="pointer-events-none absolute inset-x-0 top-12 -z-10 h-56 rounded-full bg-gradient-to-br from-teal-200/60 via-white to-orange-200/60 blur-3xl print:hidden" />
-      <section className="pay-receipt relative w-full border-x border-slate-200 shadow-2xl shadow-slate-400/30 print:border print:shadow-none">
-        <div className="pay-receipt-edge pay-receipt-edge-top" />
-        <div className="pay-receipt-edge pay-receipt-edge-bottom" />
-        <div className="absolute inset-y-3 left-0 w-2 bg-gradient-to-b from-teal-700 via-cyan-400 to-orange-400 print:hidden" />
-        <div className="p-4 pb-5 pl-6 pt-5 sm:p-5 sm:pl-7">
+      <section className="pay-receipt relative w-full overflow-hidden rounded-[1.75rem] border border-slate-200 shadow-2xl shadow-slate-400/30 print:shadow-none">
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-teal-700 via-cyan-400 to-orange-400 print:hidden" />
+        <div className="p-4 pb-4 pt-5 sm:p-6 sm:pb-5 sm:pt-7">
         <header>
           <div className="flex flex-nowrap items-center justify-between gap-2">
             <XdcidMark />
-            <div className="min-w-0 shrink print:hidden"><WalletButton compact /></div>
+            <div className="shrink-0 print:hidden"><WalletButton compact /></div>
           </div>
-          <div className="mt-3 border-t border-dashed border-slate-300 pt-3 text-center">
+          <div className="mt-4 border-t border-dashed border-slate-300 pt-4 text-center sm:mt-5 sm:pt-5">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Pay</p>
-            <div className="mt-1.5 flex items-center justify-center gap-2.5">
-              <TokenLogo symbol={token} size={36} />
-              <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-                {amount || "—"} <span className="text-xl font-medium text-slate-500 sm:text-2xl">{token}</span>
+            <div className="mt-2 flex items-center justify-center gap-2.5 sm:gap-3">
+              <TokenLogo symbol={token} size={40} />
+              <h1 className="text-[2.35rem] font-bold leading-none tracking-tight text-slate-950 tabular-nums sm:text-5xl">
+                <AmountValue amount={amount} /> <span className="text-xl font-medium text-slate-500 sm:text-2xl">{token}</span>
               </h1>
             </div>
-            <p className="mt-1 text-sm text-slate-600">to <strong className="font-semibold text-teal-800">{parsedName.name}</strong></p>
+            <p className="mt-2 text-sm text-slate-600 sm:text-base">to <strong className="font-semibold text-teal-800">{parsedName.name}</strong></p>
           </div>
         </header>
 
         {sourceNetwork && destinationNetwork ? (
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 shadow-sm">
+          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-2xl border border-slate-200 bg-white/75 px-3 py-2.5 shadow-sm sm:px-4">
             <div className="flex min-w-0 items-center justify-center gap-2">
               <TokenLogo symbol={nativeTokenForChain(route.sourceChainId)} size={24} />
               <p className="truncate text-[11px] font-semibold text-slate-700">{sourceNetwork.name}</p>
@@ -570,7 +551,13 @@ export default function PayRequestPage() {
           </p>
         )}
 
-        {token === "USDC" && paymentAddress && !wrongNetwork && (
+        {!isConnected && !requestError && (
+          <p className="mt-3 text-center text-xs font-medium text-slate-500">
+            Connect your wallet above to enable payment.
+          </p>
+        )}
+
+        {token === "USDC" && isConnected && paymentAddress && !wrongNetwork && (
           <div className="print:hidden">
             <MultichainUsdcExecutor
               key={address + ":" + route.sourceChainId + ":" + route.destinationChainId}
@@ -593,7 +580,7 @@ export default function PayRequestPage() {
           </div>
         )}
 
-        {token === "XDC" && !wrongNetwork && (
+        {token === "XDC" && isConnected && !wrongNetwork && (
           <div className="mt-3 print:hidden">
             <button type="button" disabled={!canPay || Boolean(transactionHash) || receipt.isSuccess} onClick={pay} className="h-12 w-full rounded-xl bg-slate-950 px-5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
               {nativePayment.isPending
@@ -602,7 +589,7 @@ export default function PayRequestPage() {
                   ? "Payment submitted · Confirming"
                   : receipt.isSuccess
                     ? "✓ Payment confirmed"
-                    : "Pay " + (amount || "") + " XDC"}
+                    : "Pay"}
             </button>
             <p className={"min-h-5 pt-1.5 text-center text-xs " + (paymentError ? "text-red-600" : receipt.isSuccess ? "text-teal-700" : "text-slate-500")} aria-live="polite">
               {paymentError
@@ -714,7 +701,7 @@ export default function PayRequestPage() {
 
 function XdcidMark({ className = "" }: { className?: string }) {
   return (
-    <span className={"relative block h-8 w-28 shrink-0 overflow-hidden " + className} aria-label="XDCID">
+    <span className={"relative block h-9 w-28 shrink-0 overflow-hidden sm:w-32 " + className} aria-label="XDCID">
       <Image
         alt=""
         className="absolute left-[-19px] top-[-22px] h-[76px] w-[142px] max-w-none"
@@ -723,6 +710,22 @@ function XdcidMark({ className = "" }: { className?: string }) {
         src="/XDCID.png"
         width={1714}
       />
+    </span>
+  );
+}
+
+function AmountValue({ amount }: { amount: string }) {
+  if (!amount) return <>—</>;
+  const [whole, fraction] = amount.trim().split(".");
+  return (
+    <span aria-label={amount}>
+      <span aria-hidden="true">{whole || "0"}</span>
+      {fraction !== undefined ? (
+        <>
+          <span aria-hidden="true" className="inline-block min-w-[0.25em] text-center">.</span>
+          <span aria-hidden="true">{fraction}</span>
+        </>
+      ) : null}
     </span>
   );
 }
