@@ -38,6 +38,7 @@ import {
   SIGNED_QUOTE_DOMAIN_VERSION,
   signedQuoteTypes,
 } from "../../../../../lib/signedRegistrarQuotes";
+import { domainRegistrationFlag } from "../../../../../flags";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -220,6 +221,16 @@ export async function POST(request: Request) {
     enforceRateLimit(request);
     const body = await readBody(request);
     const quoteRequest = normalizeSignedQuoteRequest(body);
+    if (
+      quoteRequest.product === "registration" &&
+      !(await domainRegistrationFlag(request))
+    ) {
+      throw new ApiServiceError(
+        "FEATURE_DISABLED",
+        "New .xdc registrations are temporarily unavailable",
+        503,
+      );
+    }
     const registrar = requiredAddress(
       "XNS_SIGNED_QUOTE_REGISTRAR",
       process.env.XNS_SIGNED_QUOTE_REGISTRAR,

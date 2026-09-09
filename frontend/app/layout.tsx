@@ -3,6 +3,7 @@ import "@rainbow-me/rainbowkit/styles.css";
 import type { Metadata } from "next";
 import { Nav } from "../components/Nav";
 import { Providers } from "../components/Providers";
+import { evaluateFeatureFlags } from "../flags";
 
 const title = "XDCID";
 const description = ".XDC names for identities, profiles, and payments on XDC";
@@ -38,11 +39,17 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const featureFlags = await evaluateFeatureFlags();
+
   return (
     <html lang="en">
       <body>
-        <Providers>
+        <Providers featureFlags={featureFlags}>
           <Nav />
           {children}
         </Providers>
