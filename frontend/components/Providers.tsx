@@ -26,10 +26,23 @@ import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
 import { getRpcTransport } from "../config/rpcTransports";
 import { PAYMENT_NETWORK_ENV } from "../config/paymentNetworks";
+import { BASE_NETWORK_ICON_URL } from "./BaseNetworkLogo";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 const defaultWalletChain =
   PAYMENT_NETWORK_ENV === "testnet" ? xdcApothem : xdcMainnet;
+
+const baseMainnet = {
+  ...base,
+  iconUrl: BASE_NETWORK_ICON_URL,
+  iconBackground: "#FFFFFF"
+} as const;
+
+const baseTestnet = {
+  ...baseSepolia,
+  iconUrl: BASE_NETWORK_ICON_URL,
+  iconBackground: "#FFFFFF"
+} as const;
 
 const connectors = walletConnectProjectId
   ? connectorsForWallets(
@@ -54,8 +67,8 @@ const connectors = walletConnectProjectId
   : [injected()];
 
 const walletChains = PAYMENT_NETWORK_ENV === "testnet"
-  ? [xdcApothem, sepolia, polygonAmoy, arbitrumSepolia, baseSepolia] as const
-  : [xdcMainnet, mainnet, polygon, arbitrum, base] as const;
+  ? [xdcApothem, sepolia, polygonAmoy, arbitrumSepolia, baseTestnet] as const
+  : [xdcMainnet, mainnet, polygon, arbitrum, baseMainnet] as const;
 
 const config = createConfig({
   chains: walletChains,
