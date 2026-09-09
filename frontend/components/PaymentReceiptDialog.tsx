@@ -48,30 +48,30 @@ export function PaymentReceiptDialog({
       <section
         aria-labelledby="payment-receipt-title"
         aria-modal="true"
-        className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/20 bg-slate-950 text-white shadow-2xl"
+        className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-teal-100 bg-white text-slate-950 shadow-2xl shadow-teal-950/20"
         role="dialog"
       >
-        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-teal-400 via-cyan-300 to-orange-300" />
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#0b6670] via-[#19a6a6] to-[#65d4e1]" />
         <button
           autoFocus
           type="button"
           aria-label="Close receipt"
-          className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-lg text-white hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-lg text-slate-600 hover:bg-teal-50 hover:text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600"
           onClick={onClose}
         >
           ×
         </button>
         <div className="px-6 pb-6 pt-9 sm:px-8">
           <div className="text-center">
-            <span className="mx-auto grid h-14 w-14 place-items-center rounded-full border-4 border-teal-300/20 bg-teal-400 text-2xl font-bold text-slate-950 shadow-lg">✓</span>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.25em] text-teal-300">Payment completed</p>
+            <span className="mx-auto grid h-14 w-14 place-items-center rounded-full border-4 border-teal-100 bg-teal-700 text-2xl font-bold text-white shadow-lg shadow-teal-900/15">✓</span>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.25em] text-teal-700">Payment completed</p>
             <h2 id="payment-receipt-title" className="mt-2 text-4xl font-bold tracking-tight tabular-nums">
-              {amount} <span className="text-xl font-medium text-slate-400">{record.token}</span>
+              {amount} <span className="text-xl font-medium text-slate-500">{record.token}</span>
             </h2>
-            <p className="mt-2 text-sm text-slate-400">{paymentKind(record)} · {displayRoute(record)}</p>
+            <p className="mt-2 text-sm text-slate-500">{paymentKind(record)} · {displayRoute(record)}</p>
           </div>
 
-          <dl className="mt-6 divide-y divide-white/10 border-y border-white/10 text-sm">
+          <dl className="mt-6 divide-y divide-slate-200 border-y border-slate-200 text-sm">
             <ReceiptLine label="Date" value={date.toLocaleString()} />
             <ReceiptLine label="Direction" value={record.direction === "incoming" ? "Incoming" : "Outgoing"} />
             <ReceiptLine label="From" value={shortAddress(record.payer)} title={record.payer} mono />
@@ -85,10 +85,10 @@ export function PaymentReceiptDialog({
           </dl>
 
           <div className="mt-5 grid gap-2 sm:grid-cols-2">
-            <a className="rounded-xl border border-white/20 px-4 py-3 text-center text-sm font-semibold hover:bg-white/10" href={explorerLink(record.sourceChainId, record.sourceTransactionHash)} target="_blank" rel="noreferrer">
+            <a className="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800" href={explorerLink(record.sourceChainId, record.sourceTransactionHash)} target="_blank" rel="noreferrer">
               View transaction
             </a>
-            <button type="button" onClick={() => downloadPaymentReceiptPdf(record)} className="rounded-xl bg-teal-400 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-300">
+            <button type="button" onClick={() => downloadPaymentReceiptPdf(record)} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-800">
               Download PDF receipt
             </button>
           </div>
@@ -105,7 +105,7 @@ function ReceiptLine({ label, value, title, mono = false }: { label: string; val
   return (
     <div className="flex items-start justify-between gap-5 py-2.5">
       <dt className="shrink-0 text-slate-500">{label}</dt>
-      <dd className={(mono ? "font-mono " : "") + "min-w-0 break-words text-right font-medium text-slate-100"} title={title}>{value}</dd>
+      <dd className={(mono ? "font-mono " : "") + "min-w-0 break-words text-right font-medium text-slate-900"} title={title}>{value}</dd>
     </div>
   );
 }

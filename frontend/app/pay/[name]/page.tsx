@@ -450,9 +450,9 @@ export default function PayRequestPage() {
 
   return (
     <main className="relative mx-auto flex min-h-[100svh] w-full max-w-[520px] items-start px-3 py-3 sm:items-center sm:px-5 sm:py-5">
-      <div className="pointer-events-none absolute inset-x-0 top-12 -z-10 h-56 rounded-full bg-gradient-to-br from-teal-200/60 via-white to-orange-200/60 blur-3xl print:hidden" />
-      <section className="pay-receipt relative w-full overflow-hidden rounded-[1.75rem] border border-slate-200 shadow-2xl shadow-slate-400/30 print:shadow-none">
-        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-teal-700 via-cyan-400 to-orange-400 print:hidden" />
+      <div className="pointer-events-none absolute inset-x-0 top-12 -z-10 h-56 rounded-full bg-gradient-to-br from-teal-200/70 via-white to-cyan-100/70 blur-3xl print:hidden" />
+      <section className="pay-receipt relative w-full overflow-hidden rounded-[1.75rem] border border-teal-100 shadow-2xl shadow-teal-950/10 print:shadow-none">
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#0b6670] via-[#19a6a6] to-[#65d4e1] print:hidden" />
         <div className="p-4 pb-4 pt-5 sm:p-6 sm:pb-5 sm:pt-7">
         <header>
           <div className="flex flex-nowrap items-center justify-between gap-2">
