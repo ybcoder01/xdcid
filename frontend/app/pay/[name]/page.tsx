@@ -39,6 +39,7 @@ import {
 } from "../../../components/MultichainUsdcExecutor";
 import { TokenLogo, nativeTokenForChain } from "../../../components/TokenLogo";
 import { WalletButton } from "../../../components/WalletButton";
+import { PaymentReceiptDialog } from "../../../components/PaymentReceiptDialog";
 import { parseXnsName } from "../../../lib/names";
 import { paymentRequestId } from "../../../lib/paymentCancellation";
 import { selectPaymentDestination } from "../../../lib/paymentPreparation";
@@ -46,6 +47,7 @@ import {
   installPaymentCompletionRetry,
   submitPaymentCompletion
 } from "../../../lib/paymentCompletionQueue";
+import type { PaymentReceiptRecord } from "../../../lib/paymentReceipt";
 import { useRegistryStatus } from "../../../lib/useRegistryStatus";
 import {
   inspectAccountDeployment,
@@ -226,6 +228,7 @@ export default function PayRequestPage() {
   const [signatureError, setSignatureError] = useState("");
   const [accountDeployment, setAccountDeployment] = useState<AccountDeploymentState>("unknown");
   const [historyStatus, setHistoryStatus] = useState("");
+  const [completedReceipt, setCompletedReceipt] = useState<PaymentReceiptRecord | null>(null);
   const [networkSwitchError, setNetworkSwitchError] = useState("");
   const recordingHashes = useRef(new Set<string>());
 
@@ -241,6 +244,7 @@ export default function PayRequestPage() {
     if (previousPayer.current && previousPayer.current !== address) {
       resetNativePayment();
       setHistoryStatus("");
+      setCompletedReceipt(null);
       recordingHashes.current.clear();
     }
     previousPayer.current = address;
@@ -388,7 +392,7 @@ export default function PayRequestPage() {
     recordingHashes.current.add(key);
     setHistoryStatus("Verifying payment for private history...");
     try {
-      await submitPaymentCompletion({
+      const completed = await submitPaymentCompletion({
           name: parsedName.name,
           sourceChainId: route.sourceChainId,
           destinationChainId: route.destinationChainId,
@@ -409,6 +413,7 @@ export default function PayRequestPage() {
       });
       setCancellationStatus("paid");
       setHistoryStatus("Payment added to private history.");
+      setCompletedReceipt(completed);
     } catch (cause) {
       recordingHashes.current.delete(key);
       setHistoryStatus(
@@ -695,6 +700,7 @@ export default function PayRequestPage() {
         </footer>
         </div>
       </section>
+      <PaymentReceiptDialog record={completedReceipt} onClose={() => setCompletedReceipt(null)} />
     </main>
   );
 }
