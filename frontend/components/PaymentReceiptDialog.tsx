@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect } from "react";
 import {
   completionLabel,
@@ -61,9 +62,21 @@ export function PaymentReceiptDialog({
         >
           ×
         </button>
-        <div className="px-6 pb-6 pt-9 sm:px-8">
+        <div className="px-6 pb-6 pt-8 sm:px-8">
+          <div aria-label="XDCID" className="flex justify-center">
+            <span aria-hidden="true" className="relative block h-9 w-32 overflow-hidden">
+              <Image
+                alt=""
+                className="absolute left-[-26px] top-[-29px] h-[95px] w-[178px] max-w-none"
+                height={914}
+                priority
+                src="/XDCID.png"
+                width={1714}
+              />
+            </span>
+          </div>
           <div className="text-center">
-            <span className="mx-auto grid h-14 w-14 place-items-center rounded-full border-4 border-teal-100 bg-teal-700 text-2xl font-bold text-white shadow-lg shadow-teal-900/15">✓</span>
+            <span className="mx-auto mt-5 grid h-14 w-14 place-items-center rounded-full border-4 border-teal-100 bg-teal-700 text-2xl font-bold text-white shadow-lg shadow-teal-900/15">✓</span>
             <p className="mt-4 text-xs font-semibold uppercase tracking-[0.25em] text-teal-700">Payment completed</p>
             <h2 id="payment-receipt-title" className="mt-2 text-4xl font-bold tracking-tight tabular-nums">
               {amount} <span className="text-xl font-medium text-slate-500">{record.token}</span>
