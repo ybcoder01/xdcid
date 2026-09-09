@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   completionLabel,
+  destinationReceiptName,
   displayRoute,
   downloadPaymentReceiptPdf,
   explorerLink,
@@ -22,6 +23,12 @@ export function PaymentReceiptDialog({
   record: PaymentReceiptRecord | null;
   onClose: () => void;
 }) {
+  const [resolvedNames, setResolvedNames] = useState<{
+    payerName?: string;
+    destinationName?: string;
+  }>({});
+  const [namesLoading, setNamesLoading] = useState(false);
+
   useEffect(() => {
     if (!record) return;
     function onKeyDown(event: KeyboardEvent) {
@@ -36,7 +43,50 @@ export function PaymentReceiptDialog({
     };
   }, [onClose, record]);
 
+  useEffect(() => {
+    if (!record) {
+      setResolvedNames({});
+      setNamesLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const recordedDestinationName = destinationReceiptName(record);
+    setResolvedNames({
+      ...(record.payerName ? { payerName: record.payerName } : {}),
+      ...(recordedDestinationName ? { destinationName: recordedDestinationName } : {})
+    });
+    setNamesLoading(true);
+    Promise.all([
+      record.payerName
+        ? Promise.resolve(record.payerName)
+        : fetchVerifiedPrimaryName(record.payer, controller.signal),
+      recordedDestinationName
+        ? Promise.resolve(recordedDestinationName)
+        : fetchVerifiedPrimaryName(record.creator, controller.signal)
+    ]).then(([payerName, destinationName]) => {
+      setResolvedNames({
+        ...(payerName ? { payerName } : {}),
+        ...(destinationName ? { destinationName } : {})
+      });
+    }).catch((error) => {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setResolvedNames({
+          ...(record.payerName ? { payerName: record.payerName } : {}),
+          ...(recordedDestinationName ? { destinationName: recordedDestinationName } : {})
+        });
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setNamesLoading(false);
+    });
+    return () => controller.abort();
+  }, [record]);
+
   if (!record) return null;
+  const receiptRecord = {
+    ...record,
+    payerName: resolvedNames.payerName ?? null,
+    destinationName: resolvedNames.destinationName ?? null
+  };
   const amount = formatAtomic(record.amountAtomic, record.tokenDecimals);
   const date = new Date(record.completedAt);
 
@@ -88,7 +138,9 @@ export function PaymentReceiptDialog({
             <ReceiptLine label="Date" value={date.toLocaleString()} />
             <ReceiptLine label="Direction" value={record.direction === "incoming" ? "Incoming" : "Outgoing"} />
             <ReceiptLine label="From" value={shortAddress(record.payer)} title={record.payer} mono />
+            {resolvedNames.payerName ? <ReceiptLine label="Payer ID" value={resolvedNames.payerName} /> : null}
             <ReceiptLine label="To" value={shortAddress(record.creator)} title={record.creator} mono />
+            {resolvedNames.destinationName ? <ReceiptLine label="Destination ID" value={resolvedNames.destinationName} /> : null}
             <ReceiptLine label="Route" value={networkName(record.sourceChainId) + " → " + networkName(record.destinationChainId)} />
             <ReceiptLine label="Method" value={completionLabel(record.completionMethod)} />
             {record.privateContext?.reference ? <ReceiptLine label="Reference" value={record.privateContext.reference} /> : null}
@@ -101,8 +153,8 @@ export function PaymentReceiptDialog({
             <a className="rounded-xl border border-slate-300 px-4 py-3 text-center text-sm font-semibold text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800" href={explorerLink(record.sourceChainId, record.sourceTransactionHash)} target="_blank" rel="noreferrer">
               View transaction
             </a>
-            <button type="button" onClick={() => downloadPaymentReceiptPdf(record)} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-800">
-              Download PDF receipt
+            <button type="button" disabled={namesLoading} onClick={() => downloadPaymentReceiptPdf(receiptRecord)} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60">
+              {namesLoading ? "Preparing receipt..." : "Download PDF receipt"}
             </button>
           </div>
           <p className="mt-4 text-center text-[11px] leading-5 text-slate-500">
@@ -112,6 +164,18 @@ export function PaymentReceiptDialog({
       </section>
     </div>
   );
+}
+
+async function fetchVerifiedPrimaryName(address: string, signal: AbortSignal): Promise<string | undefined> {
+  const response = await fetch("/api/v1/reverse/" + encodeURIComponent(address), {
+    cache: "no-store",
+    signal
+  });
+  if (!response.ok) return undefined;
+  const body = await response.json() as {
+    data?: { name?: string | null; verified?: boolean };
+  };
+  return body.data?.verified && body.data.name ? body.data.name : undefined;
 }
 
 function ReceiptLine({ label, value, title, mono = false }: { label: string; value: string; title?: string; mono?: boolean }) {

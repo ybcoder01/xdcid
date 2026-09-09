@@ -17,6 +17,8 @@ export type PaymentReceiptRecord = {
   sourceTransactionHash: string;
   destinationTransactionHash: string | null;
   completedAt: string;
+  payerName?: string | null;
+  destinationName?: string | null;
   privateContext?: {
     reference?: string;
     description?: string;
@@ -51,6 +53,11 @@ export function networkName(chainId: number): string {
 
 export function displayRoute(record: PaymentReceiptRecord): string {
   return /^0x[a-fA-F0-9]{40}$/.test(record.name) ? "Direct wallet" : record.name;
+}
+
+export function destinationReceiptName(record: PaymentReceiptRecord): string | undefined {
+  if (record.destinationName) return record.destinationName;
+  return /^0x[a-fA-F0-9]{40}$/.test(record.name) ? undefined : record.name;
 }
 
 export function paymentKind(record: PaymentReceiptRecord): string {
@@ -110,6 +117,7 @@ export function downloadPaymentReceiptPdf(record: PaymentReceiptRecord): void {
 
 export function createPaymentReceiptPdf(record: PaymentReceiptRecord): Uint8Array {
   const completed = new Date(record.completedAt);
+  const destinationName = destinationReceiptName(record);
   const lines: Array<[string, string]> = [
     ["Payment ID", record.id],
     ["Status", "Completed"],
@@ -117,7 +125,9 @@ export function createPaymentReceiptPdf(record: PaymentReceiptRecord): Uint8Arra
     ["Payment type", paymentKind(record) + " / " + completionLabel(record.completionMethod)],
     ["Direction", record.direction === "incoming" ? "Incoming" : "Outgoing"],
     ["From", record.payer],
+    ...(record.payerName ? [["Payer ID", record.payerName] as [string, string]] : []),
     ["To", record.creator],
+    ...(destinationName ? [["Destination ID", destinationName] as [string, string]] : []),
     ["Route", networkName(record.sourceChainId) + " to " + networkName(record.destinationChainId)],
     ["XDCID fee", formatFee(record.xdcidFeeAtomic)],
     ["Circle fee", formatFee(record.circleFeeAtomic)],
@@ -139,10 +149,10 @@ export function createPaymentReceiptPdf(record: PaymentReceiptRecord): Uint8Arra
   for (const [label, rawValue] of lines) {
     const values = wrapPdfText(rawValue, 72);
     content.push(`0.39 0.46 0.57 rg BT /F1 9 Tf 54 ${y} Td (${pdfText(label.toUpperCase())}) Tj ET`);
-    content.push(`0.05 0.09 0.16 rg BT /F1 10 Tf 170 ${y} Td (${pdfText(values[0])}) Tj ET`);
+    content.push(`0.05 0.09 0.16 rg BT /F1 10 Tf 200 ${y} Td (${pdfText(values[0])}) Tj ET`);
     for (let index = 1; index < values.length; index += 1) {
       y -= 13;
-      content.push(`0.05 0.09 0.16 rg BT /F1 10 Tf 170 ${y} Td (${pdfText(values[index])}) Tj ET`);
+      content.push(`0.05 0.09 0.16 rg BT /F1 10 Tf 200 ${y} Td (${pdfText(values[index])}) Tj ET`);
     }
     y -= 27;
   }
