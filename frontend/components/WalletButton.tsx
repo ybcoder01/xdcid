@@ -3,6 +3,7 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
+import { BaseNetworkLogo } from "./BaseNetworkLogo";
 import { TokenLogo, nativeTokenForChain } from "./TokenLogo";
 
 export const PRIMARY_NAME_CHANGED_EVENT = "xdcid:primary-name-changed";
@@ -40,6 +41,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         }
 
         const iconUrl = typeof chain.iconUrl === "string" ? chain.iconUrl : undefined;
+        const isBaseNetwork = chain.id === 8453 || chain.id === 84532;
         const displayName = primaryName || account.displayName;
         return (
           <div className={(compact ? "h-11 rounded-2xl " : "h-12 rounded-2xl ") + width + " inline-flex flex-nowrap items-center overflow-hidden border border-slate-200 bg-white shadow-sm"}>
@@ -49,7 +51,9 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
               onClick={openChainModal}
               aria-label={"Change network from " + chain.name}
             >
-              {iconUrl ? (
+              {isBaseNetwork ? (
+                <BaseNetworkLogo size={24} />
+              ) : iconUrl ? (
                 <span aria-hidden="true" className="block h-6 w-6 rounded-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${iconUrl})` }} />
               ) : (
                 <TokenLogo symbol={nativeTokenForChain(chain.id)} size={24} />

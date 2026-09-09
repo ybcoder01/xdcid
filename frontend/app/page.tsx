@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEther, keccak256, stringToHex } from "viem";
+import { BaseNetworkLogo } from "../components/BaseNetworkLogo";
 import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
 import {
@@ -25,7 +26,6 @@ type Network = {
   logoClass: string;
   logoSrc?: string;
   logoImageClass?: string;
-  logoColor?: string;
 };
 
 const networks: Network[] = [
@@ -42,8 +42,7 @@ const networks: Network[] = [
   },
   {
     name: "Base",
-    logoClass: "bg-white",
-    logoColor: "#0052FF"
+    logoClass: "bg-white"
   },
   {
     name: "Arbitrum",
@@ -199,8 +198,8 @@ export default function Home() {
                   <div key={network.name} className="relative flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <span aria-hidden="true" className="absolute -left-5 top-1/2 hidden h-px w-5 bg-[#65d4e1] md:block" />
                     <span className={"grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl " + network.logoClass}>
-                      {network.logoColor ? (
-                        <span aria-hidden="true" className="h-7 w-7" style={{ backgroundColor: network.logoColor }} />
+                      {network.name === "Base" ? (
+                        <BaseNetworkLogo />
                       ) : (
                         <img
                           alt=""
