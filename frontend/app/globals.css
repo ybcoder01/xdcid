@@ -35,9 +35,8 @@ textarea:focus {
 }
 
 .pay-receipt {
-  background-color: #fffdf8;
-  background-image:
-    radial-gradient(rgba(15, 23, 42, 0.025) 0.7px, transparent 0.7px),
-    linear-gradient(90deg, rgba(15, 118, 110, 0.025), transparent 35%, rgba(249, 115, 88, 0.025));
-  background-size: 5px 5px, 100% 100%;
+  background:
+    linear-gradient(140deg, rgba(217, 242, 240, 0.62), transparent 34%),
+    linear-gradient(315deg, rgba(101, 212, 225, 0.14), transparent 38%),
+    rgba(255, 255, 255, 0.98);
 }
