@@ -26,7 +26,9 @@ import { arbitrumSepolia, xdcApothem } from "../config/cctp";
 import { xdcMainnet } from "../config/contracts";
 import { getRpcTransport } from "../config/rpcTransports";
 import { PAYMENT_NETWORK_ENV } from "../config/paymentNetworks";
+import type { FeatureFlagValues } from "../flags";
 import { BASE_NETWORK_ICON_URL } from "./BaseNetworkLogo";
+import { FeatureFlagsProvider } from "./FeatureFlagsProvider";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 const defaultWalletChain =
@@ -91,14 +93,22 @@ const config = createConfig({
 
 const queryClient = new QueryClient();
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  featureFlags,
+}: {
+  children: React.ReactNode;
+  featureFlags: FeatureFlagValues;
+}) {
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider initialChain={defaultWalletChain}>
-          {children}
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <FeatureFlagsProvider value={featureFlags}>
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <RainbowKitProvider initialChain={defaultWalletChain}>
+            {children}
+          </RainbowKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </FeatureFlagsProvider>
   );
 }

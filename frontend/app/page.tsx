@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEther, keccak256, stringToHex } from "viem";
 import { BaseNetworkLogo } from "../components/BaseNetworkLogo";
+import { useFeatureFlags } from "../components/FeatureFlagsProvider";
 import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
 import {
@@ -65,6 +66,7 @@ const capabilities = [
 
 export default function Home() {
   const [input, setInput] = useState("");
+  const featureFlags = useFeatureFlags();
   const { address, isConnected } = useAccount();
   const connectedChainId = useChainId();
   const apothemMode = process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV === "testnet";
@@ -79,6 +81,7 @@ export default function Home() {
     ? apothemRegistration.pricingPolicy
     : addresses.pricingPolicy;
   const registrationSignedEnabled = apothemMode || signedRegistrarEnabled;
+  const domainRegistrationEnabled = featureFlags.domainRegistration;
   const registrationContractsConfigured = apothemMode
     ? registrationRegistrar !== zeroAddress && registrationPricingPolicy !== zeroAddress
     : mainnetContractsConfigured;
@@ -132,7 +135,7 @@ export default function Home() {
     availability.data === true && registry.status?.registrationAllowed === true;
 
   function claim() {
-    if (registrationSignedEnabled || !isValid || !registrationContractsConfigured || !address || !price.data || !registrationAllowed) return;
+    if (!domainRegistrationEnabled || registrationSignedEnabled || !isValid || !registrationContractsConfigured || !address || !price.data || !registrationAllowed) return;
     writeContract(
       {
         address: registrationRegistrar,
@@ -287,7 +290,9 @@ export default function Home() {
                               : registry.status?.state === "collision"
                                 ? "Registered in both registries; review required"
                                 : registrationAllowed
-                                  ? "Available to claim"
+                                  ? domainRegistrationEnabled
+                                    ? "Available to claim"
+                                    : "Registration is temporarily unavailable"
                                   : registry.status?.state === "xdcid"
                                     ? "Already registered with XDCID"
                                     : "Unavailable"}
@@ -295,7 +300,11 @@ export default function Home() {
                   </p>
                 </div>
                 {isValid && registrationAllowed ? (
-                  registrationSignedEnabled ? (
+                  !domainRegistrationEnabled ? (
+                    <button className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900" disabled>
+                      Registration paused
+                    </button>
+                  ) : registrationSignedEnabled ? (
                     <SignedRegistrationControls
                       name={name}
                       enabled={

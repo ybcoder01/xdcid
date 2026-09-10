@@ -30,6 +30,7 @@ import {
   SUBDOMAIN_QUOTE_DOMAIN_VERSION,
   subdomainQuoteTypes,
 } from "../../../../../lib/subdomainQuotes";
+import { subdomainRegistrationFlag } from "../../../../../flags";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -71,6 +72,16 @@ export async function POST(request: Request) {
   try {
     enforceRateLimit(request);
     const input = normalizeSubdomainQuoteRequest(await readBody(request));
+    if (
+      input.action === "registration" &&
+      !(await subdomainRegistrationFlag(request))
+    ) {
+      throw new ApiServiceError(
+        "FEATURE_DISABLED",
+        "New subdomain registrations are temporarily unavailable",
+        503,
+      );
+    }
     const registrar = requiredAddress(
       "XNS_SUBDOMAIN_REGISTRAR",
       process.env.XNS_SUBDOMAIN_REGISTRAR,

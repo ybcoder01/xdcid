@@ -31,6 +31,7 @@ import {
   subdomainRegistrarAbi,
   subdomainRegistrationEnabled,
 } from "../config/contracts";
+import { useFeatureFlags } from "./FeatureFlagsProvider";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 import { parseXnsName } from "../lib/names";
 
@@ -66,6 +67,7 @@ type QuoteResponse = {
 };
 
 export function SubdomainRegistration() {
+  const featureFlags = useFeatureFlags();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
@@ -130,6 +132,7 @@ export function SubdomainRegistration() {
   const action: Action = available.data === false && hasActiveOwner
     ? "renewal"
     : "registration";
+  const registrationFeatureEnabled = featureFlags.subdomainRegistration;
 
   useEffect(() => {
     if (action === "renewal" && owner.data && owner.data !== zeroAddress) {
@@ -140,6 +143,7 @@ export function SubdomainRegistration() {
   async function submit() {
     if (
       !subdomainRegistrationEnabled ||
+      (action === "registration" && !registrationFeatureEnabled) ||
       !isConnected ||
       !address ||
       !client ||
@@ -303,12 +307,24 @@ export function SubdomainRegistration() {
           !isAddress(ownerInput) ||
           !availabilityReady ||
           busy ||
+          (action === "registration" && !registrationFeatureEnabled) ||
           (available.data === false && !hasActiveOwner)
         }
         onClick={submit}
       >
-        {busy ? "Processing…" : action === "registration" ? "Get quote and register subdomain" : "Get quote and renew subdomain"}
+        {busy
+          ? "Processing…"
+          : action === "registration" && !registrationFeatureEnabled
+            ? "Subdomain registration paused"
+            : action === "registration"
+              ? "Get quote and register subdomain"
+              : "Get quote and renew subdomain"}
       </button>
+      {action === "registration" && !registrationFeatureEnabled ? (
+        <p className="mt-3 text-sm text-amber-700">
+          New subdomain registrations are temporarily unavailable. Existing subdomains can still be renewed.
+        </p>
+      ) : null}
       {status ? <p className="mt-4 break-all text-sm text-slate-600">{status}</p> : null}
       <p className="mt-4 text-xs text-slate-500">
         Registration must be submitted by the parent owner or an authorized parent operator. A subdomain cannot outlive its parent name.
