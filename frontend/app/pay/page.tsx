@@ -49,6 +49,9 @@ export default function PayLinksPage() {
   const [revoked, setRevoked] = useState(false);
   const [createError, setCreateError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrError, setQrError] = useState("");
+  const [showQr, setShowQr] = useState(false);
 
   const { address, isConnected, chainId } = useAccount();
   const signRequest = useSignTypedData();
@@ -137,6 +140,9 @@ export default function PayLinksPage() {
     setRevoked(false);
     setCopied(false);
     setCreateError("");
+    setQrDataUrl("");
+    setQrError("");
+    setShowQr(false);
   }, [
     recipient,
     amount,
@@ -256,6 +262,43 @@ export default function PayLinksPage() {
     if (!payLink) return;
     await navigator.clipboard.writeText(payLink);
     setCopied(true);
+  }
+
+  async function openQrCode() {
+    if (!payLink || shortLinkStatus === "paid" || revoked) return;
+    setQrError("");
+    setShowQr(true);
+    if (qrDataUrl) return;
+
+    try {
+      const { default: QRCode } = await import("qrcode");
+      const dataUrl = await QRCode.toDataURL(payLink, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 640,
+        color: { dark: "#020617", light: "#ffffff" },
+      });
+      setQrDataUrl(dataUrl);
+    } catch {
+      setQrError("The QR code could not be generated. You can still copy the payment link.");
+    }
+  }
+
+  async function sharePayLink() {
+    if (!payLink) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "XDCID Pay Link",
+          text: "Pay this verified XDCID request.",
+          url: payLink,
+        });
+      } catch {
+        // Closing the native share sheet is not an error state.
+      }
+      return;
+    }
+    await copyLink();
   }
 
   async function loadCancellationPayload(link: string): Promise<{
@@ -485,6 +528,11 @@ export default function PayLinksPage() {
             )}
             <div className="mt-5 flex flex-wrap gap-3">
               <button type="button" disabled={shortLinkStatus === "paid"} onClick={copyLink} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{copied ? "Copied" : "Copy payment link"}</button>
+              {shortLinkStatus === "active" && !revoked && (
+                <button type="button" onClick={openQrCode} className="rounded-xl border border-teal-300 px-5 py-3 font-semibold text-teal-900">
+                  Show QR code
+                </button>
+              )}
               {shortLinkStatus === "active" && (
                 <a className="rounded-xl border border-teal-300 px-5 py-3 font-semibold text-teal-900" href={payLink}>Preview request</a>
               )}
@@ -534,6 +582,67 @@ export default function PayLinksPage() {
       <p className="mt-6 text-sm text-slate-500">
         The signature proves who issued the request but cannot move funds. Requests remain public to anyone who receives their link.
       </p>
+
+      {showQr && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-5"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowQr(false);
+          }}
+        >
+          <section
+            aria-labelledby="pay-link-qr-title"
+            aria-modal="true"
+            className="w-full max-w-sm rounded-3xl border border-teal-200 bg-white p-6 shadow-2xl"
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-teal-700">XDCID Pay Link</p>
+                <h2 id="pay-link-qr-title" className="mt-1 text-2xl font-bold text-slate-950">Scan to pay</h2>
+              </div>
+              <button
+                aria-label="Close QR code"
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                onClick={() => setShowQr(false)}
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              This code opens the same signed payment link. Check the amount and recipient before approving in your wallet.
+            </p>
+            <div className="mt-5 flex aspect-square items-center justify-center rounded-2xl bg-slate-50 p-5">
+              {qrDataUrl ? (
+                <img alt="QR code for this XDCID Pay Link" className="h-full w-full max-h-64 max-w-64" src={qrDataUrl} />
+              ) : qrError ? (
+                <p className="text-center text-sm text-red-700">{qrError}</p>
+              ) : (
+                <p className="text-sm text-slate-500">Generating QR code…</p>
+              )}
+            </div>
+            <p className="mt-4 truncate rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600">{payLink}</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={sharePayLink} className="rounded-xl border border-slate-300 px-4 py-3 font-semibold text-slate-800">
+                Share or copy
+              </button>
+              {qrDataUrl ? (
+                <a
+                  className="rounded-xl bg-slate-950 px-4 py-3 text-center font-semibold text-white"
+                  download={`xdcid-pay-link${shortId ? `-${shortId}` : ""}.png`}
+                  href={qrDataUrl}
+                >
+                  Download QR
+                </a>
+              ) : (
+                <button type="button" disabled className="rounded-xl bg-slate-200 px-4 py-3 font-semibold text-slate-500">Download QR</button>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
