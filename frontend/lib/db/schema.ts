@@ -186,42 +186,6 @@ export const adminSecurityEvents = pgTable(
   (table) => [index("admin_security_events_created_at_idx").on(table.createdAt)]
 );
 
-export const privateVaultChallenges = pgTable(
-  "private_vault_challenges",
-  {
-    id: varchar("id", { length: 32 }).primaryKey(),
-    address: varchar("address", { length: 42 }).notNull(),
-    messageHash: varchar("message_hash", { length: 64 }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
-    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" })
-  },
-  (table) => [index("private_vault_challenges_expires_idx").on(table.expiresAt)]
-);
-
-export const exchangeAddressBookEntries = pgTable(
-  "exchange_address_book_entries",
-  {
-    id: varchar("id", { length: 40 }).primaryKey(),
-    ownerFingerprint: varchar("owner_fingerprint", { length: 64 }).notNull(),
-    encryptedPayload: text("encrypted_payload").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
-      .defaultNow()
-      .notNull()
-  },
-  (table) => [
-    index("exchange_address_book_owner_idx").on(
-      table.ownerFingerprint,
-      table.updatedAt
-    )
-  ]
-);
-
 
 export const paymentRecords = pgTable(
   "payment_records",

@@ -53,12 +53,6 @@ const publicEndpoints = [
     path: "/api/pay-links/cancellations/{requestId}",
     title: "Monitor a Pay Link",
     description: "Returns active, cancelled, or paid so an integration can update immediately after completion."
-  },
-  {
-    method: "PRIVATE",
-    path: "/address-book",
-    title: "Encrypted Exchange Address Book",
-    description: "Wallet owners can save exchange, asset, network, address and memo together. Records are encrypted and require a short-lived wallet-authorized vault session."
   }
 ];
 

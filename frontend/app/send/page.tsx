@@ -44,10 +44,6 @@ import {
   estimateAdaptiveGasFees,
   isBaseFeeTooLowError
 } from "../../lib/gasFeePolicy";
-import {
-  assetMatchesNetwork,
-  type ExchangeAddressBookEntry,
-} from "../../lib/exchangeAddressBook";
 
 const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 const DEFAULT_SOURCE_CHAIN_ID =
@@ -77,13 +73,10 @@ export default function SendPage() {
   const [token, setToken] = useState<PaymentToken>("USDC");
   const [paymentReference, setPaymentReference] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
-  const [savedEntries, setSavedEntries] = useState<ExchangeAddressBookEntry[]>([]);
-  const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [selectedEntryId, setSelectedEntryId] = useState("");
   const recordingHashes = useRef(new Set<string>());
 
   useEffect(() => installPaymentCompletionRetry(), []);
-  const { address: connectedAddress, chainId: connectedChainId, isConnected } = useAccount();
+  const { chainId: connectedChainId, isConnected } = useAccount();
   const {
     sendTransactionAsync,
     isPending,
@@ -121,59 +114,6 @@ export default function SendPage() {
   const enabled = !directRecipient && isValid;
   const units = useMemo(() => paymentUnits(amount, token), [amount, token]);
   const sourceNetwork = getPaymentNetwork(sourceChainId);
-  const selectedEntry = useMemo(
-    () => savedEntries.find((entry) => entry.id === selectedEntryId),
-    [savedEntries, selectedEntryId],
-  );
-  const selectedEntryToken: PaymentToken | null = selectedEntry
-    ? selectedEntry.asset === "USDC"
-      ? "USDC"
-      : assetMatchesNetwork(selectedEntry.asset, selectedEntry.chainId)
-        ? "NATIVE"
-        : null
-    : null;
-  const savedDestinationMismatch = !!selectedEntry && (
-    directRecipient?.toLowerCase() !== selectedEntry.address.toLowerCase()
-    || destinationChainId !== selectedEntry.chainId
-    || selectedEntryToken !== token
-  );
-
-  const applySavedEntry = useCallback((entry: ExchangeAddressBookEntry) => {
-    setSelectedEntryId(entry.id);
-    setRecipient(entry.address);
-    setDestinationChainId(entry.chainId);
-    if (entry.asset === "USDC") setToken("USDC");
-    else if (assetMatchesNetwork(entry.asset, entry.chainId)) setToken("NATIVE");
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    if (!connectedAddress) {
-      setSavedEntries([]);
-      setVaultUnlocked(false);
-      setSelectedEntryId("");
-      return;
-    }
-    void fetch("/api/private-vault/auth/session", { cache: "no-store" })
-      .then(async (response) => ({ response, body: await response.json() as { authenticated?: boolean; address?: string } }))
-      .then(async ({ response, body }) => {
-        if (!active || !response.ok || !body.authenticated || body.address?.toLowerCase() !== connectedAddress.toLowerCase()) {
-          if (active) { setSavedEntries([]); setVaultUnlocked(false); setSelectedEntryId(""); }
-          return;
-        }
-        const entriesResponse = await fetch("/api/address-book", { cache: "no-store" });
-        const entriesBody = await entriesResponse.json() as { entries?: ExchangeAddressBookEntry[] };
-        if (!active || !entriesResponse.ok) return;
-        const entries = entriesBody.entries || [];
-        setVaultUnlocked(true);
-        setSavedEntries(entries);
-        const requestedId = new URLSearchParams(window.location.search).get("destination");
-        const requested = entries.find((entry) => entry.id === requestedId && entry.status !== "retired");
-        if (requested) applySavedEntry(requested);
-      })
-      .catch(() => { if (active) { setSavedEntries([]); setVaultUnlocked(false); } });
-    return () => { active = false; };
-  }, [applySavedEntry, connectedAddress]);
 
   const routeState = useMemo(() => {
     try {
@@ -289,9 +229,7 @@ export default function SendPage() {
     recipientReady &&
     !!destination &&
     !!routeState.route &&
-    units > 0n &&
-    !savedDestinationMismatch &&
-    (!selectedEntry || (!!selectedEntryToken && !selectedEntry.memo));
+    units > 0n;
 
   const canSendNative =
     routeReady &&
@@ -413,31 +351,6 @@ export default function SendPage() {
           </p>
 
           <div className="mt-8 grid gap-4">
-            <div className="rounded-xl border border-teal-100 bg-teal-50/70 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <label className="grid flex-1 gap-2 text-sm">
-                  <span className="font-semibold text-slate-950">Saved exchange destination</span>
-                  <select
-                    className="rounded-md border border-teal-200 bg-white px-4 py-3 disabled:text-neutral-400"
-                    disabled={!vaultUnlocked || savedEntries.length === 0}
-                    value={selectedEntryId}
-                    onChange={(event) => {
-                      const entry = savedEntries.find((candidate) => candidate.id === event.target.value);
-                      if (entry) applySavedEntry(entry);
-                      else setSelectedEntryId("");
-                    }}
-                  >
-                    <option value="">{vaultUnlocked ? "Choose a saved destination" : "Unlock your address book first"}</option>
-                    {savedEntries.filter((entry) => entry.status !== "retired").map((entry) => (
-                      <option key={entry.id} value={entry.id}>{entry.label} · {entry.exchange} · {entry.asset}</option>
-                    ))}
-                  </select>
-                </label>
-                <a className="rounded-md border border-teal-700 bg-white px-4 py-3 text-center text-sm font-semibold text-teal-800" href="/address-book">
-                  {vaultUnlocked ? "Manage" : "Open address book"}
-                </a>
-              </div>
-            </div>
             <label className="grid gap-2 text-sm">
               <span className="font-semibold text-slate-950">Recipient</span>
               <div className="flex gap-2 rounded-md border border-black/10 bg-slate-950 p-2">
@@ -541,19 +454,6 @@ export default function SendPage() {
             {routeState.error ? (
               <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {routeState.error}
-              </p>
-            ) : null}
-            {selectedEntry?.memo ? (
-              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                This exchange destination requires memo/tag “{selectedEntry.memo}”. XDCID Send cannot safely include exchange memos yet, so payment is blocked.
-              </p>
-            ) : selectedEntry && !selectedEntryToken ? (
-              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                {selectedEntry.asset} is not supported on {getPaymentNetwork(selectedEntry.chainId)?.name || "this network"} by XDCID Send.
-              </p>
-            ) : savedDestinationMismatch ? (
-              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                The destination network or asset no longer matches the saved exchange entry. Re-select the entry before sending.
               </p>
             ) : null}
           </div>
