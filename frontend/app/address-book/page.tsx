@@ -195,7 +195,10 @@ export default function AddressBookPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       <section className="rounded-3xl border border-teal-100 bg-gradient-to-br from-white via-white to-teal-50 p-6 shadow-sm md:p-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Private destination vault</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Send · Private destination vault</p>
+          <a className="rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50" href="/send">Back to Send</a>
+        </div>
         <div className="mt-3 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold text-slate-950 md:text-5xl">Exchange Address Book</h1>
