@@ -38,6 +38,11 @@ import {
   SIGNED_QUOTE_DOMAIN_VERSION,
   signedQuoteTypes,
 } from "../../../../../lib/signedRegistrarQuotes";
+import { registrationModeFlag } from "../../../../../flags";
+import {
+  BETA_REGISTRATION_CAMPAIGN,
+  betaGrantValidationError,
+} from "../../../../../lib/betaRegistration";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -220,6 +225,16 @@ export async function POST(request: Request) {
     enforceRateLimit(request);
     const body = await readBody(request);
     const quoteRequest = normalizeSignedQuoteRequest(body);
+    const registrationMode = quoteRequest.product === "registration"
+      ? await registrationModeFlag()
+      : "public";
+    if (registrationMode === "closed") {
+      throw new ApiServiceError(
+        "FEATURE_DISABLED",
+        "New .xdc registrations are temporarily unavailable",
+        503,
+      );
+    }
     const registrar = requiredAddress(
       "XNS_SIGNED_QUOTE_REGISTRAR",
       process.env.XNS_SIGNED_QUOTE_REGISTRAR,
@@ -328,8 +343,31 @@ export async function POST(request: Request) {
           chainId,
           registrar,
           request: quoteRequest,
+          campaign: registrationMode === "beta"
+            ? BETA_REGISTRATION_CAMPAIGN
+            : undefined,
         })
       : undefined;
+    if (registrationMode === "beta") {
+      if (!discountGrant) {
+        throw new ApiServiceError(
+          "BETA_ACCESS_REQUIRED",
+          "This wallet and five-letter name are not approved for the private beta",
+          403,
+        );
+      }
+      const validationError = betaGrantValidationError({
+        name: quoteRequest.name,
+        authorization: discountGrant.authorization,
+      });
+      if (validationError) {
+        throw new ApiServiceError(
+          "BETA_ACCESS_REQUIRED",
+          validationError,
+          403,
+        );
+      }
+    }
     const usdMicros = discountGrant
       ? applyDomainDiscount(
           grossUsdMicros,
@@ -447,6 +485,7 @@ async function usableDiscountGrant(input: {
   chainId: number;
   registrar: Address;
   request: ReturnType<typeof normalizeSignedQuoteRequest>;
+  campaign?: string;
 }): Promise<StoredDomainDiscountGrant | undefined> {
   try {
     const authorizationContract = await input.client.readContract({
@@ -465,6 +504,7 @@ async function usableDiscountGrant(input: {
       name: input.request.name,
       product: input.request.productId,
       termYears: input.request.termYears,
+      campaign: input.campaign,
     });
     for (const candidate of candidates) {
       const usable = await input.client.readContract({

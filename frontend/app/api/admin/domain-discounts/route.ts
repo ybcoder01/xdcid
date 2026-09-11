@@ -11,9 +11,15 @@ import {
   serializeDomainDiscountAuthorization,
 } from "../../../../lib/domainDiscounts";
 import {
+  countDomainDiscountGrantsByCampaign,
   listDomainDiscountGrants,
   saveDomainDiscountGrant,
 } from "../../../../lib/domainDiscountGrantStore";
+import {
+  BETA_REGISTRATION_CAMPAIGN,
+  BETA_REGISTRATION_LIMIT,
+  betaGrantValidationError,
+} from "../../../../lib/betaRegistration";
 import { xdcClient } from "../../../../lib/xdcClient";
 
 export const dynamic = "force-dynamic";
@@ -30,9 +36,20 @@ export async function GET(request: Request) {
       chainId: context.chainId,
       authorizationContract: context.authorizationContract,
     });
+    const betaIssued = await countDomainDiscountGrantsByCampaign({
+      chainId: context.chainId,
+      authorizationContract: context.authorizationContract,
+      campaign: BETA_REGISTRATION_CAMPAIGN,
+    });
     return Response.json(
       {
         context,
+        beta: {
+          campaign: BETA_REGISTRATION_CAMPAIGN,
+          issued: betaIssued,
+          limit: BETA_REGISTRATION_LIMIT,
+          remaining: Math.max(BETA_REGISTRATION_LIMIT - betaIssued, 0),
+        },
         grants: grants.map((grant) => ({
           ...grant,
           authorization: serializeDomainDiscountAuthorization(grant.authorization),
@@ -63,6 +80,7 @@ export async function POST(request: Request) {
       name?: unknown;
       authorization?: unknown;
       signature?: unknown;
+      campaign?: unknown;
     };
     if (typeof body.name !== "string" || typeof body.signature !== "string" || !isHex(body.signature)) {
       return invalid("A valid name, authorization, and signature are required");
@@ -90,6 +108,19 @@ export async function POST(request: Request) {
     if (normalized.authorization.node !== supplied.node) {
       return invalid("The signed grant does not match the supplied name");
     }
+    const campaign = body.campaign === BETA_REGISTRATION_CAMPAIGN
+      ? BETA_REGISTRATION_CAMPAIGN
+      : undefined;
+    if (body.campaign !== undefined && !campaign) {
+      return invalid("The discount campaign is invalid");
+    }
+    if (campaign) {
+      const betaError = betaGrantValidationError({
+        name: normalized.name,
+        authorization: normalized.authorization,
+      });
+      if (betaError) return invalid(betaError);
+    }
     const now = Math.floor(Date.now() / 1_000);
     if (
       supplied.product !== 0 ||
@@ -103,6 +134,19 @@ export async function POST(request: Request) {
     const context = await currentDomainDiscountContext();
     if (getAddress(session.address) !== context.authorizationSigner) {
       return unauthorized();
+    }
+    if (campaign) {
+      const betaIssued = await countDomainDiscountGrantsByCampaign({
+        chainId: context.chainId,
+        authorizationContract: context.authorizationContract,
+        campaign,
+      });
+      if (betaIssued >= BETA_REGISTRATION_LIMIT) {
+        return Response.json(
+          { error: "The 50-wallet beta allocation is full" },
+          { status: 409, headers: noStoreHeaders() },
+        );
+      }
     }
     const usable = await xdcClient.readContract({
       address: context.authorizationContract,
@@ -125,6 +169,7 @@ export async function POST(request: Request) {
       name: normalized.name,
       authorization: normalized.authorization,
       signature: body.signature as Hex,
+      campaign,
       createdBy: session.address,
     });
     return Response.json(

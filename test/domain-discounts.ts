@@ -7,6 +7,11 @@ import {
   domainDiscountTypedData,
   serializeDomainDiscountAuthorization,
 } from "../frontend/lib/domainDiscounts";
+import {
+  BETA_REGISTRATION_CAMPAIGN,
+  BETA_REGISTRATION_LIMIT,
+  betaGrantValidationError,
+} from "../frontend/lib/betaRegistration";
 
 const beneficiary = getAddress("0x00000000000000000000000000000000000000a1");
 const authorizationContract = getAddress(
@@ -122,5 +127,39 @@ describe("domain discount grants", function () {
       deadline: 2_000,
       nonce: 1n,
     })).to.throw("Discount must be between 0.01% and 100%");
+  });
+
+  it("accepts only the exact five-letter beta grant scope", function () {
+    const valid = buildDomainDiscountAuthorization({
+      name: "alpha.xdc",
+      beneficiary,
+      termYears: 1,
+      discountBps: 10_000,
+      maxUses: 1,
+      validAfter: 1_000,
+      deadline: 2_000,
+      nonce: 1n,
+    });
+    expect(betaGrantValidationError(valid)).to.equal(undefined);
+    expect(BETA_REGISTRATION_CAMPAIGN).to.equal("five-letter-beta-2026");
+    expect(BETA_REGISTRATION_LIMIT).to.equal(50);
+
+    const wrongName = { ...valid, name: "four.xdc" };
+    expect(betaGrantValidationError(wrongName)).to.include("five-letter");
+
+    const numericName = { ...valid, name: "ab12c.xdc" };
+    expect(betaGrantValidationError(numericName)).to.include("five-letter");
+
+    const wrongTerm = {
+      ...valid,
+      authorization: { ...valid.authorization, termYears: 3n },
+    };
+    expect(betaGrantValidationError(wrongTerm)).to.include("one year");
+
+    const partialDiscount = {
+      ...valid,
+      authorization: { ...valid.authorization, discountBps: 9_999 },
+    };
+    expect(betaGrantValidationError(partialDiscount)).to.include("gas-only");
   });
 });

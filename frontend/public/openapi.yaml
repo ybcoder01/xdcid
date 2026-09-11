@@ -356,7 +356,11 @@ paths:
         Returns a ten-minute EIP-712 quote bound to the payer, owner, name,
         registrar, chain, policy version, and next nonce. The endpoint is
         available only after the registrar, policy, RPC, CoinGecko, and
-        server-side signer settings are configured.
+        server-side signer settings are configured. New registrations also
+        follow the current rollout mode. During the private beta, a quote is
+        issued only for a pre-approved wallet and its exact five-letter name,
+        for one year with a single-use 100% discount grant. Renewals remain
+        available regardless of the new-registration rollout mode.
       tags:
         - Registration quotes
       requestBody:
@@ -459,13 +463,17 @@ paths:
         "400":
           description: Invalid request.
         "403":
-          description: The payer is not authorized to renew the name.
+          description: |
+            The payer is not authorized to renew the name, or a new
+            registration does not have an eligible private-beta grant.
         "409":
           description: The requested registration name is unavailable.
         "429":
           description: Quote request rate limit exceeded.
         "503":
-          description: Quote signing, RPC, policy, or pricing is unavailable.
+          description: |
+            New registration is closed, or quote signing, RPC, policy, or
+            pricing is unavailable.
   /api/v1/subdomain/quote:
     post:
       operationId: createSubdomainQuote
@@ -972,6 +980,8 @@ components:
                 - UNAUTHORIZED
                 - NOT_FOUND
                 - GATEWAY_UNAVAILABLE
+                - FEATURE_DISABLED
+                - BETA_ACCESS_REQUIRED
                 - XDC_INDEX_UNAVAILABLE
                 - XDC_RPC_UNAVAILABLE
             message:
