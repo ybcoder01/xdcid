@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { formatEther } from "viem";
+import { formatEther, keccak256, stringToHex } from "viem";
+import { BaseNetworkLogo } from "../components/BaseNetworkLogo";
 import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
 import {
@@ -11,11 +12,13 @@ import {
   contractsConfigured as mainnetContractsConfigured,
   pricingPolicyAbi,
   registrarAbi,
+  registryAbi,
   signedRegistrarEnabled,
   zeroAddress,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
+import { xdcidRegistrationFromOwner } from "../lib/registryStatus";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
 
 type Network = {
@@ -23,7 +26,6 @@ type Network = {
   logoClass: string;
   logoSrc?: string;
   logoImageClass?: string;
-  logoColor?: string;
 };
 
 const networks: Network[] = [
@@ -40,8 +42,7 @@ const networks: Network[] = [
   },
   {
     name: "Base",
-    logoClass: "bg-white",
-    logoColor: "#0052FF"
+    logoClass: "bg-white"
   },
   {
     name: "Arbitrum",
@@ -71,6 +72,9 @@ export default function Home() {
   const registrationRegistrar = apothemMode
     ? apothemRegistration.registrar
     : addresses.registrar;
+  const registrationRegistry = apothemMode
+    ? apothemRegistration.registry
+    : addresses.registry;
   const registrationPricingPolicy = apothemMode
     ? apothemRegistration.pricingPolicy
     : addresses.pricingPolicy;
@@ -87,6 +91,10 @@ export default function Home() {
     registrationSignedEnabled || parsedName.label.length >= 3;
   const canReadContracts =
     isValid && registrationContractsConfigured && registrarSupportsName;
+  const node = useMemo(
+    () => (canReadContracts ? keccak256(stringToHex(name)) : undefined),
+    [canReadContracts, name]
+  );
   const availability = useReadContract({
     address: registrationRegistrar,
     chainId: registrationChainId,
@@ -94,6 +102,15 @@ export default function Home() {
     functionName: "available",
     args: [name],
     query: { enabled: canReadContracts }
+  });
+
+  const xdcidOwner = useReadContract({
+    address: registrationRegistry,
+    chainId: registrationChainId,
+    abi: registryAbi,
+    functionName: "ownerOf",
+    args: node ? [node] : undefined,
+    query: { enabled: !!node }
   });
 
   const price = useReadContract({
@@ -107,7 +124,7 @@ export default function Home() {
 
   const registry = useRegistryStatus(
     name,
-    typeof availability.data === "boolean" ? !availability.data : undefined,
+    xdcidRegistrationFromOwner(xdcidOwner.data),
     canReadContracts,
     registrationChainId
   );
@@ -181,8 +198,8 @@ export default function Home() {
                   <div key={network.name} className="relative flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <span aria-hidden="true" className="absolute -left-5 top-1/2 hidden h-px w-5 bg-[#65d4e1] md:block" />
                     <span className={"grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl " + network.logoClass}>
-                      {network.logoColor ? (
-                        <span aria-hidden="true" className="h-7 w-7" style={{ backgroundColor: network.logoColor }} />
+                      {network.name === "Base" ? (
+                        <BaseNetworkLogo />
                       ) : (
                         <img
                           alt=""
@@ -261,9 +278,9 @@ export default function Home() {
                         ? "Contracts not configured"
                         : !registrarSupportsName
                           ? "Two-character names become available when Pricing V2 is activated"
-                          : availability.isLoading || (!registrationSignedEnabled && price.isLoading) || registry.isChecking
+                          : availability.isLoading || xdcidOwner.isLoading || (!registrationSignedEnabled && price.isLoading) || registry.isChecking
                           ? "Checking both registries..."
-                          : availability.isError || (!registrationSignedEnabled && price.isError) || registry.isError
+                          : availability.isError || xdcidOwner.isError || (!registrationSignedEnabled && price.isError) || registry.isError
                             ? "Could not check registry status"
                             : registry.status?.state === "legacy"
                               ? "Reserved in XDCDomains; migration required"

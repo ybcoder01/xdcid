@@ -6,6 +6,8 @@ import {
   saveCompletedPayment
 } from "../../../../lib/paymentHistory";
 import { verifySettlement } from "../../../../lib/paymentSettlementVerification";
+import { settleStoredPayLink } from "../../../../lib/payLinkStore";
+import type { PaymentReceiptRecord } from "../../../../lib/paymentReceipt";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +24,8 @@ type CompletionBody = {
   reference?: unknown;
   description?: unknown;
   paymentChannel?: unknown;
+  payLinkId?: unknown;
+  payLinkRequestId?: unknown;
   completionMethod?: unknown;
 };
 
@@ -66,45 +70,93 @@ export async function POST(request: Request) {
         ? body.completionMethod === "recovered" ? "recovered" : "automatic"
         : "standard";
     const id = "pm_" + sourceHash.slice(2, 39).toLowerCase();
+    const paymentChannel = body.paymentChannel === "pay_link" ? "pay_link" : "send";
+    if (paymentChannel === "pay_link") {
+      await settleStoredPayLink({
+        payLinkId: typeof body.payLinkId === "string" ? body.payLinkId : undefined,
+        requestId: body.payLinkRequestId as Hash,
+        paymentId: id,
+        name: (body.name as string).trim(),
+        sourceChainId: body.sourceChainId as number,
+        destinationChainId: body.destinationChainId as number,
+        token,
+        amountAtomic: amountAtomic.toString(),
+        payer: verified.payer,
+        sourceTransactionHash: verified.sourceTransactionHash,
+        destinationTransactionHash: verified.destinationTransactionHash,
+        paidAt: new Date()
+      });
+    }
+    const completedAt = new Date();
+    const privateContext =
+      (typeof body.reference === "string" && body.reference.trim()) ||
+      (typeof body.description === "string" && body.description.trim())
+        ? {
+            ...(typeof body.reference === "string" && body.reference.trim()
+              ? { reference: body.reference.trim() }
+              : {}),
+            ...(typeof body.description === "string" && body.description.trim()
+              ? { description: body.description.trim() }
+              : {})
+          }
+        : undefined;
+    const storedName = (body.name as string).trim() || recipient;
+    const storedToken = token === "NATIVE"
+      ? getPaymentNetwork(body.sourceChainId as number)?.nativeSymbol || "NATIVE"
+      : "USDC";
+    const tokenDecimals = token === "USDC" ? USDC_DECIMALS : 18;
+    const xdcidFeeAtomic = forwarded
+      ? calculateXdcidConvenienceFee(amountAtomic).toString()
+      : undefined;
+    const circleFeeAtomic = forwarded
+      ? verified.circleFeeAtomic.toString()
+      : undefined;
     await saveCompletedPayment({
       id,
-      requestId: sourceHash.toLowerCase(),
-      name: (body.name as string).trim() || recipient,
+      requestId: paymentChannel === "pay_link"
+        ? (body.payLinkRequestId as string).toLowerCase()
+        : sourceHash.toLowerCase(),
+      name: storedName,
       creator: recipient,
       payer: verified.payer,
       amountAtomic: amountAtomic.toString(),
-      token: token === "NATIVE"
-        ? getPaymentNetwork(body.sourceChainId as number)?.nativeSymbol || "NATIVE"
-        : "USDC",
+      token: storedToken,
       tokenAddress: token === "USDC" ? sourceNetwork.usdcAddress : undefined,
-      tokenDecimals: token === "USDC" ? USDC_DECIMALS : 18,
+      tokenDecimals,
       transactionType,
       completionMethod,
-      paymentChannel: body.paymentChannel === "pay_link" ? "pay_link" : "send",
-      xdcidFeeAtomic: forwarded
-        ? calculateXdcidConvenienceFee(amountAtomic).toString()
-        : undefined,
-      circleFeeAtomic: forwarded
-        ? verified.circleFeeAtomic.toString()
-        : undefined,
+      paymentChannel,
+      xdcidFeeAtomic,
+      circleFeeAtomic,
       sourceChainId: body.sourceChainId as number,
       destinationChainId: body.destinationChainId as number,
       sourceTransactionHash: verified.sourceTransactionHash,
       destinationTransactionHash: verified.destinationTransactionHash,
-      privateContext:
-        (typeof body.reference === "string" && body.reference.trim()) ||
-        (typeof body.description === "string" && body.description.trim())
-          ? {
-              ...(typeof body.reference === "string" && body.reference.trim()
-                ? { reference: body.reference.trim() }
-                : {}),
-              ...(typeof body.description === "string" && body.description.trim()
-                ? { description: body.description.trim() }
-                : {})
-            }
-          : undefined
+      completedAt,
+      privateContext
     });
-    return json({ id, status: "recorded" }, 201);
+    const receipt: PaymentReceiptRecord = {
+      id,
+      name: storedName,
+      creator: recipient,
+      payer: verified.payer,
+      amountAtomic: amountAtomic.toString(),
+      token: storedToken,
+      tokenDecimals,
+      transactionType,
+      completionMethod,
+      paymentChannel,
+      direction: "outgoing",
+      xdcidFeeAtomic: xdcidFeeAtomic ?? null,
+      circleFeeAtomic: circleFeeAtomic ?? null,
+      sourceChainId: body.sourceChainId as number,
+      destinationChainId: body.destinationChainId as number,
+      sourceTransactionHash: verified.sourceTransactionHash,
+      destinationTransactionHash: verified.destinationTransactionHash ?? null,
+      completedAt: completedAt.toISOString(),
+      privateContext
+    };
+    return json({ id, status: "recorded", receipt }, 201);
   } catch (cause) {
     return json({
       error: cause instanceof Error ? cause.message : "Payment could not be verified"
@@ -149,6 +201,15 @@ function validate(body: CompletionBody): string | undefined {
     body.paymentChannel !== "send" &&
     body.paymentChannel !== "pay_link"
   ) return "Payment channel is invalid";
+  if (body.paymentChannel === "pay_link") {
+    if (typeof body.payLinkRequestId !== "string" || !isHash(body.payLinkRequestId)) {
+      return "Pay Link request ID is required";
+    }
+    if (
+      body.payLinkId !== undefined &&
+      (typeof body.payLinkId !== "string" || !/^rq_[A-Za-z0-9_-]{20}$/.test(body.payLinkId))
+    ) return "Pay Link ID is invalid";
+  }
   if (
     body.completionMethod !== undefined &&
     !["direct", "standard", "automatic", "recovered"].includes(body.completionMethod as string)

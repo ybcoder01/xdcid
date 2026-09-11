@@ -1,33 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount, useSignMessage } from "wagmi";
-
-type PaymentRecord = {
-  id: string;
-  name: string;
-  creator: string;
-  payer: string;
-  amountAtomic: string;
-  token: string;
-  tokenAddress: string | null;
-  tokenDecimals: number;
-  transactionType: "native" | "same_chain_usdc" | "cross_chain_usdc" | "legacy";
-  completionMethod: "direct" | "standard" | "automatic" | "recovered" | "wallet";
-  paymentChannel: "send" | "pay_link";
-  direction: "incoming" | "outgoing";
-  xdcidFeeAtomic: string | null;
-  circleFeeAtomic: string | null;
-  sourceChainId: number;
-  destinationChainId: number;
-  sourceTransactionHash: string;
-  destinationTransactionHash: string | null;
-  completedAt: string;
-  privateContext?: {
-    reference?: string;
-    description?: string;
-  };
-};
+import { PaymentReceiptDialog } from "../../components/PaymentReceiptDialog";
+import {
+  NETWORKS,
+  displayRoute,
+  formatAtomic,
+  networkName,
+  paymentKind,
+  shortAddress,
+  type PaymentReceiptRecord
+} from "../../lib/paymentReceipt";
 
 type ArchiveAccess = {
   crossChainHistoryAllowed: boolean;
@@ -62,29 +46,25 @@ const EMPTY_FILTERS: Filters = {
   completionMethod: ""
 };
 
-const NETWORKS = [
-  [50, "XDC Network"],
-  [1, "Ethereum"],
-  [137, "Polygon"],
-  [8453, "Base"],
-  [42161, "Arbitrum One"],
-  [51, "XDC Apothem"],
-  [11155111, "Ethereum Sepolia"],
-  [80002, "Polygon Amoy"],
-  [84532, "Base Sepolia"],
-  [421614, "Arbitrum Sepolia"]
-] as const;
-
 export default function PaymentHistoryPage() {
   const { address, isConnected } = useAccount();
   const signer = useSignMessage();
-  const [records, setRecords] = useState<PaymentRecord[]>([]);
+  const [records, setRecords] = useState<PaymentReceiptRecord[]>([]);
+  const [selectedReceipt, setSelectedReceipt] = useState<PaymentReceiptRecord | null>(null);
   const [archiveAccess, setArchiveAccess] = useState<ArchiveAccess>();
   const [loaded, setLoaded] = useState(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setRecords([]);
+    setArchiveAccess(undefined);
+    setSelectedReceipt(null);
+    setLoaded(false);
+    setError("");
+  }, [address]);
 
   async function signedChallenge() {
     if (!address) throw new Error("Connect your wallet to continue.");
@@ -120,7 +100,7 @@ export default function PaymentHistoryPage() {
         body: JSON.stringify({ ...authorization, filters: filterPayload(filters) })
       });
       const history = await historyResponse.json() as {
-        records?: PaymentRecord[];
+        records?: PaymentReceiptRecord[];
         archiveAccess?: ArchiveAccess;
         error?: string;
       };
@@ -171,46 +151,6 @@ export default function PaymentHistoryPage() {
     } finally {
       setExporting(false);
     }
-  }
-
-  function downloadReceipt(record: PaymentRecord) {
-    const amount = formatAtomic(record.amountAtomic, record.tokenDecimals);
-    const completed = new Date(record.completedAt);
-    const lines = [
-      "XDCID PAYMENT RECEIPT",
-      "",
-      "Payment ID: " + record.id,
-      "Completed UTC: " + completed.toISOString(),
-      "Completed local: " + completed.toLocaleString(),
-      "Direction: " + record.direction,
-      "Type: " + paymentKind(record),
-      "Completion method: " + completionLabel(record.completionMethod),
-      "Route identifier: " + displayRoute(record),
-      "Amount: " + amount + " " + record.token,
-      "Payer: " + record.payer,
-      "Recipient: " + record.creator,
-      "Route: " + networkName(record.sourceChainId) + " to " + networkName(record.destinationChainId),
-      "XDCID fee: " + formatFee(record.xdcidFeeAtomic),
-      "Circle fee: " + formatFee(record.circleFeeAtomic),
-      "Source transaction: " + record.sourceTransactionHash,
-      record.destinationTransactionHash
-        ? "Destination transaction: " + record.destinationTransactionHash
-        : "",
-      record.privateContext?.reference
-        ? "Reference: " + record.privateContext.reference
-        : "",
-      record.privateContext?.description
-        ? "Description: " + record.privateContext.description
-        : "",
-      "",
-      "This receipt was reconstructed from XDCID's minimal settlement record."
-    ].filter(Boolean);
-    const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/plain" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "xdcid-receipt-" + record.id + ".txt";
-    link.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -344,61 +284,90 @@ export default function PaymentHistoryPage() {
       </section>
 
       {loaded ? (
-        <section className="mt-8 space-y-4">
+        <section className="mt-8">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Unlocked private history</p>
+              <h2 className="mt-1 text-2xl font-semibold text-slate-950">Your payments</h2>
+            </div>
+            <p className="text-sm text-slate-500">Select a payment to view or download its receipt.</p>
+          </div>
           {records.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">
               No completed payments were found for this wallet.
             </div>
-          ) : records.map((record) => (
-            <article key={record.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-xl font-semibold text-slate-950">{displayRoute(record)}</h2>
-                    <span className={"rounded-full px-3 py-1 text-xs font-semibold " + (record.direction === "incoming" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800")}>
-                      {record.direction === "incoming" ? "Incoming" : "Outgoing"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm font-medium text-slate-700">{paymentKind(record)} · {completionLabel(record.completionMethod)}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Local: {new Date(record.completedAt).toLocaleString()}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    UTC: {new Date(record.completedAt).toISOString()}
-                  </p>
-                </div>
-                <strong className="text-lg text-slate-950">
-                  {formatAtomic(record.amountAtomic, record.tokenDecimals)} {record.token}
-                </strong>
-              </div>
-              <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2">
-                <div><dt className="text-slate-500">From</dt><dd className="break-all">{record.payer}</dd></div>
-                <div><dt className="text-slate-500">To</dt><dd className="break-all">{record.creator}</dd></div>
-                <div><dt className="text-slate-500">Route</dt><dd>{networkName(record.sourceChainId)} → {networkName(record.destinationChainId)}</dd></div>
-                <div><dt className="text-slate-500">Payment route</dt><dd>{record.paymentChannel === "pay_link" ? "Pay Link" : displayRoute(record)}</dd></div>
-                <div><dt className="text-slate-500">XDCID fee</dt><dd>{formatFee(record.xdcidFeeAtomic)}</dd></div>
-                <div><dt className="text-slate-500">Circle fee</dt><dd>{formatFee(record.circleFeeAtomic)}</dd></div>
-                <div><dt className="text-slate-500">Reference</dt><dd>{record.privateContext?.reference || "—"}</dd></div>
-                <div><dt className="text-slate-500">Description</dt><dd>{record.privateContext?.description || "—"}</dd></div>
-              </dl>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <a className="rounded-xl border border-slate-300 px-4 py-2 font-semibold text-slate-800" href={explorerLink(record.sourceChainId, record.sourceTransactionHash)} target="_blank" rel="noreferrer">
-                  Source transaction
-                </a>
-                {record.destinationTransactionHash ? (
-                  <a className="rounded-xl border border-slate-300 px-4 py-2 font-semibold text-slate-800" href={explorerLink(record.destinationChainId, record.destinationTransactionHash)} target="_blank" rel="noreferrer">
-                    Destination transaction
-                  </a>
-                ) : null}
-                <button type="button" onClick={() => downloadReceipt(record)} className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white">
-                  Download private receipt
-                </button>
-              </div>
-            </article>
-          ))}
+          ) : <PaymentRecords records={records} onSelect={setSelectedReceipt} />}
         </section>
       ) : null}
+      <PaymentReceiptDialog record={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
     </main>
+  );
+}
+
+function PaymentRecords({ records, onSelect }: { records: PaymentReceiptRecord[]; onSelect: (record: PaymentReceiptRecord) => void }) {
+  return (
+    <>
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] border-collapse text-left">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-5 py-4">Payment</th>
+                <th className="px-5 py-4">Counterparty</th>
+                <th className="px-5 py-4">Route</th>
+                <th className="px-5 py-4">Date</th>
+                <th className="px-5 py-4 text-right">Amount</th>
+                <th className="px-5 py-4"><span className="sr-only">Receipt</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {records.map((record) => {
+                const counterparty = record.direction === "incoming" ? record.payer : record.creator;
+                return (
+                  <tr key={record.id} className="group cursor-pointer transition hover:bg-teal-50/60 focus-within:bg-teal-50/60" onClick={() => onSelect(record)}>
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-slate-950">{displayRoute(record)}</p>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                        <span className={"rounded-full px-2 py-0.5 font-semibold " + (record.direction === "incoming" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800")}>{record.direction === "incoming" ? "Incoming" : "Outgoing"}</span>
+                        <span>{paymentKind(record)}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 font-mono text-sm text-slate-600" title={counterparty}>{shortAddress(counterparty)}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{networkName(record.sourceChainId)} → {networkName(record.destinationChainId)}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">{new Date(record.completedAt).toLocaleDateString()}<span className="block text-xs text-slate-400">{new Date(record.completedAt).toLocaleTimeString()}</span></td>
+                    <td className="whitespace-nowrap px-5 py-4 text-right font-semibold text-slate-950 tabular-nums">{formatAtomic(record.amountAtomic, record.tokenDecimals)} {record.token}<span className="mt-1 block text-xs font-medium text-emerald-700">Completed</span></td>
+                    <td className="px-5 py-4 text-right">
+                      <button type="button" className="rounded-full border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition group-hover:border-teal-300 group-hover:bg-white group-hover:text-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600" onClick={(event) => { event.stopPropagation(); onSelect(record); }} aria-label={"Open receipt for " + displayRoute(record)}>Receipt</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:hidden">
+        {records.map((record) => {
+          const counterparty = record.direction === "incoming" ? record.payer : record.creator;
+          return (
+            <button key={record.id} type="button" onClick={() => onSelect(record)} className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-teal-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-600">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-slate-950">{displayRoute(record)}</p>
+                  <p className="mt-1 text-sm text-slate-500">{paymentKind(record)} · {record.direction === "incoming" ? "Incoming" : "Outgoing"}</p>
+                </div>
+                <p className="shrink-0 text-right font-semibold text-slate-950 tabular-nums">{formatAtomic(record.amountAtomic, record.tokenDecimals)}<span className="ml-1 text-sm text-slate-500">{record.token}</span></p>
+              </div>
+              <div className="mt-4 flex items-end justify-between gap-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                <div><p>{networkName(record.sourceChainId)} → {networkName(record.destinationChainId)}</p><p className="mt-1 font-mono" title={counterparty}>{shortAddress(counterparty)}</p></div>
+                <div className="text-right"><p>{new Date(record.completedAt).toLocaleDateString()}</p><p className="mt-1 font-semibold text-teal-700">View receipt →</p></div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -464,60 +433,4 @@ function exportFilename(filters: Filters): string {
     ? "-" + (filters.from || "start") + "-to-" + (filters.to || "now")
     : "-all";
   return "xdcid-payment-history" + range + ".csv";
-}
-
-function formatAtomic(value: string, decimals: number): string {
-  const negative = value.startsWith("-");
-  const digits = negative ? value.slice(1) : value;
-  const padded = digits.padStart(decimals + 1, "0");
-  const whole = padded.slice(0, -decimals) || "0";
-  const fraction = decimals ? padded.slice(-decimals).replace(/0+$/, "") : "";
-  return (negative ? "-" : "") + whole + (fraction ? "." + fraction : "");
-}
-
-function networkName(chainId: number): string {
-  return NETWORKS.find(([id]) => id === chainId)?.[1] || "Chain " + chainId;
-}
-
-function displayRoute(record: PaymentRecord): string {
-  return /^0x[a-fA-F0-9]{40}$/.test(record.name) ? "Direct wallet" : record.name;
-}
-
-function paymentKind(record: PaymentRecord): string {
-  if (record.paymentChannel === "pay_link") return "Pay Link";
-  if (record.completionMethod === "automatic" || record.completionMethod === "recovered") return "Forwarding";
-  if (record.transactionType === "native") return "Native transfer";
-  if (record.transactionType === "same_chain_usdc") return "Same-chain USDC";
-  if (record.transactionType === "cross_chain_usdc") return "Cross-chain USDC";
-  return "Legacy payment";
-}
-
-function completionLabel(method: PaymentRecord["completionMethod"]): string {
-  return {
-    direct: "Direct completion",
-    standard: "Standard completion",
-    automatic: "Automatic forwarding",
-    recovered: "Recovered transfer",
-    wallet: "Wallet completion"
-  }[method];
-}
-
-function formatFee(value: string | null): string {
-  return value ? formatAtomic(value, 6) + " USDC" : "—";
-}
-
-function explorerLink(chainId: number, hash: string): string {
-  const bases: Record<number, string> = {
-    1: "https://etherscan.io/tx/",
-    50: "https://xdcscan.com/tx/",
-    51: "https://testnet.xdcscan.com/tx/",
-    137: "https://polygonscan.com/tx/",
-    8453: "https://basescan.org/tx/",
-    42161: "https://arbiscan.io/tx/",
-    11155111: "https://sepolia.etherscan.io/tx/",
-    80002: "https://amoy.polygonscan.com/tx/",
-    84532: "https://sepolia.basescan.org/tx/",
-    421614: "https://sepolia.arbiscan.io/tx/"
-  };
-  return (bases[chainId] || "https://xdcscan.com/tx/") + hash;
 }

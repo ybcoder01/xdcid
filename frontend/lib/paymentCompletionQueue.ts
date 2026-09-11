@@ -1,4 +1,5 @@
 import type { Hash } from "viem";
+import type { PaymentReceiptRecord } from "./paymentReceipt";
 
 const STORAGE_KEY = "xdcid.pending-payment-completions.v1";
 const RETRY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -16,6 +17,8 @@ export type PaymentCompletionPayload = {
   reference?: string;
   description?: string;
   paymentChannel: "send" | "pay_link";
+  payLinkId?: string;
+  payLinkRequestId?: Hash;
   completionMethod?: "direct" | "standard" | "automatic" | "recovered";
   xdcidFeeAtomic?: string;
   circleFeeAtomic?: string;
@@ -29,15 +32,19 @@ type QueuedCompletion = {
 
 export async function submitPaymentCompletion(
   payload: PaymentCompletionPayload
-): Promise<void> {
+): Promise<PaymentReceiptRecord> {
   const key = completionKey(payload);
   rememberCompletion(payload);
   const response = await postCompletion(payload);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string };
+  const body = await response.json().catch(() => ({})) as {
+    error?: string;
+    receipt?: PaymentReceiptRecord;
+  };
+  if (!response.ok || !body.receipt) {
     throw new Error(body.error || "Payment history could not be recorded");
   }
   forgetCompletion(key);
+  return body.receipt;
 }
 
 export async function retryPendingPaymentCompletions(): Promise<number> {
@@ -89,6 +96,8 @@ function rememberCompletion(payload: PaymentCompletionPayload): void {
     sourceTransactionHash: payload.sourceTransactionHash,
     destinationTransactionHash: payload.destinationTransactionHash,
     paymentChannel: payload.paymentChannel,
+    payLinkId: payload.payLinkId,
+    payLinkRequestId: payload.payLinkRequestId,
     completionMethod: payload.completionMethod,
     xdcidFeeAtomic: payload.xdcidFeeAtomic,
     circleFeeAtomic: payload.circleFeeAtomic

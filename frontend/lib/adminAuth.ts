@@ -27,8 +27,12 @@ import { xdcClient } from "./xdcClient";
 import { isArchiveAccessAdministratorWallet } from "./archiveAccessAdministrator";
 import { currentDomainDiscountContext } from "./domainDiscountContext";
 import { authorizedTreasuryAddresses } from "./treasuryAuthorization";
+import { adminClientBinding } from "./adminSecurity";
 
-export const ADMIN_SESSION_COOKIE = "xdcid_admin_session";
+export const ADMIN_SESSION_COOKIE =
+  process.env.NODE_ENV === "production"
+    ? "__Host-xdcid_admin_session"
+    : "xdcid_admin_session";
 export const ADMIN_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
 export const ADMIN_SESSION_TTL_SECONDS = 15 * 60;
 
@@ -50,8 +54,9 @@ export type AdminAuthorization = {
 };
 
 type AdminSessionPayload = {
-  v: 1;
+  v: 2;
   address: Address;
+  clientBinding: string;
   issuedAt: number;
   expiresAt: number;
   sessionId: string;
@@ -107,14 +112,15 @@ export function buildAdminChallenge(
   ].join("\n");
 }
 
-export function createAdminSession(address: Address): {
+export function createAdminSession(address: Address, clientBinding: string): {
   token: string;
   expiresAt: string;
 } {
   const issuedAt = Math.floor(Date.now() / 1_000);
   const payload: AdminSessionPayload = {
-    v: 1,
+    v: 2,
     address: getAddress(address),
+    clientBinding,
     issuedAt,
     expiresAt: issuedAt + ADMIN_SESSION_TTL_SECONDS,
     sessionId: randomBytes(16).toString("hex"),
@@ -127,30 +133,33 @@ export function createAdminSession(address: Address): {
 }
 
 export function adminSessionCookie(token: string): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return [
     `${ADMIN_SESSION_COOKIE}=${token}`,
     "HttpOnly",
     "Path=/",
     "SameSite=Strict",
+    "Priority=High",
     `Max-Age=${ADMIN_SESSION_TTL_SECONDS}`,
-    secure.slice(2),
+    process.env.NODE_ENV === "production" ? "Secure" : "",
   ].filter(Boolean).join("; ");
 }
 
 export function clearAdminSessionCookie(): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
   return [
     `${ADMIN_SESSION_COOKIE}=`,
     "HttpOnly",
     "Path=/",
     "SameSite=Strict",
+    "Priority=High",
     "Max-Age=0",
-    secure.slice(2),
+    process.env.NODE_ENV === "production" ? "Secure" : "",
   ].filter(Boolean).join("; ");
 }
 
-export function parseAdminSession(token: string | undefined): AdminSessionPayload | null {
+export function parseAdminSession(
+  token: string | undefined,
+  clientBinding: string,
+): AdminSessionPayload | null {
   if (!token) return null;
   const [segment, signature, extra] = token.split(".");
   if (!segment || !signature || extra) return null;
@@ -167,8 +176,9 @@ export function parseAdminSession(token: string | undefined): AdminSessionPayloa
       Buffer.from(segment, "base64url").toString("utf8"),
     ) as AdminSessionPayload;
     if (
-      payload.v !== 1 ||
+      payload.v !== 2 ||
       !isAddress(payload.address) ||
+      payload.clientBinding !== clientBinding ||
       !Number.isSafeInteger(payload.issuedAt) ||
       !Number.isSafeInteger(payload.expiresAt) ||
       payload.expiresAt <= Math.floor(Date.now() / 1_000) ||
@@ -307,15 +317,13 @@ export async function verifyAdminWalletSignature(
   return result.toLowerCase() === ERC1271_MAGIC_VALUE;
 }
 
-export function isSameOrigin(request: Request): boolean {
-  const suppliedOrigin = request.headers.get("origin");
-  return !suppliedOrigin || suppliedOrigin === new URL(request.url).origin;
-}
-
 export async function requireAuthorizedAdminSession(
   request: Request,
 ): Promise<(AdminSessionPayload & AdminAuthorization) | null> {
-  const session = parseAdminSession(cookieValue(request, ADMIN_SESSION_COOKIE));
+  const session = parseAdminSession(
+    cookieValue(request, ADMIN_SESSION_COOKIE),
+    adminClientBinding(request),
+  );
   if (!session) return null;
 
   try {

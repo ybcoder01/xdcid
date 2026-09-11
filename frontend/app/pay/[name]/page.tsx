@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { isHex, keccak256, stringToHex, zeroAddress, type Hash, type Hex } from "viem";
 import { useParams, useSearchParams } from "next/navigation";
 import {
@@ -8,6 +9,7 @@ import {
   usePublicClient,
   useReadContract,
   useSendTransaction,
+  useSwitchChain,
   useWaitForTransactionReceipt,
 } from "wagmi";
 import {
@@ -35,6 +37,9 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../../components/MultichainUsdcExecutor";
+import { TokenLogo, nativeTokenForChain } from "../../../components/TokenLogo";
+import { WalletButton } from "../../../components/WalletButton";
+import { PaymentReceiptDialog } from "../../../components/PaymentReceiptDialog";
 import { parseXnsName } from "../../../lib/names";
 import { paymentRequestId } from "../../../lib/paymentCancellation";
 import { selectPaymentDestination } from "../../../lib/paymentPreparation";
@@ -42,10 +47,10 @@ import {
   installPaymentCompletionRetry,
   submitPaymentCompletion
 } from "../../../lib/paymentCompletionQueue";
+import type { PaymentReceiptRecord } from "../../../lib/paymentReceipt";
 import { useRegistryStatus } from "../../../lib/useRegistryStatus";
 import {
   inspectAccountDeployment,
-  paymentReceiptActors,
   type AccountDeploymentState,
 } from "../../../lib/accountAbstraction";
 import {
@@ -137,7 +142,7 @@ export default function PayRequestPage() {
     [signedRequest],
   );
   const [cancellationStatus, setCancellationStatus] = useState<
-    "not-applicable" | "checking" | "active" | "cancelled" | "unavailable"
+    "not-applicable" | "checking" | "active" | "cancelled" | "paid" | "unavailable"
   >("not-applicable");
   const legacyRequest = !encodedRequest && !encodedSignature;
   const awaitingShortLink = Boolean(shortId && !shortPayload && !shortLinkError);
@@ -171,28 +176,36 @@ export default function PayRequestPage() {
     }
 
     setCancellationStatus("checking");
-    fetch(
-      "/api/pay-links/cancellations/" + encodeURIComponent(signedRequestId),
-      { cache: "no-store" },
-    )
+    const checkStatus = () => fetch(
+        "/api/pay-links/cancellations/" + encodeURIComponent(signedRequestId),
+        { cache: "no-store" },
+      )
       .then(async (response) => {
         const body = await response.json() as {
           cancelled?: boolean;
+          paid?: boolean;
           error?: string;
         };
-        if (!response.ok || typeof body.cancelled !== "boolean") {
+        if (
+          !response.ok ||
+          typeof body.cancelled !== "boolean" ||
+          typeof body.paid !== "boolean"
+        ) {
           throw new Error(body.error || "Cancellation status could not be verified.");
         }
         if (current) {
-          setCancellationStatus(body.cancelled ? "cancelled" : "active");
+          setCancellationStatus(body.paid ? "paid" : body.cancelled ? "cancelled" : "active");
         }
       })
       .catch(() => {
         if (current) setCancellationStatus("unavailable");
       });
+    void checkStatus();
+    const interval = window.setInterval(checkStatus, 3_000);
 
     return () => {
       current = false;
+      window.clearInterval(interval);
     };
   }, [signedRequestId]);
 
@@ -215,12 +228,27 @@ export default function PayRequestPage() {
   const [signatureError, setSignatureError] = useState("");
   const [accountDeployment, setAccountDeployment] = useState<AccountDeploymentState>("unknown");
   const [historyStatus, setHistoryStatus] = useState("");
+  const [completedReceipt, setCompletedReceipt] = useState<PaymentReceiptRecord | null>(null);
+  const [networkSwitchError, setNetworkSwitchError] = useState("");
   const recordingHashes = useRef(new Set<string>());
 
   useEffect(() => installPaymentCompletionRetry(), []);
   const nativePayment = useSendTransaction();
+  const resetNativePayment = nativePayment.reset;
+  const { switchChainAsync } = useSwitchChain();
   const transactionHash = nativePayment.data;
   const receipt = useWaitForTransactionReceipt({ hash: transactionHash });
+
+  const previousPayer = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (previousPayer.current && previousPayer.current !== address) {
+      resetNativePayment();
+      setHistoryStatus("");
+      setCompletedReceipt(null);
+      recordingHashes.current.clear();
+    }
+    previousPayer.current = address;
+  }, [address, resetNativePayment]);
 
   const enabled = parsedName.isValid;
   const node = useMemo(
@@ -338,7 +366,7 @@ export default function PayRequestPage() {
   const payerAllowed = signedRequest ? isDesignatedPayer(signedRequest, address) : true;
   const nativeXdcPayment = token === "XDC" && route.sourceChainId === XDC_CHAIN_ID && route.destinationChainId === XDC_CHAIN_ID;
   const pending = nativePayment.isPending || receipt.isLoading;
-  const wrongNetwork = isConnected && nativeXdcPayment && chainId !== XDC_CHAIN_ID;
+  const wrongNetwork = isConnected && chainId !== route.sourceChainId;
   const cancellationAllowsPayment = legacyRequest || cancellationStatus === "active";
   const signedRequestValid = legacyRequest || Boolean(
     signedRequest && signatureVerification?.valid && !signatureError && payerAllowed &&
@@ -352,7 +380,6 @@ export default function PayRequestPage() {
     nativeXdcPayment && isConnected && !wrongNetwork && routeReady && !pending,
   );
   const paymentError = nativePayment.error;
-  const receiptActors = paymentReceiptActors(address, receipt.data?.from);
 
   const recordSettlement = useCallback(async (
     sourceTransactionHash: Hash,
@@ -365,7 +392,7 @@ export default function PayRequestPage() {
     recordingHashes.current.add(key);
     setHistoryStatus("Verifying payment for private history...");
     try {
-      await submitPaymentCompletion({
+      const completed = await submitPaymentCompletion({
           name: parsedName.name,
           sourceChainId: route.sourceChainId,
           destinationChainId: route.destinationChainId,
@@ -377,12 +404,16 @@ export default function PayRequestPage() {
           reference: reference.trim(),
           description: memo.trim(),
           paymentChannel: "pay_link",
+          payLinkId: shortId || undefined,
+          payLinkRequestId: signedRequestId,
           completionMethod: metadata?.completionMethod ||
             (route.sourceChainId === route.destinationChainId ? "direct" : "standard"),
           xdcidFeeAtomic: metadata?.xdcidFeeAtomic,
           circleFeeAtomic: metadata?.circleFeeAtomic
       });
+      setCancellationStatus("paid");
       setHistoryStatus("Payment added to private history.");
+      setCompletedReceipt(completed);
     } catch (cause) {
       recordingHashes.current.delete(key);
       setHistoryStatus(
@@ -398,6 +429,8 @@ export default function PayRequestPage() {
     reference,
     route.destinationChainId,
     route.sourceChainId,
+    shortId,
+    signedRequestId,
     token,
     value
   ]);
@@ -411,129 +444,133 @@ export default function PayRequestPage() {
     nativePayment.sendTransaction({ to: paymentAddress, value });
   }
 
+  async function switchToPaymentNetwork() {
+    setNetworkSwitchError("");
+    try {
+      await switchChainAsync({ chainId: route.sourceChainId });
+    } catch (cause) {
+      setNetworkSwitchError(friendlyPaymentError(cause));
+    }
+  }
+
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">XDCID Pay Link</p>
-      <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
-        <p className="text-sm text-slate-500">Payment requested by</p>
-        <h1 className="mt-2 text-4xl font-bold text-slate-950">{parsedName.name}</h1>
-        <div className="mt-8 rounded-2xl bg-slate-950 p-7 text-white print:border print:border-slate-300 print:bg-white print:text-slate-950">
-          <p className="text-sm text-slate-300 print:text-slate-500">Amount due</p>
-          <p className="mt-2 text-4xl font-semibold">{amount || "—"} {token}</p>
-          {reference && <p className="mt-5 border-t border-white/15 pt-5 print:border-slate-200">Reference: {reference}</p>}
-          {memo && <p className="mt-2 text-slate-200 print:text-slate-700">{memo}</p>}
-        </div>
+    <main className="relative mx-auto flex min-h-[100svh] w-full max-w-[460px] items-start px-3 py-3 sm:items-center sm:px-5 sm:py-5">
+      <div className="pointer-events-none absolute inset-x-0 top-12 -z-10 h-56 rounded-full bg-gradient-to-br from-teal-200/70 via-white to-cyan-100/70 blur-3xl print:hidden" />
+      <section className="pay-receipt relative w-full overflow-hidden rounded-[1.75rem] border border-teal-100 shadow-2xl shadow-teal-950/10 print:shadow-none">
+        <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#0b6670] via-[#19a6a6] to-[#65d4e1] print:hidden" />
+        <div className="p-4 pb-4 pt-5 sm:p-6 sm:pb-5 sm:pt-7">
+        <header>
+          <div className="flex flex-nowrap items-center justify-between gap-2">
+            <XdcidMark />
+            <div className="shrink-0 print:hidden"><WalletButton compact /></div>
+          </div>
+          <div className="mt-4 border-t border-dashed border-slate-300 pt-4 text-center sm:mt-5 sm:pt-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Pay</p>
+            <div className="mt-2 flex items-center justify-center gap-2.5 sm:gap-3">
+              <TokenLogo symbol={token} size={40} />
+              <h1 className="text-[2.35rem] font-bold leading-none tracking-tight text-slate-950 tabular-nums sm:text-5xl">
+                <AmountValue amount={amount} /> <span className="text-xl font-medium text-slate-500 sm:text-2xl">{token}</span>
+              </h1>
+            </div>
+            <p className="mt-2 text-sm text-slate-600 sm:text-base">to <strong className="font-semibold text-teal-800">{parsedName.name}</strong></p>
+          </div>
+        </header>
+
+        {sourceNetwork && destinationNetwork ? (
+          <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-2xl border border-slate-200 bg-white/75 px-3 py-2.5 shadow-sm sm:px-4">
+            <div className="flex min-w-0 items-center justify-center gap-2">
+              <TokenLogo symbol={nativeTokenForChain(route.sourceChainId)} size={24} />
+              <p className="truncate text-[11px] font-semibold text-slate-700">{sourceNetwork.name}</p>
+            </div>
+            <span className="text-base font-light text-teal-700" aria-hidden="true">→</span>
+            <div className="flex min-w-0 items-center justify-center gap-2">
+              <TokenLogo symbol={nativeTokenForChain(route.destinationChainId)} size={24} />
+              <p className="truncate text-[11px] font-semibold text-slate-700">{destinationNetwork.name}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {reference || memo ? (
+          <dl className="mt-2.5 divide-y divide-dashed divide-slate-200 border-y border-slate-200 text-xs">
+            {reference ? (
+              <div className="flex items-center justify-between gap-4 py-2">
+                <dt className="flex items-center gap-2 text-slate-500"><span aria-hidden="true">▤</span> Reference</dt>
+                <dd className="max-w-[62%] truncate text-right font-semibold text-slate-900" title={reference}>{reference}</dd>
+              </div>
+            ) : null}
+            {memo ? (
+              <div className="flex items-center justify-between gap-4 py-2">
+                <dt className="flex items-center gap-2 text-slate-500"><span aria-hidden="true">◇</span> Note</dt>
+                <dd className="max-w-[62%] truncate text-right text-slate-700" title={memo}>{memo}</dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
 
         {shortLinkLoading && (
-          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
             Loading and verifying the short Pay Link...
           </p>
         )}
         {legacyRequest && !shortId && (
-          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 print:hidden">
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 print:hidden">
             Unsigned legacy request: verify the amount and recipient independently before paying.
           </p>
         )}
         {requestError && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{requestError}</p>
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{requestError}</p>
         )}
-        {wrongNetwork && (
-          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            This XDC payment requires XDC Network (chain ID 50). Switch networks in your wallet.
-          </p>
+        {wrongNetwork && sourceNetwork && (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            <span>Wrong network. Switch to <strong>{sourceNetwork.name}</strong>.</span>
+            <button type="button" className="shrink-0 rounded-lg bg-amber-900 px-3 py-2 font-semibold text-white" onClick={switchToPaymentNetwork}>
+              Switch network
+            </button>
+          </div>
         )}
-        {signatureError && <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{signatureError}</p>}
+        {networkSwitchError && <p className="mt-1.5 text-center text-xs text-red-600">{networkSwitchError}</p>}
+        {signatureError && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{signatureError}</p>}
         {signedRequest && cancellationStatus === "checking" && (
-          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
             Checking whether this payment request is still active...
           </p>
         )}
         {signedRequest && cancellationStatus === "cancelled" && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
             This payment request was cancelled by its creator. Payment is disabled.
           </p>
         )}
+        {signedRequest && cancellationStatus === "paid" && (
+          <p className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-800">
+            This Pay Link has been paid and is no longer available for another payment.
+          </p>
+        )}
         {signedRequest && cancellationStatus === "unavailable" && (
-          <p className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             Cancellation status cannot be verified right now. Payment is temporarily disabled for safety.
           </p>
         )}
         {signedRequest && signedRequest.payer !== zeroAddress && isConnected && !payerAllowed && (
-          <p className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             This request is designated for a different payer wallet.
           </p>
         )}
 
-        {signedRequest && !requestError && sourceNetwork && destinationNetwork && (
-          <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <p className="text-sm font-semibold text-slate-900">Payment route</p>
-            <p className="mt-2 text-sm text-slate-700">
-              {sourceNetwork.name} → {destinationNetwork.name} · {crossChain
-                ? route.transferMode === "payer-choice" ? "Payer chooses Standard or Automatic" : route.transferMode
-                : "Direct"}
-            </p>
-          </div>
-        )}
-
-        {signedRequest && !requestError && !signatureError && (
-          <div className="mt-7 rounded-2xl border border-teal-200 bg-teal-50 p-5">
-            <p className="text-sm font-semibold text-teal-900">Signed request verification</p>
-            <p className="mt-2 break-all text-sm text-teal-800">
-              {signaturePending
-                ? "Checking the current XNS owner signature..."
-                : signatureVerification?.valid
-                  ? (signatureVerification.accountType === "contract"
-                      ? "Verified smart account (ERC-1271): "
-                      : "Verified ordinary wallet: ") + signatureVerification.signer
-                  : "Signature verification unavailable."}
-            </p>
-          </div>
-        )}
-
-        {isConnected && (
-          <div className="mt-7 rounded-2xl border border-indigo-200 bg-indigo-50 p-5 print:hidden">
-            <p className="text-sm font-semibold text-indigo-900">Wallet execution</p>
-            <p className="mt-2 text-sm leading-6 text-indigo-800">
-              {accountDeployment === "deployed-contract"
-                ? "A deployed contract account is connected. Its wallet may submit this payment through ERC-4337."
-                : "XDCID sends this payment request to your connected wallet. If it uses ERC-4337, the wallet handles its UserOperation and bundler."}
-              {" "}Gas sponsorship depends on the wallet and its paymaster; XDCID does not control or store either service.
-            </p>
-          </div>
-        )}
-
-        <div className="mt-7 rounded-2xl border border-slate-200 p-5">
-          <p className="text-sm font-semibold text-slate-700">Resolved recipient</p>
-          <p className="mt-2 break-all text-sm text-slate-600">
-            {resolving
-              ? "Resolving the XNS ID on-chain..."
-                : resolutionFailed
-                  ? "The registry status could not be verified."
-                  : registry.status?.state === "legacy"
-                    ? "Payment blocked: this name requires migration from XDCDomains."
-                    : registry.status?.state === "collision"
-                      ? "Payment blocked: this name exists in both registries and requires review."
-                      : !hasOwner
-                        ? "The XNS ID is unregistered or expired."
-                        : paymentAddress
-                    ? paymentAddress + (paymentDestination?.source === "evm-default" ? " (default EVM address)" : "")
-                    : "No payment address is set for the destination network."}
+        {!isConnected && !requestError && (
+          <p className="mt-3 text-center text-xs font-medium text-slate-500">
+            Connect your wallet above to enable payment.
           </p>
-          {paymentAddress && (
-            <a className="mt-3 inline-block text-sm font-semibold text-teal-700 underline print:hidden" href={(explorerUrls[route.destinationChainId] || "https://xdcscan.com") + "/address/" + paymentAddress} target="_blank" rel="noreferrer">
-              Verify recipient on {destinationNetwork?.name || "destination explorer"}
-            </a>
-          )}
-        </div>
+        )}
 
-        {token === "USDC" && paymentAddress && (
-          <div className="mt-7 print:hidden">
+        {token === "USDC" && isConnected && paymentAddress && !wrongNetwork && (
+          <div className="print:hidden">
             <MultichainUsdcExecutor
+              key={address + ":" + route.sourceChainId + ":" + route.destinationChainId}
               sourceChainId={route.sourceChainId}
               destinationChainId={route.destinationChainId}
               amount={amount}
               recipient={paymentAddress}
-              ready={routeReady}
+              ready={routeReady && !wrongNetwork}
               paymentReference={reference.trim()}
               onCompleted={recordSettlement}
               requestedTransferMode={
@@ -543,52 +580,166 @@ export default function PayRequestPage() {
                     ? "standard"
                     : "payer-choice"
               }
+              presentation="checkout"
             />
           </div>
         )}
 
-        {token === "XDC" && (
-          <button type="button" disabled={!canPay} onClick={pay} className="mt-7 w-full rounded-xl bg-slate-950 px-5 py-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 print:hidden">
-            {pending ? "Waiting for confirmation..." : isConnected ? "Review " + (amount || "") + " XDC in wallet" : "Connect wallet to pay"}
-          </button>
-        )}
-
-        {transactionHash && !receipt.isSuccess && (
-          <a className="mt-4 block break-all text-sm font-semibold text-teal-700 underline" href={"https://xdcscan.com/tx/" + transactionHash} target="_blank" rel="noreferrer">
-            View transaction on XDCScan
-          </a>
-        )}
-        {paymentError && <p className="mt-4 text-sm text-red-600">{paymentError.message}</p>}
-        {historyStatus && <p className="mt-4 text-sm text-slate-600">{historyStatus}</p>}
-
-        {receipt.isSuccess && transactionHash && (
-          <section className="mt-8 border-t border-slate-200 pt-8" aria-label="Payment confirmation receipt">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-700">Payment confirmation</p>
-            <h2 className="mt-2 text-3xl font-bold text-slate-950">Confirmed on XDC Network</h2>
-            <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
-              <div><dt className="font-semibold text-slate-500">XNS ID</dt><dd className="mt-1 break-all text-slate-900">{parsedName.name}</dd></div>
-              <div><dt className="font-semibold text-slate-500">Amount</dt><dd className="mt-1 text-slate-900">{amount} {token}</dd></div>
-              {reference && <div><dt className="font-semibold text-slate-500">Reference</dt><dd className="mt-1 break-all text-slate-900">{reference}</dd></div>}
-              <div><dt className="font-semibold text-slate-500">Recipient</dt><dd className="mt-1 break-all text-slate-900">{paymentAddress}</dd></div>
-              <div><dt className="font-semibold text-slate-500">Payer</dt><dd className="mt-1 break-all text-slate-900">{receiptActors.payer || address}</dd></div>
-              {receiptActors.networkSubmitter && <div><dt className="font-semibold text-slate-500">Network submitter</dt><dd className="mt-1 break-all text-slate-900">{receiptActors.networkSubmitter}</dd></div>}
-              <div><dt className="font-semibold text-slate-500">Block</dt><dd className="mt-1 text-slate-900">{receipt.data?.blockNumber?.toString()}</dd></div>
-              <div className="sm:col-span-2"><dt className="font-semibold text-slate-500">Transaction hash</dt><dd className="mt-1 break-all text-slate-900">{transactionHash}</dd></div>
-            </dl>
-            <div className="mt-6 flex flex-wrap gap-3 print:hidden">
-              <button type="button" onClick={() => window.print()} className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white">Print or save receipt</button>
-              <a className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-800" href={"https://xdcscan.com/tx/" + transactionHash} target="_blank" rel="noreferrer">Verify on XDCScan</a>
-            </div>
-            <p className="mt-5 text-xs leading-5 text-slate-500">
-              This is evidence of blockchain confirmation shown with the signed request. It is not a tax invoice or accounting document.
+        {token === "XDC" && isConnected && !wrongNetwork && (
+          <div className="mt-3 print:hidden">
+            <button type="button" disabled={!canPay || Boolean(transactionHash) || receipt.isSuccess} onClick={pay} className="h-12 w-full rounded-xl bg-slate-950 px-5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+              {nativePayment.isPending
+                ? "Approve or reject in your wallet"
+                : transactionHash && !receipt.isSuccess
+                  ? "Payment submitted · Confirming"
+                  : receipt.isSuccess
+                    ? "✓ Payment confirmed"
+                    : "Pay"}
+            </button>
+            <p className={"min-h-5 pt-1.5 text-center text-xs " + (paymentError ? "text-red-600" : receipt.isSuccess ? "text-teal-700" : "text-slate-500")} aria-live="polite">
+              {paymentError
+                ? friendlyPaymentError(paymentError)
+                : receipt.isSuccess
+                  ? "Confirmed on XDC Network"
+                  : transactionHash
+                    ? "Your wallet approved the payment. Waiting for network confirmation."
+                    : " "}
             </p>
-          </section>
+          </div>
         )}
 
-        <p className="mt-7 text-xs leading-5 text-slate-500 print:hidden">
-          Check the amount, token, and resolved address before signing. The reference and description are not written into the payment transaction.
-        </p>
+        {!requestError && (
+          <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 print:hidden">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-700">
+              Payment details
+            </summary>
+            <div className="space-y-4 border-t border-slate-200 px-4 py-4 text-sm">
+              {signedRequest && sourceNetwork && destinationNetwork && (
+                <div>
+                  <p className="font-semibold text-slate-900">Route</p>
+                  <p className="mt-1 text-slate-600">
+                    {sourceNetwork.name} → {destinationNetwork.name} · {crossChain
+                      ? route.transferMode === "payer-choice" ? "Payer chooses Standard or Automatic" : route.transferMode
+                      : "Direct"}
+                  </p>
+                </div>
+              )}
+              {signedRequest && !signatureError && (
+                <div>
+                  <p className="font-semibold text-slate-900">Signed request</p>
+                  <p className="mt-1 break-all text-slate-600">
+                    {signaturePending
+                      ? "Checking the current XNS owner signature..."
+                      : signatureVerification?.valid
+                        ? (signatureVerification.accountType === "contract"
+                            ? "Verified smart account (ERC-1271): "
+                            : "Verified ordinary wallet: ") + signatureVerification.signer
+                        : "Signature verification unavailable."}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="font-semibold text-slate-900">Recipient</p>
+                <p className="mt-1 break-all text-slate-600">
+                  {resolving
+                    ? "Resolving the XNS ID on-chain..."
+                      : resolutionFailed
+                        ? "The registry status could not be verified."
+                        : registry.status?.state === "legacy"
+                          ? "Payment blocked: this name requires migration from XDCDomains."
+                          : registry.status?.state === "collision"
+                            ? "Payment blocked: this name exists in both registries and requires review."
+                            : !hasOwner
+                              ? "The XNS ID is unregistered or expired."
+                              : paymentAddress
+                                ? paymentAddress + (paymentDestination?.source === "evm-default" ? " (default EVM address)" : "")
+                                : "No payment address is set for the destination network."}
+                </p>
+                {paymentAddress && (
+                  <a className="mt-2 inline-block font-semibold text-teal-700 underline" href={(explorerUrls[route.destinationChainId] || "https://xdcscan.com") + "/address/" + paymentAddress} target="_blank" rel="noreferrer">
+                    Verify on {destinationNetwork?.name || "destination explorer"}
+                  </a>
+                )}
+              </div>
+              {isConnected && (
+                <div>
+                  <p className="font-semibold text-slate-900">Connected wallet</p>
+                  <p className="mt-1 text-slate-600">
+                    {accountDeployment === "deployed-contract"
+                      ? "Smart-account execution is handled by the connected wallet."
+                      : "Transaction execution and gas approval are handled by the connected wallet."}
+                  </p>
+                </div>
+              )}
+              {transactionHash && (
+                <div>
+                  <p className="font-semibold text-slate-900">Transaction</p>
+                  <a className="mt-1 block break-all font-semibold text-teal-700 underline" href={"https://xdcscan.com/tx/" + transactionHash} target="_blank" rel="noreferrer">
+                    {transactionHash}
+                  </a>
+                </div>
+              )}
+            </div>
+          </details>
+        )}
+
+        {historyStatus && <p className="mt-1.5 text-center text-[11px] text-slate-500">{historyStatus}</p>}
+
+        <footer className="mt-2.5 border-t border-dashed border-slate-300 pt-2 text-center print:hidden">
+          <div className="inline-flex items-center gap-2 text-left">
+            <span className="grid h-6 w-6 place-items-center rounded-full border border-teal-700 text-xs font-bold text-teal-700" aria-hidden="true">✓</span>
+            <span className="text-xs">
+              <strong className="text-slate-800">
+                {signedRequest && signatureVerification?.valid && cancellationStatus === "active"
+                  ? "Verified Pay Link"
+                  : "On-chain checkout"}
+              </strong>
+              <span className="text-slate-400"> · Secured by XDCID</span>
+            </span>
+          </div>
+        </footer>
+        </div>
       </section>
+      <PaymentReceiptDialog record={completedReceipt} onClose={() => setCompletedReceipt(null)} />
     </main>
   );
+}
+
+function XdcidMark({ className = "" }: { className?: string }) {
+  return (
+    <span className={"relative block h-9 w-28 shrink-0 overflow-hidden sm:w-32 " + className} aria-label="XDCID">
+      <Image
+        alt=""
+        className="absolute left-[-19px] top-[-22px] h-[76px] w-[142px] max-w-none"
+        height={914}
+        priority
+        src="/XDCID.png"
+        width={1714}
+      />
+    </span>
+  );
+}
+
+function AmountValue({ amount }: { amount: string }) {
+  if (!amount) return <>—</>;
+  const [whole, fraction] = amount.trim().split(".");
+  return (
+    <span aria-label={amount}>
+      <span aria-hidden="true">{whole || "0"}</span>
+      {fraction !== undefined ? (
+        <>
+          <span aria-hidden="true" className="inline-block min-w-[0.25em] text-center">.</span>
+          <span aria-hidden="true">{fraction}</span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function friendlyPaymentError(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("rejected") || message.includes("denied") || message.includes("user cancelled")) {
+    return "Payment rejected in your wallet. No funds were sent.";
+  }
+  return "Payment could not be submitted. You can try again.";
 }

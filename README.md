@@ -2,9 +2,9 @@
   <img src="frontend/public/XDCID.png" alt="XDCID" width="720" />
 </p>
 
-# XDCID MVP
+# XDCID
 
-Minimal `.xdc` names for XDC mainnet.
+Wallet-native `.xdc` identities, multichain resolution, signed registration, subdomains, and Pay Links on XDC mainnet.
 
 ## Stack
 
@@ -29,9 +29,13 @@ The frontend displays the suffix as `.XDC`, but canonicalizes registrations to l
 | Contract | Address |
 | --- | --- |
 | XNSRegistry | [`0x05fa64a05bc205DeDF47e023d2D90c2d119cd097`](https://xdcscan.com/address/0x05fa64a05bc205DeDF47e023d2D90c2d119cd097) |
-| XNSRegistrar (active v2) | [`0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7`](https://xdcscan.com/address/0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7) |
+| XNSRegistrar V2 (active) | [`0xdEaf1742614908a8d170f4c9520c3cd1e967ef36`](https://xdcscan.com/address/0xdEaf1742614908a8d170f4c9520c3cd1e967ef36) |
+| XNSPricingPolicy V2 | [`0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94`](https://xdcscan.com/address/0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94) |
+| XNSDiscountAuthorization | [`0x9EE907230d351264403555fA6967EA44Ba31A5d1`](https://xdcscan.com/address/0x9EE907230d351264403555fA6967EA44Ba31A5d1) |
+| XNSSubdomainRegistrar | [`0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7`](https://xdcscan.com/address/0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7) |
 | XNSResolver | [`0x52bfa70B30190050F77033Fe427De8B3d4A8F453`](https://xdcscan.com/address/0x52bfa70B30190050F77033Fe427De8B3d4A8F453) |
 | XNSReverseResolver | [`0x8b1a236845b0CC84094578cEd97844b8dC5f139f`](https://xdcscan.com/address/0x8b1a236845b0CC84094578cEd97844b8dC5f139f) |
+| XNSMultichainResolver | [`0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240`](https://xdcscan.com/address/0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240) |
 
 The Registry and active Registrar protocol owner is `0xe82a4267CC310FC6Db334601671A043DFc8Ce06A`.
 
@@ -106,21 +110,30 @@ Open the Next.js URL and connect a wallet on XDC mainnet, chain ID `50`.
 
 The complete OpenAPI 3.1 contract is published at [`/openapi.yaml`](frontend/public/openapi.yaml) and is served by the deployed frontend at `/openapi.yaml`.
 
-The first API version exposes two XDC mainnet read endpoints:
+The first API version exposes public XDC mainnet reads and short-lived payment authorization:
 
 - `GET /api/v1/names/{name}?years=1` returns canonical name data, forward resolution, availability, pricing, expiry, and profile records.
 - `GET /api/v1/reverse/{address}` returns the wallet's verified primary name, or `null` when the stored reverse record is stale or missing.
+- `GET /api/v1/addresses/{address}/names` returns the verified primary ID and active owned-name inventory.
+- `GET /api/v1/pricing/quote` returns informational USD policy pricing and a buffered XDC estimate.
+- `POST /api/v1/registrar/quote` returns a signed registration or renewal quote.
+- `POST /api/v1/subdomain/quote` returns a signed subdomain registration or renewal quote.
+- `POST /api/pay-links` stores an already signed payment request and returns a short path plus private revocation token.
+- `GET /api/pay-links/cancellations/{requestId}` reports whether a payment request is active, cancelled, or paid.
+
+The repository SDK supports both direct on-chain reads/write preparation and typed HTTP integration for browser, Node.js, and Web2 services. See [`sdk/README.md`](sdk/README.md) and the deployed [`/docs`](https://xdcid.xyz/docs) page.
 
 The name endpoint accepts either a bare label or a `.xdc` name. The optional `years` parameter must be an integer from 1 through 100 and controls the total registration-price quote.
 
 ### XDC AI gateway upstream
 
-Four focused upstream routes are available for the XDC AI Gateway:
+Five focused upstream routes are available for the XDC AI Gateway:
 
 - `GET /api/xdcai/v1/resolve/{name}` returns ownership, forward resolution, and expiry.
 - `GET /api/xdcai/v1/reverse/{address}` returns the verified primary name.
 - `GET /api/xdcai/v1/availability/{name}?years=1` returns availability, expiry, and pricing.
 - `GET /api/xdcai/v1/profile/{name}` returns the profile records.
+- `GET /api/xdcai/v1/owned-names/{address}` returns the verified primary ID and active owned names.
 
 These routes require the `X-XDCID-Gateway-Key` request header to match the server-only `XDCID_GATEWAY_API_KEY` environment variable. If the variable is missing, the routes fail closed with HTTP 503; invalid credentials return HTTP 401. Never commit the key or expose it through a `NEXT_PUBLIC_*` variable. Agents call the paid `api.xdcai.tech` service URL rather than these protected upstream URLs directly.
 

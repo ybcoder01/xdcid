@@ -100,6 +100,7 @@ export const payLinks = pgTable(
   "pay_links",
   {
     id: varchar("id", { length: 32 }).primaryKey(),
+    requestId: varchar("request_id", { length: 66 }),
     name: varchar("name", { length: 255 }).notNull(),
     encodedRequest: text("encoded_request").notNull(),
     signature: text("signature").notNull(),
@@ -108,10 +109,15 @@ export const payLinks = pgTable(
       .defaultNow()
       .notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
-    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" })
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+    paidAt: timestamp("paid_at", { withTimezone: true, mode: "date" }),
+    paymentId: varchar("payment_id", { length: 64 }),
+    sourceTransactionHash: varchar("source_transaction_hash", { length: 66 }),
+    destinationTransactionHash: varchar("destination_transaction_hash", { length: 66 })
   },
   (table) => [
     index("pay_links_name_idx").on(table.name),
+    index("pay_links_request_id_idx").on(table.requestId),
     index("pay_links_expires_at_idx").on(table.expiresAt)
   ]
 );
@@ -149,6 +155,70 @@ export const adminAuthChallenges = pgTable(
   (table) => [
     index("admin_auth_challenges_address_idx").on(table.address),
     index("admin_auth_challenges_expires_at_idx").on(table.expiresAt)
+  ]
+);
+
+export const adminAuthRateLimits = pgTable(
+  "admin_auth_rate_limits",
+  {
+    scope: varchar("scope", { length: 32 }).notNull(),
+    identifierHash: varchar("identifier_hash", { length: 64 }).notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true, mode: "date" }).notNull(),
+    hitCount: integer("hit_count").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [
+    primaryKey({ columns: [table.scope, table.identifierHash] }),
+    index("admin_auth_rate_limits_updated_at_idx").on(table.updatedAt)
+  ]
+);
+
+export const adminSecurityEvents = pgTable(
+  "admin_security_events",
+  {
+    id: varchar("id", { length: 32 }).primaryKey(),
+    eventType: varchar("event_type", { length: 48 }).notNull(),
+    outcome: varchar("outcome", { length: 24 }).notNull(),
+    addressFingerprint: varchar("address_fingerprint", { length: 64 }),
+    clientFingerprint: varchar("client_fingerprint", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull()
+  },
+  (table) => [index("admin_security_events_created_at_idx").on(table.createdAt)]
+);
+
+export const privateVaultChallenges = pgTable(
+  "private_vault_challenges",
+  {
+    id: varchar("id", { length: 32 }).primaryKey(),
+    address: varchar("address", { length: 42 }).notNull(),
+    messageHash: varchar("message_hash", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" })
+  },
+  (table) => [index("private_vault_challenges_expires_idx").on(table.expiresAt)]
+);
+
+export const exchangeAddressBookEntries = pgTable(
+  "exchange_address_book_entries",
+  {
+    id: varchar("id", { length: 40 }).primaryKey(),
+    ownerFingerprint: varchar("owner_fingerprint", { length: 64 }).notNull(),
+    encryptedPayload: text("encrypted_payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    index("exchange_address_book_owner_idx").on(
+      table.ownerFingerprint,
+      table.updatedAt
+    )
   ]
 );
 

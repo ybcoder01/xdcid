@@ -8,6 +8,7 @@ import {
 
 describe("pricing policy foundation", function () {
   it("prices names by canonical label length", function () {
+    expect(annualNamePriceUsdMicros(2)).to.equal(50_000_000n);
     expect(annualNamePriceUsdMicros(3)).to.equal(20_000_000n);
     expect(annualNamePriceUsdMicros(4)).to.equal(10_000_000n);
     expect(annualNamePriceUsdMicros(5)).to.equal(5_000_000n);
@@ -81,8 +82,8 @@ describe("pricing policy foundation", function () {
   });
 
   it("rejects unsupported lengths and terms", function () {
-    expect(() => annualNamePriceUsdMicros(2)).to.throw(
-      "between 3 and 63",
+    expect(() => annualNamePriceUsdMicros(1)).to.throw(
+      "between 2 and 63",
     );
     expect(() =>
       calculateUsdPrice({

@@ -33,3 +33,10 @@ textarea:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
 }
+
+.pay-receipt {
+  background:
+    linear-gradient(140deg, rgba(217, 242, 240, 0.62), transparent 34%),
+    linear-gradient(315deg, rgba(101, 212, 225, 0.14), transparent 38%),
+    rgba(255, 255, 255, 0.98);
+}
