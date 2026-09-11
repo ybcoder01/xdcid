@@ -7,11 +7,7 @@ export type AdminRateLimitScope =
   | "challenge-ip"
   | "challenge-wallet"
   | "verify-ip"
-  | "verify-challenge"
-  | "vault-challenge-ip"
-  | "vault-challenge-wallet"
-  | "vault-verify-ip"
-  | "vault-verify-challenge";
+  | "verify-challenge";
 
 type AdminSecurityOutcome =
   | "allowed"
@@ -39,7 +35,7 @@ export function isSameOrigin(request: Request): boolean {
 }
 
 function securitySecret(): string {
-  const secret = process.env.ADMIN_SESSION_SECRET || process.env.PRIVATE_VAULT_SESSION_SECRET;
+  const secret = process.env.ADMIN_SESSION_SECRET;
   if (!secret || Buffer.byteLength(secret, "utf8") < 32) {
     throw new Error("Admin security is not configured");
   }
