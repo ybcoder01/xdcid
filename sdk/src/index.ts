@@ -6,17 +6,26 @@ import {
   http,
   isAddress,
   isAddressEqual,
+  isHex,
   keccak256,
   toBytes,
   zeroAddress,
   type Address,
   type Hash,
+  type Hex,
   type PublicClient
 } from "viem";
+import type {
+  RegistrarQuoteData,
+  SerializedDiscountAuthorization,
+  SerializedRegistrarQuote,
+  SerializedSubdomainQuote,
+  SubdomainQuoteData
+} from "./api.js";
 
 export const XDC_CHAIN_ID = 50;
 export const XDCID_SUFFIX = ".xdc";
-export const MIN_LABEL_LENGTH = 3;
+export const MIN_LABEL_LENGTH = 2;
 export const MAX_LABEL_LENGTH = 63;
 export const PROFILE_KEYS = ["avatar", "website", "twitter", "telegram", "bio"] as const;
 export const MULTICHAIN_RESOLVER_ADDRESS = "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240" as const;
@@ -44,14 +53,20 @@ export type XdcidContracts = {
   resolver: Address;
   reverseResolver: Address;
   multichainResolver: Address;
+  pricingPolicy: Address;
+  discountAuthorization: Address;
+  subdomainRegistrar: Address;
 };
 
 export const XDCID_CONTRACTS: XdcidContracts = {
   registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
-  registrar: "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
+  registrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
   resolver: "0x52bfa70B30190050F77033Fe427De8B3d4A8F453",
   reverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f",
-  multichainResolver: MULTICHAIN_RESOLVER_ADDRESS
+  multichainResolver: MULTICHAIN_RESOLVER_ADDRESS,
+  pricingPolicy: "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94",
+  discountAuthorization: "0x9EE907230d351264403555fA6967EA44Ba31A5d1",
+  subdomainRegistrar: "0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7"
 };
 
 export const xdcMainnet = defineChain({
@@ -108,9 +123,11 @@ export type AvailabilityResult = {
   node: Hash;
   available: boolean;
   expiry: bigint;
-  pricePerYear: bigint;
+  /** @deprecated Current pricing is signed in USD. Use createXdcidApiClient().getPricingQuote(). */
+  pricePerYear: null;
   years: number;
-  totalPrice: bigint;
+  /** @deprecated Current pricing is signed in USD. Use createXdcidApiClient().createRegistrarQuote(). */
+  totalPrice: null;
 };
 
 export type ProfileResult = {
@@ -153,13 +170,6 @@ const registrarAbi = [
     inputs: [{ name: "name", type: "string" }],
     outputs: [{ type: "bool" }]
   },
-  {
-    type: "function",
-    name: "price",
-    stateMutability: "pure",
-    inputs: [{ name: "name", type: "string" }],
-    outputs: [{ type: "uint256" }]
-  }
 ] as const;
 
 const registryAbi = [
@@ -176,6 +186,26 @@ const registryAbi = [
     stateMutability: "view",
     inputs: [{ name: "node", type: "bytes32" }],
     outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "transferName",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "newOwner", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "setResolver",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "resolver", type: "address" }
+    ],
+    outputs: []
   }
 ] as const;
 
@@ -196,6 +226,27 @@ const resolverAbi = [
       { name: "key", type: "string" }
     ],
     outputs: [{ type: "string" }]
+  },
+  {
+    type: "function",
+    name: "setAddress",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "addr", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "setText",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "key", type: "string" },
+      { name: "value", type: "string" }
+    ],
+    outputs: []
   }
 ] as const;
 
@@ -206,6 +257,16 @@ const reverseResolverAbi = [
     stateMutability: "view",
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ type: "string" }]
+  },
+  {
+    type: "function",
+    name: "setPrimaryName",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "node", type: "bytes32" }
+    ],
+    outputs: []
   }
 ] as const;
 
@@ -257,6 +318,170 @@ export const multichainResolverAbi = [
   }
 ] as const;
 
+export const xdcidRegistryAbi = registryAbi;
+export const xdcidResolverAbi = resolverAbi;
+export const xdcidReverseResolverAbi = reverseResolverAbi;
+
+const registrarQuoteComponents = [
+  { name: "node", type: "bytes32" },
+  { name: "payer", type: "address" },
+  { name: "nameOwner", type: "address" },
+  { name: "product", type: "uint8" },
+  { name: "termYears", type: "uint256" },
+  { name: "paymentToken", type: "address" },
+  { name: "paymentAmount", type: "uint256" },
+  { name: "usdMicros", type: "uint256" },
+  { name: "policyVersion", type: "uint256" },
+  { name: "nonce", type: "uint256" },
+  { name: "issuedAt", type: "uint256" },
+  { name: "deadline", type: "uint256" }
+] as const;
+
+const discountAuthorizationComponents = [
+  { name: "node", type: "bytes32" },
+  { name: "beneficiary", type: "address" },
+  { name: "product", type: "uint8" },
+  { name: "termYears", type: "uint256" },
+  { name: "discountBps", type: "uint16" },
+  { name: "maxUses", type: "uint32" },
+  { name: "validAfter", type: "uint64" },
+  { name: "deadline", type: "uint64" },
+  { name: "nonce", type: "uint256" }
+] as const;
+
+export const signedRegistrarV2Abi = [
+  {
+    type: "function",
+    name: "registerWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: registrarQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: registrarQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "registerWithDiscountQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: registrarQuoteComponents },
+      { name: "quoteSignature", type: "bytes" },
+      { name: "authorization", type: "tuple", components: discountAuthorizationComponents },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithDiscountQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: registrarQuoteComponents },
+      { name: "quoteSignature", type: "bytes" },
+      { name: "authorization", type: "tuple", components: discountAuthorizationComponents },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
+
+const subdomainQuoteComponents = [
+  { name: "node", type: "bytes32" },
+  { name: "parentNode", type: "bytes32" },
+  { name: "payer", type: "address" },
+  { name: "subdomainOwner", type: "address" },
+  { name: "termYears", type: "uint256" },
+  { name: "paymentToken", type: "address" },
+  { name: "paymentAmount", type: "uint256" },
+  { name: "usdMicros", type: "uint256" },
+  { name: "policyVersion", type: "uint256" },
+  { name: "nonce", type: "uint256" },
+  { name: "issuedAt", type: "uint256" },
+  { name: "deadline", type: "uint256" }
+] as const;
+
+export const subdomainRegistrarAbi = [
+  {
+    type: "function",
+    name: "registerWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "quote", type: "tuple", components: subdomainQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "quote", type: "tuple", components: subdomainQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
+
+export const erc20ApprovalAbi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" }
+    ],
+    outputs: [{ type: "bool" }]
+  }
+] as const;
+
+type WriteRequest<TAbi extends readonly unknown[], TFunctionName extends string, TArgs extends readonly unknown[]> = {
+  chainId: typeof XDC_CHAIN_ID;
+  address: Address;
+  abi: TAbi;
+  functionName: TFunctionName;
+  args: TArgs;
+  value?: bigint;
+};
+
+export type RegistrarPaymentPlan = {
+  approval: WriteRequest<typeof erc20ApprovalAbi, "approve", readonly [Address, bigint]> | null;
+  transaction: WriteRequest<
+    typeof signedRegistrarV2Abi,
+    "registerWithQuote" | "renewWithQuote" | "registerWithDiscountQuote" | "renewWithDiscountQuote",
+    readonly unknown[]
+  >;
+};
+
+export type SubdomainPaymentPlan = {
+  approval: WriteRequest<typeof erc20ApprovalAbi, "approve", readonly [Address, bigint]> | null;
+  transaction: WriteRequest<
+    typeof subdomainRegistrarAbi,
+    "registerWithQuote" | "renewWithQuote",
+    readonly [string, string, ReturnType<typeof deserializeSubdomainQuote>, Hash]
+  >;
+};
+
 export type SetMultichainAddressRequest = {
   chainId: typeof XDC_CHAIN_ID;
   address: Address;
@@ -289,7 +514,7 @@ export function parseXdcidName(value: string): ParsedXdcidName {
   const name = label + XDCID_SUFFIX;
 
   if (label.length < MIN_LABEL_LENGTH) {
-    return invalidName(input, label, name, "Name must be at least 3 characters");
+    return invalidName(input, label, name, "Name must be at least 2 characters");
   }
 
   if (label.length > MAX_LABEL_LENGTH) {
@@ -470,6 +695,173 @@ export class XdcidClient {
     };
   }
 
+  prepareTransferName(value: string, newOwner: string) {
+    const owner = assertNonZeroAddress(newOwner, "New owner");
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.registry,
+      abi: xdcidRegistryAbi,
+      functionName: "transferName" as const,
+      args: [nodeForName(value), owner] as const
+    };
+  }
+
+  prepareSetResolver(value: string, resolver = this.contracts.resolver) {
+    const target = assertNonZeroAddress(resolver, "Resolver");
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.registry,
+      abi: xdcidRegistryAbi,
+      functionName: "setResolver" as const,
+      args: [nodeForName(value), target] as const
+    };
+  }
+
+  prepareSetAddress(value: string, target: string) {
+    const address = assertNonZeroAddress(target, "Resolved address");
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.resolver,
+      abi: xdcidResolverAbi,
+      functionName: "setAddress" as const,
+      args: [nodeForName(value), address] as const
+    };
+  }
+
+  prepareSetText(value: string, key: ProfileKey, text: string) {
+    if (!PROFILE_KEYS.includes(key)) {
+      throw new XdcidSdkError("INVALID_CONFIG", "Unsupported profile key");
+    }
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.resolver,
+      abi: xdcidResolverAbi,
+      functionName: "setText" as const,
+      args: [nodeForName(value), key, text] as const
+    };
+  }
+
+  prepareSetPrimaryName(value: string) {
+    const name = normalizeName(value);
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.reverseResolver,
+      abi: xdcidReverseResolverAbi,
+      functionName: "setPrimaryName" as const,
+      args: [name, nodeForName(name)] as const
+    };
+  }
+
+  prepareRegistrarPayment(data: RegistrarQuoteData): RegistrarPaymentPlan {
+    assertQuoteContext(data.chainId, data.registrar, data.policy, {
+      registrar: this.contracts.registrar,
+      policy: this.contracts.pricingPolicy
+    });
+    const name = normalizeName(data.name);
+    const quote = deserializeRegistrarQuote(data.quote);
+    if (quote.node !== nodeForName(name)) {
+      throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote does not match the requested name");
+    }
+    if (
+      quote.product !== (data.product === "registration" ? 0 : 1) ||
+      quote.deadline < BigInt(Math.floor(Date.now() / 1_000))
+    ) {
+      throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote product or deadline is invalid");
+    }
+    if (!isHex(data.signature, { strict: true })) {
+      throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote signature is invalid");
+    }
+    const baseFunction = data.product === "registration" ? "registerWithQuote" : "renewWithQuote";
+    const discountFunction = data.product === "registration"
+      ? "registerWithDiscountQuote"
+      : "renewWithDiscountQuote";
+    let discountAuthorization: ReturnType<typeof deserializeDiscountAuthorization> | undefined;
+    if (data.discount) {
+      if (
+        !isAddressEqual(data.discount.authorizationContract, this.contracts.discountAuthorization) ||
+        !isHex(data.discount.signature, { strict: true })
+      ) {
+        throw new XdcidSdkError("INVALID_CONFIG", "Discount authorization context is invalid");
+      }
+      discountAuthorization = deserializeDiscountAuthorization(data.discount.authorization);
+      if (
+        discountAuthorization.node !== quote.node ||
+        !isAddressEqual(discountAuthorization.beneficiary, quote.nameOwner) ||
+        discountAuthorization.product !== quote.product ||
+        discountAuthorization.termYears !== quote.termYears ||
+        discountAuthorization.deadline < BigInt(Math.floor(Date.now() / 1_000))
+      ) {
+        throw new XdcidSdkError("INVALID_CONFIG", "Discount authorization does not match the registrar quote");
+      }
+    }
+    const args = data.discount && discountAuthorization
+      ? [
+          name,
+          quote,
+          data.signature,
+          discountAuthorization,
+          data.discount.signature
+        ] as const
+      : [name, quote, data.signature] as const;
+
+    return {
+      approval: quote.paymentToken === zeroAddress || quote.paymentAmount === 0n
+        ? null
+        : {
+            chainId: XDC_CHAIN_ID,
+            address: quote.paymentToken,
+            abi: erc20ApprovalAbi,
+            functionName: "approve",
+            args: [data.registrar, quote.paymentAmount]
+          },
+      transaction: {
+        chainId: XDC_CHAIN_ID,
+        address: data.registrar,
+        abi: signedRegistrarV2Abi,
+        functionName: data.discount ? discountFunction : baseFunction,
+        args,
+        value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n
+      }
+    };
+  }
+
+  prepareSubdomainPayment(data: SubdomainQuoteData): SubdomainPaymentPlan {
+    assertQuoteContext(data.chainId, data.registrar, data.pricingPolicy, {
+      registrar: this.contracts.subdomainRegistrar,
+      policy: this.contracts.pricingPolicy
+    });
+    const quote = deserializeSubdomainQuote(data.quote);
+    const parentName = normalizeName(data.parentName);
+    const label = normalizeSubdomainLabel(data.label);
+    if (
+      quote.node !== keccak256(toBytes(`${label}.${parentName}`)) ||
+      quote.parentNode !== nodeForName(parentName) ||
+      quote.deadline < BigInt(Math.floor(Date.now() / 1_000)) ||
+      !isHex(data.signature, { strict: true })
+    ) {
+      throw new XdcidSdkError("INVALID_CONFIG", "Subdomain quote does not match the requested name");
+    }
+    return {
+      approval: quote.paymentToken === zeroAddress || quote.paymentAmount === 0n
+        ? null
+        : {
+            chainId: XDC_CHAIN_ID,
+            address: quote.paymentToken,
+            abi: erc20ApprovalAbi,
+            functionName: "approve",
+            args: [data.registrar, quote.paymentAmount]
+          },
+      transaction: {
+        chainId: XDC_CHAIN_ID,
+        address: data.registrar,
+        abi: subdomainRegistrarAbi,
+        functionName: data.action === "registration" ? "registerWithQuote" : "renewWithQuote",
+        args: [parentName, label, quote, data.signature],
+        value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n
+      }
+    };
+  }
+
   async reverseResolve(value: string): Promise<ReverseResolutionResult | null> {
     if (!isAddress(value)) {
       throw new XdcidSdkError("INVALID_ADDRESS", "Address must be a valid EVM address");
@@ -520,7 +912,7 @@ export class XdcidClient {
     assertYears(years);
     const name = normalizeName(value);
     const node = nodeForName(name);
-    const [available, expiry, pricePerYear] = await Promise.all([
+    const [available, expiry] = await Promise.all([
       this.read<boolean>({
         address: this.contracts.registrar,
         abi: registrarAbi,
@@ -532,12 +924,6 @@ export class XdcidClient {
         abi: registryAbi,
         functionName: "expiryOf",
         args: [node]
-      }),
-      this.read<bigint>({
-        address: this.contracts.registrar,
-        abi: registrarAbi,
-        functionName: "price",
-        args: [name]
       })
     ]);
 
@@ -546,9 +932,9 @@ export class XdcidClient {
       node,
       available,
       expiry,
-      pricePerYear,
+      pricePerYear: null,
       years,
-      totalPrice: pricePerYear * BigInt(years)
+      totalPrice: null
     };
   }
 
@@ -642,6 +1028,131 @@ function assertRpcUrl(value: string): void {
   }
 }
 
+function assertNonZeroAddress(value: string, label: string): Address {
+  if (!isAddress(value) || value === zeroAddress) {
+    throw new XdcidSdkError("INVALID_ADDRESS", `${label} must be a non-zero EVM address`);
+  }
+  return getAddress(value);
+}
+
+function assertQuoteContext(
+  chainId: number,
+  registrar: string,
+  policy: string,
+  expected: { registrar: Address; policy: Address }
+) {
+  if (chainId !== XDC_CHAIN_ID) {
+    throw new XdcidSdkError("WRONG_CHAIN", "Quote must target XDC mainnet chain ID 50");
+  }
+  if (
+    !isAddress(registrar) ||
+    !isAddress(policy) ||
+    !isAddressEqual(registrar, expected.registrar) ||
+    !isAddressEqual(policy, expected.policy)
+  ) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Quote contract addresses do not match the SDK configuration");
+  }
+}
+
+function deserializeRegistrarQuote(value: SerializedRegistrarQuote) {
+  assertSerializedQuoteIdentity(value.node, value.payer, value.nameOwner);
+  if (value.product !== 0 && value.product !== 1) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote product is invalid");
+  }
+  return {
+    node: value.node,
+    payer: getAddress(value.payer),
+    nameOwner: getAddress(value.nameOwner),
+    product: value.product,
+    termYears: parseUnsignedBigInt(value.termYears, "termYears"),
+    paymentToken: getAddress(value.paymentToken),
+    paymentAmount: parseUnsignedBigInt(value.paymentAmount, "paymentAmount"),
+    usdMicros: parseUnsignedBigInt(value.usdMicros, "usdMicros"),
+    policyVersion: parseUnsignedBigInt(value.policyVersion, "policyVersion"),
+    nonce: parseUnsignedBigInt(value.nonce, "nonce"),
+    issuedAt: parseUnsignedBigInt(value.issuedAt, "issuedAt"),
+    deadline: parseUnsignedBigInt(value.deadline, "deadline")
+  };
+}
+
+function deserializeDiscountAuthorization(value: SerializedDiscountAuthorization) {
+  assertSerializedQuoteIdentity(value.node, value.beneficiary, value.beneficiary);
+  if (
+    !Number.isSafeInteger(value.product) ||
+    !Number.isSafeInteger(value.discountBps) ||
+    value.discountBps < 0 ||
+    value.discountBps > 10_000 ||
+    !Number.isSafeInteger(value.maxUses) ||
+    value.maxUses < 1
+  ) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Discount authorization values are invalid");
+  }
+  return {
+    node: value.node,
+    beneficiary: getAddress(value.beneficiary),
+    product: value.product,
+    termYears: parseUnsignedBigInt(value.termYears, "discount termYears"),
+    discountBps: value.discountBps,
+    maxUses: value.maxUses,
+    validAfter: parseUnsignedBigInt(value.validAfter, "discount validAfter"),
+    deadline: parseUnsignedBigInt(value.deadline, "discount deadline"),
+    nonce: parseUnsignedBigInt(value.nonce, "discount nonce")
+  };
+}
+
+function deserializeSubdomainQuote(value: SerializedSubdomainQuote) {
+  if (!isHex(value.parentNode, { strict: true }) || value.parentNode.length !== 66) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Subdomain quote parent node is invalid");
+  }
+  assertSerializedQuoteIdentity(value.node, value.payer, value.subdomainOwner);
+  return {
+    node: value.node,
+    parentNode: value.parentNode,
+    payer: getAddress(value.payer),
+    subdomainOwner: getAddress(value.subdomainOwner),
+    termYears: parseUnsignedBigInt(value.termYears, "termYears"),
+    paymentToken: getAddress(value.paymentToken),
+    paymentAmount: parseUnsignedBigInt(value.paymentAmount, "paymentAmount"),
+    usdMicros: parseUnsignedBigInt(value.usdMicros, "usdMicros"),
+    policyVersion: parseUnsignedBigInt(value.policyVersion, "policyVersion"),
+    nonce: parseUnsignedBigInt(value.nonce, "nonce"),
+    issuedAt: parseUnsignedBigInt(value.issuedAt, "issuedAt"),
+    deadline: parseUnsignedBigInt(value.deadline, "deadline")
+  };
+}
+
+function assertSerializedQuoteIdentity(node: string, firstAddress: string, secondAddress: string) {
+  if (
+    !isHex(node, { strict: true }) ||
+    node.length !== 66 ||
+    !isAddress(firstAddress) ||
+    !isAddress(secondAddress)
+  ) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Quote identity fields are invalid");
+  }
+}
+
+function parseUnsignedBigInt(value: string, field: string): bigint {
+  if (!/^[0-9]+$/.test(value)) {
+    throw new XdcidSdkError("INVALID_CONFIG", `${field} must be an unsigned integer string`);
+  }
+  return BigInt(value);
+}
+
+function normalizeSubdomainLabel(value: string): string {
+  const label = value.trim().toLowerCase();
+  if (
+    label.length < 1 ||
+    label.length > 63 ||
+    !/^[a-z0-9-]+$/.test(label) ||
+    label.startsWith("-") ||
+    label.endsWith("-")
+  ) {
+    throw new XdcidSdkError("INVALID_NAME", "Subdomain label is invalid");
+  }
+  return label;
+}
+
 function normalizeContracts(overrides?: Partial<XdcidContracts>): XdcidContracts {
   const contracts = { ...XDCID_CONTRACTS, ...overrides };
   for (const [name, address] of Object.entries(contracts)) {
@@ -654,6 +1165,9 @@ function normalizeContracts(overrides?: Partial<XdcidContracts>): XdcidContracts
     registrar: getAddress(contracts.registrar),
     resolver: getAddress(contracts.resolver),
     reverseResolver: getAddress(contracts.reverseResolver),
-    multichainResolver: getAddress(contracts.multichainResolver)
+    multichainResolver: getAddress(contracts.multichainResolver),
+    pricingPolicy: getAddress(contracts.pricingPolicy),
+    discountAuthorization: getAddress(contracts.discountAuthorization),
+    subdomainRegistrar: getAddress(contracts.subdomainRegistrar)
   };
 }

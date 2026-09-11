@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: XDCID API
-  version: 1.3.0
+  version: 1.4.0
   description: |
-    Versioned, read-only access to XDCID name and reverse-resolution data on
-    XDC mainnet. The API version is present in both the URL and every
-    application JSON response.
+    Versioned XDCID resolution, pricing, signed-quote, subdomain, and Pay Link
+    APIs. Versioned endpoints include the API version in both the URL and every
+    application JSON response. Pay Link storage endpoints use compact raw JSON
+    responses and never accept a private key.
 servers:
   - url: /
     description: Current XDCID deployment
@@ -13,6 +14,10 @@ tags:
   - name: Names
   - name: Reverse resolution
   - name: Wallet names
+  - name: Pricing
+  - name: Registration quotes
+  - name: Subdomain quotes
+  - name: Pay Links
   - name: XDC AI gateway
 paths:
   /api/v1/names/{name}:
@@ -305,6 +310,44 @@ paths:
           $ref: "#/components/responses/GatewayUnauthorized"
         "503":
           $ref: "#/components/responses/GatewayServiceUnavailable"
+  /api/v1/pricing/quote:
+    get:
+      operationId: getPricingQuote
+      summary: Get an informational policy price
+      description: Returns the current USD policy price and a buffered XDC estimate. This response cannot authorize a contract payment.
+      tags:
+        - Pricing
+      parameters:
+        - name: product
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [registration, renewal, subdomain, migration]
+        - name: name
+          in: query
+          required: false
+          description: Required for registration and renewal products.
+          schema:
+            type: string
+        - name: years
+          in: query
+          required: false
+          description: Required except for migration.
+          schema:
+            type: integer
+            enum: [1, 3, 5, 10]
+      responses:
+        "200":
+          description: Informational price returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingQuoteResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "503":
+          $ref: "#/components/responses/RpcUnavailable"
   /api/v1/registrar/quote:
     post:
       operationId: createRegistrarQuote
@@ -423,6 +466,164 @@ paths:
           description: Quote request rate limit exceeded.
         "503":
           description: Quote signing, RPC, policy, or pricing is unavailable.
+  /api/v1/subdomain/quote:
+    post:
+      operationId: createSubdomainQuote
+      summary: Create a short-lived subdomain registration or renewal quote
+      description: Checks the parent owner/operator, subdomain state, and parent expiry before returning an EIP-712 quote.
+      tags:
+        - Subdomain quotes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [parentName, label, action, termYears, paymentCurrency, payer, subdomainOwner]
+              properties:
+                parentName:
+                  type: string
+                  examples: [company.xdc]
+                label:
+                  type: string
+                  examples: [alice]
+                action:
+                  type: string
+                  enum: [registration, renewal]
+                termYears:
+                  type: integer
+                  enum: [1, 3, 5, 10]
+                paymentCurrency:
+                  type: string
+                  enum: [XDC, USDC]
+                payer:
+                  $ref: "#/components/schemas/Address"
+                subdomainOwner:
+                  $ref: "#/components/schemas/Address"
+      responses:
+        "200":
+          description: Signed subdomain quote returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubdomainQuoteResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          description: The payer is not an authorized parent or subdomain controller.
+        "409":
+          description: The name is unavailable or the requested term exceeds the parent expiry.
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: Quote signing, RPC, policy, or pricing is unavailable.
+  /api/pay-links:
+    post:
+      operationId: createPayLink
+      summary: Store an already signed payment request
+      description: Returns a short path and a one-time private revocation token. The request signature is verified against the current XDCID owner.
+      tags:
+        - Pay Links
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [request, signature]
+              properties:
+                request:
+                  type: string
+                  pattern: "^0x[a-fA-F0-9]+$"
+                signature:
+                  type: string
+                  pattern: "^0x[a-fA-F0-9]+$"
+      responses:
+        "201":
+          description: Short Pay Link created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedPayLink"
+        "400":
+          description: The signed payment request is malformed.
+        "403":
+          description: The request is not signed by the current XDCID owner.
+        "503":
+          description: Pay Link storage is unavailable.
+  /api/pay-links/{id}:
+    get:
+      operationId: getPayLink
+      summary: Read a short Pay Link
+      tags:
+        - Pay Links
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Active Pay Link returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivePayLink"
+        "404":
+          description: Pay Link not found.
+        "410":
+          description: Pay Link was paid, revoked, or expired. Paid responses include the payment ID when available.
+    delete:
+      operationId: revokePayLink
+      summary: Revoke a short Pay Link
+      description: Requires the private revocation token returned only at creation time.
+      tags:
+        - Pay Links
+      security:
+        - PayLinkRevocationToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pay Link revoked.
+        "401":
+          description: Revocation token missing.
+        "403":
+          description: Revocation token invalid.
+        "404":
+          description: Pay Link not found.
+  /api/pay-links/cancellations/{requestId}:
+    get:
+      operationId: getPayLinkStatus
+      summary: Read payment-request status
+      description: Safe polling endpoint for updating a payer or payee UI when a request becomes paid or cancelled.
+      tags:
+        - Pay Links
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^0x[a-fA-F0-9]{64}$"
+      responses:
+        "200":
+          description: Current request status returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayLinkStatus"
+        "400":
+          description: Invalid request ID.
+        "503":
+          description: Pay Link status storage is unavailable.
 components:
   securitySchemes:
     XdcAiGatewayKey:
@@ -430,6 +631,10 @@ components:
       in: header
       name: X-XDCID-Gateway-Key
       description: Server-only key injected by the XDC AI Gateway.
+    PayLinkRevocationToken:
+      type: http
+      scheme: bearer
+      description: One-time private token returned when the short Pay Link is created.
   headers:
     CacheControl:
       description: Application responses are not stored by shared or browser caches.
@@ -497,6 +702,157 @@ components:
               code: XDC_RPC_UNAVAILABLE
               message: Unable to read the XDC Network
   schemas:
+    PricingQuoteResponse:
+      type: object
+      required: [version, data]
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"
+        data:
+          type: object
+          required: [authorizedForPayment, warning, policyVersion, product, pricing, xdc]
+          properties:
+            authorizedForPayment:
+              type: boolean
+              const: false
+            warning:
+              type: string
+            policyVersion:
+              type: integer
+            product:
+              type: string
+              enum: [registration, renewal, subdomain, migration]
+            name:
+              type: [string, "null"]
+            years:
+              type: [integer, "null"]
+            pricing:
+              type: object
+              required: [currency, annualMicros, grossMicros, discountBps, totalMicros]
+              properties:
+                currency:
+                  type: string
+                  const: USD
+                annualMicros:
+                  type: [string, "null"]
+                grossMicros:
+                  type: string
+                discountBps:
+                  type: string
+                totalMicros:
+                  type: string
+            xdc:
+              type: object
+              required: [wei, xdc, bufferBps, marketPriceUsdMicros, provider, observedAt, fetchedAt]
+              properties:
+                wei:
+                  type: string
+                xdc:
+                  type: string
+                bufferBps:
+                  type: string
+                marketPriceUsdMicros:
+                  type: string
+                provider:
+                  type: string
+                coinId:
+                  type: string
+                observedAt:
+                  type: string
+                  format: date-time
+                fetchedAt:
+                  type: string
+                  format: date-time
+    SubdomainQuoteResponse:
+      type: object
+      required: [version, data]
+      properties:
+        version:
+          $ref: "#/components/schemas/ApiVersion"
+        data:
+          type: object
+          required: [authorizedForPayment, chainId, registrar, pricingPolicy, action, parentName, label, fullName, paymentCurrency, quote, signature]
+          properties:
+            authorizedForPayment:
+              type: boolean
+              const: true
+            chainId:
+              type: integer
+              const: 50
+            registrar:
+              $ref: "#/components/schemas/Address"
+            pricingPolicy:
+              $ref: "#/components/schemas/Address"
+            action:
+              type: string
+              enum: [registration, renewal]
+            parentName:
+              type: string
+            label:
+              type: string
+            fullName:
+              type: string
+            paymentCurrency:
+              type: string
+              enum: [XDC, USDC]
+            quote:
+              type: object
+            signature:
+              type: string
+              pattern: "^0x[a-fA-F0-9]+$"
+            market:
+              type: [object, "null"]
+    CreatedPayLink:
+      type: object
+      additionalProperties: false
+      required: [id, path, expiresAt, revocationToken]
+      properties:
+        id:
+          type: string
+        path:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        revocationToken:
+          type: string
+          description: Private bearer token returned only at creation time.
+    ActivePayLink:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, request, signature, expiresAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          const: active
+        request:
+          type: string
+          pattern: "^0x[a-fA-F0-9]+$"
+        signature:
+          type: string
+          pattern: "^0x[a-fA-F0-9]+$"
+        expiresAt:
+          type: string
+          format: date-time
+    PayLinkStatus:
+      type: object
+      additionalProperties: false
+      required: [requestId, cancelled, paid, status]
+      properties:
+        requestId:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{64}$"
+        cancelled:
+          type: boolean
+        paid:
+          type: boolean
+        status:
+          type: string
+          enum: [active, cancelled, paid]
     ApiVersion:
       type: string
       enum:

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Docs | XDCID",
-  description: "Integrate XDCID name, reverse resolution, and wallet inventory on XDC mainnet."
+  description: "Integrate XDCID resolution, registration, subdomains, Pay Links, and wallet management."
 };
 
 const publicEndpoints = [
@@ -23,6 +23,63 @@ const publicEndpoints = [
     path: "/api/v1/addresses/{address}/names",
     title: "Owned names",
     description: "Returns the verified primary ID and every active XDCID name currently owned by a wallet."
+  },
+  {
+    method: "GET",
+    path: "/api/v1/pricing/quote?product=registration&name=alice.xdc&years=1",
+    title: "Informational pricing",
+    description: "Returns the current USD policy price and buffered XDC estimate. It does not authorize a payment."
+  },
+  {
+    method: "POST",
+    path: "/api/v1/registrar/quote",
+    title: "Registration or renewal quote",
+    description: "Returns a short-lived signed quote bound to a payer, owner, name, policy, registrar, and nonce."
+  },
+  {
+    method: "POST",
+    path: "/api/v1/subdomain/quote",
+    title: "Subdomain quote",
+    description: "Returns an authorized registration or renewal quote after checking parent-controller and expiry rules."
+  },
+  {
+    method: "POST",
+    path: "/api/pay-links",
+    title: "Create a short Pay Link",
+    description: "Stores an already signed payment request and returns its shareable path plus a private revocation token."
+  },
+  {
+    method: "GET",
+    path: "/api/pay-links/cancellations/{requestId}",
+    title: "Monitor a Pay Link",
+    description: "Returns active, cancelled, or paid so an integration can update immediately after completion."
+  }
+];
+
+const integrationGuides = [
+  {
+    eyebrow: "Web2 or backend",
+    title: "Resolve names over HTTPS",
+    description: "Use the typed API client from Node.js, a browser, or any runtime with fetch. No wallet or API key is required for public reads.",
+    code: 'import { createXdcidApiClient } from "@xdcid/sdk/api";\n\nconst api = createXdcidApiClient();\nconst result = await api.getName("alice.xdc");\nconst primary = await api.reverseResolve(wallet);'
+  },
+  {
+    eyebrow: "Wallet application",
+    title: "Register with a signed quote",
+    description: "Request a ten-minute quote, then let the payer approve USDC when needed and submit the prepared registrar call from their own wallet.",
+    code: 'const quote = await api.createRegistrarQuote({\n  name: "alice.xdc", product: "registration",\n  termYears: 1, paymentCurrency: "USDC",\n  payer: account, nameOwner: account\n});\nconst plan = xdcid.prepareRegistrarPayment(quote);'
+  },
+  {
+    eyebrow: "Organizations",
+    title: "Issue and manage subdomains",
+    description: "Parent owners or approved operators can request a quote and prepare the matching subdomain registration or renewal transaction.",
+    code: 'const quote = await api.createSubdomainQuote({\n  parentName: "company.xdc", label: "alice",\n  action: "registration", termYears: 1,\n  paymentCurrency: "XDC", payer: account,\n  subdomainOwner: account\n});'
+  },
+  {
+    eyebrow: "Payments",
+    title: "Share and monitor Pay Links",
+    description: "Store an already signed request, render its short path or QR code, and poll its request ID until the link becomes paid or cancelled.",
+    code: 'const link = await api.createPayLink({ request, signature });\nconst status = await api.getPayLinkStatus(requestId);\n// Keep link.revocationToken private.'
   }
 ];
 
@@ -49,7 +106,7 @@ export default function DocsPage() {
           <div>
             <h1 className="text-4xl font-semibold leading-tight md:text-5xl">Build with XDCID</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-              Resolve human-readable .xdc names, look up primary names, check availability, and read public profiles on XDC mainnet.
+              Resolve human-readable .xdc names, register and manage identities, issue subdomains, and integrate signed Pay Links on XDC mainnet.
             </p>
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-4 text-sm">
@@ -83,9 +140,9 @@ export default function DocsPage() {
 
       <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Public API</p>
-        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Read-only endpoints</h2>
+        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Public endpoints</h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
-          These endpoints require no API key. Names are canonicalized to lowercase and may be supplied as either a bare label or a complete .xdc name.
+          Public reads require no API key. Quote and Pay Link writes validate signed or wallet-bound input; they never accept a private key. Names are canonicalized to lowercase and may be supplied as a bare label or complete .xdc name.
         </p>
         <div className="mt-6 grid gap-4">
           {publicEndpoints.map((endpoint) => (
@@ -103,12 +160,12 @@ export default function DocsPage() {
 
       <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">TypeScript SDK</p>
-        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Resolve XDCID directly on-chain</h2>
+        <h2 className="mt-3 text-3xl font-semibold text-slate-950">One SDK for Web3 and Web2</h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
-          The read-only SDK provides name validation, forward and reverse resolution, availability, pricing, expiry, and profile lookups with XDC RPC fallback. It never requests a private key or wallet signature.
+          Use the on-chain client for resolution and owner-authorized transaction preparation, or the HTTP client for server and browser integrations. Signed quotes cover registration, renewal, discount grants, and subdomains; Pay Link helpers cover creation, status, lookup, and revocation.
         </p>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
-          The source is available now and is compiled with this project. Public npm installation instructions will be added after the package is released.
+          Version 0.2 is available in this repository and compiled with the application. Public npm installation instructions will be added after the package is released.
         </p>
         <pre className="mt-5 overflow-x-auto rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-200">
           <code>{sdkExample}</code>
@@ -130,6 +187,26 @@ export default function DocsPage() {
           >
             Read the SDK guide →
           </a>
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Integration recipes</p>
+        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Build by task</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+          These flows keep signing in the user&apos;s wallet and use XDCID&apos;s API only where current policy, authorization, or durable Pay Link state is required.
+        </p>
+        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          {integrationGuides.map((guide) => (
+            <article className="rounded-md border border-black/10 bg-neutral-50 p-5" key={guide.title}>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">{guide.eyebrow}</p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">{guide.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-neutral-600">{guide.description}</p>
+              <pre className="mt-4 overflow-x-auto rounded-md bg-slate-950 p-4 text-xs leading-5 text-slate-200">
+                <code>{guide.code}</code>
+              </pre>
+            </article>
+          ))}
         </div>
       </section>
 
