@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatEther, keccak256, stringToHex } from "viem";
 import { BaseNetworkLogo } from "../components/BaseNetworkLogo";
+import { useFeatureFlags } from "../components/FeatureFlagsProvider";
 import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
 import {
@@ -65,6 +66,7 @@ const capabilities = [
 
 export default function Home() {
   const [input, setInput] = useState("");
+  const featureFlags = useFeatureFlags();
   const { address, isConnected } = useAccount();
   const connectedChainId = useChainId();
   const apothemMode = process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV === "testnet";
@@ -79,6 +81,8 @@ export default function Home() {
     ? apothemRegistration.pricingPolicy
     : addresses.pricingPolicy;
   const registrationSignedEnabled = apothemMode || signedRegistrarEnabled;
+  const registrationMode = featureFlags.registrationMode;
+  const domainRegistrationEnabled = registrationMode !== "closed";
   const registrationContractsConfigured = apothemMode
     ? registrationRegistrar !== zeroAddress && registrationPricingPolicy !== zeroAddress
     : mainnetContractsConfigured;
@@ -130,9 +134,13 @@ export default function Home() {
   );
   const registrationAllowed =
     availability.data === true && registry.status?.registrationAllowed === true;
+  const betaNameEligible = /^[a-z]{5}$/.test(parsedName.label);
+  const registrationActionEnabled =
+    registrationMode === "public" ||
+    (registrationMode === "beta" && betaNameEligible && registrationSignedEnabled);
 
   function claim() {
-    if (registrationSignedEnabled || !isValid || !registrationContractsConfigured || !address || !price.data || !registrationAllowed) return;
+    if (registrationMode !== "public" || registrationSignedEnabled || !isValid || !registrationContractsConfigured || !address || !price.data || !registrationAllowed) return;
     writeContract(
       {
         address: registrationRegistrar,
@@ -239,6 +247,15 @@ export default function Home() {
             </p>
           </div>
 
+          {registrationMode === "beta" ? (
+            <div className="mt-6 max-w-2xl rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+              <p className="font-semibold">Private beta registration</p>
+              <p className="mt-1 leading-6">
+                Approved beta wallets can claim one five-letter .xdc name for one year at no purchase price. Network gas still applies.
+              </p>
+            </div>
+          ) : null}
+
           <div className="mt-8 flex max-w-2xl gap-2 rounded-xl border border-black/10 bg-slate-950 p-2 shadow-sm">
             <input
               className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white px-4 py-4 text-lg"
@@ -255,7 +272,9 @@ export default function Home() {
           <p className={"mt-2 text-sm " + (hasInput && !isValid ? "text-red-600" : "text-neutral-500")}>
             {hasInput && !isValid
               ? validationError
-              : signedRegistrarEnabled
+              : registrationMode === "beta"
+                ? "Private beta names must contain exactly 5 letters (a-z)."
+                : signedRegistrarEnabled
                 ? "Use 2-63 letters, numbers, or hyphens; a hyphen cannot be first or last."
                 : "Use 3-63 letters, numbers, or hyphens; two-character names activate with Pricing V2."}
           </p>
@@ -287,7 +306,13 @@ export default function Home() {
                               : registry.status?.state === "collision"
                                 ? "Registered in both registries; review required"
                                 : registrationAllowed
-                                  ? "Available to claim"
+                                  ? registrationMode === "closed"
+                                    ? "Registration is temporarily unavailable"
+                                    : registrationMode === "beta" && !betaNameEligible
+                                      ? "Private beta requires exactly five letters"
+                                      : registrationMode === "beta"
+                                        ? "Available for approved beta wallets"
+                                        : "Available to claim"
                                   : registry.status?.state === "xdcid"
                                     ? "Already registered with XDCID"
                                     : "Unavailable"}
@@ -295,10 +320,19 @@ export default function Home() {
                   </p>
                 </div>
                 {isValid && registrationAllowed ? (
-                  registrationSignedEnabled ? (
+                  !domainRegistrationEnabled ? (
+                    <button className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-900" disabled>
+                      Registration paused
+                    </button>
+                  ) : registrationMode === "beta" && !betaNameEligible ? (
+                    <button className="rounded-xl border border-teal-200 bg-teal-50 px-5 py-3 text-sm font-semibold text-teal-900" disabled>
+                      Five letters required
+                    </button>
+                  ) : registrationSignedEnabled ? (
                     <SignedRegistrationControls
                       name={name}
                       enabled={
+                        registrationActionEnabled &&
                         registrationContractsConfigured &&
                         isConnected &&
                         connectedChainId === registrationChainId

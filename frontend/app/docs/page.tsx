@@ -34,7 +34,8 @@ const publicEndpoints = [
     method: "POST",
     path: "/api/v1/registrar/quote",
     title: "Registration or renewal quote",
-    description: "Returns a short-lived signed quote bound to a payer, owner, name, policy, registrar, and nonce."
+    description:
+      "Returns a short-lived signed quote bound to a payer, owner, name, policy, registrar, and nonce. Private-beta registrations additionally require a wallet-and-name-bound five-letter beta grant; renewals remain available."
   },
   {
     method: "POST",
@@ -66,7 +67,8 @@ const integrationGuides = [
   {
     eyebrow: "Wallet application",
     title: "Register with a signed quote",
-    description: "Request a ten-minute quote, then let the payer approve USDC when needed and submit the prepared registrar call from their own wallet.",
+    description:
+      "Request a ten-minute quote, then let the payer approve USDC when needed and submit the prepared registrar call from their own wallet. A private-beta rollout may restrict new registrations to pre-approved wallets and exact names.",
     code: 'const quote = await api.createRegistrarQuote({\n  name: "alice.xdc", product: "registration",\n  termYears: 1, paymentCurrency: "USDC",\n  payer: account, nameOwner: account\n});\nconst plan = xdcid.prepareRegistrarPayment(quote);'
   },
   {

@@ -24,6 +24,7 @@ export type StoredDomainDiscountGrant = {
   name: string;
   authorization: DomainDiscountAuthorization;
   signature: Hex;
+  campaign?: string;
   createdAt: string;
 };
 
@@ -41,7 +42,7 @@ export async function saveDomainDiscountGrant(input: Omit<StoredDomainDiscountGr
       id, authorization_hash, chain_id, registrar_address,
       authorization_contract, beneficiary_fingerprint, name_fingerprint,
       product, term_years, discount_bps, max_uses, valid_after, deadline,
-      encrypted_payload, signature, created_by_fingerprint
+      encrypted_payload, signature, created_by_fingerprint, campaign
     ) VALUES (
       ${id}, ${input.authorizationHash.toLowerCase()}, ${input.chainId},
       ${input.registrar.toLowerCase()}, ${input.authorizationContract.toLowerCase()},
@@ -52,11 +53,13 @@ export async function saveDomainDiscountGrant(input: Omit<StoredDomainDiscountGr
       ${new Date(Number(input.authorization.validAfter) * 1_000).toISOString()},
       ${new Date(Number(input.authorization.deadline) * 1_000).toISOString()},
       ${payload}, ${input.signature},
-      ${paymentParticipantFingerprint(input.createdBy)}
+      ${paymentParticipantFingerprint(input.createdBy)},
+      ${input.campaign || null}
     )
     ON CONFLICT (id) DO UPDATE SET
       encrypted_payload = excluded.encrypted_payload,
-      signature = excluded.signature
+      signature = excluded.signature,
+      campaign = excluded.campaign
     RETURNING *
   `;
   return rowToGrant(rows[0]);
@@ -71,6 +74,7 @@ export async function findDomainDiscountGrants(input: {
   product: 0 | 1;
   termYears: number;
   now?: Date;
+  campaign?: string;
 }): Promise<StoredDomainDiscountGrant[]> {
   const client = await ensureSchema();
   const now = input.now || new Date();
@@ -85,6 +89,7 @@ export async function findDomainDiscountGrants(input: {
       AND term_years = ${input.termYears}
       AND valid_after <= ${now.toISOString()}
       AND deadline >= ${now.toISOString()}
+      AND (${input.campaign || null}::text IS NULL OR campaign = ${input.campaign || null})
     ORDER BY discount_bps DESC, created_at DESC
     LIMIT 10
   `;
@@ -105,6 +110,22 @@ export async function listDomainDiscountGrants(input: {
     LIMIT ${Math.min(Math.max(input.limit || 25, 1), 100)}
   `;
   return rows.map(rowToGrant);
+}
+
+export async function countDomainDiscountGrantsByCampaign(input: {
+  chainId: number;
+  authorizationContract: Address;
+  campaign: string;
+}): Promise<number> {
+  const client = await ensureSchema();
+  const rows = await client`
+    SELECT count(DISTINCT beneficiary_fingerprint)::integer AS count
+    FROM domain_discount_grants
+    WHERE chain_id = ${input.chainId}
+      AND authorization_contract = ${input.authorizationContract.toLowerCase()}
+      AND campaign = ${input.campaign}
+  `;
+  return Number(rows[0]?.count || 0);
 }
 
 async function ensureSchema() {
@@ -129,8 +150,13 @@ async function ensureSchema() {
       encrypted_payload text NOT NULL,
       signature text NOT NULL,
       created_by_fingerprint varchar(64) NOT NULL,
+      campaign varchar(64),
       created_at timestamptz NOT NULL DEFAULT now()
     )
+  `;
+  await client`
+    ALTER TABLE domain_discount_grants
+    ADD COLUMN IF NOT EXISTS campaign varchar(64)
   `;
   await client`
     CREATE INDEX IF NOT EXISTS domain_discount_grants_lookup_idx
@@ -138,6 +164,13 @@ async function ensureSchema() {
       chain_id, registrar_address, beneficiary_fingerprint,
       name_fingerprint, product, term_years, deadline
     )
+  `;
+  await client`
+    CREATE UNIQUE INDEX IF NOT EXISTS domain_discount_grants_campaign_wallet_idx
+    ON domain_discount_grants (
+      chain_id, authorization_contract, campaign, beneficiary_fingerprint
+    )
+    WHERE campaign IS NOT NULL
   `;
   return client;
 }
@@ -155,6 +188,7 @@ function rowToGrant(row: Record<string, unknown>): StoredDomainDiscountGrant {
     name: payload.name,
     authorization: deserializeDomainDiscountAuthorization(payload.authorization),
     signature: String(row.signature) as Hex,
+    campaign: row.campaign ? String(row.campaign) : undefined,
     createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }

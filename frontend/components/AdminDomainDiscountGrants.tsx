@@ -9,6 +9,10 @@ import {
   serializeDomainDiscountAuthorization,
   type SerializedDomainDiscountAuthorization,
 } from "../lib/domainDiscounts";
+import {
+  BETA_REGISTRATION_CAMPAIGN,
+  BETA_REGISTRATION_LIMIT,
+} from "../lib/betaRegistration";
 
 type DiscountContext = {
   chainId: number;
@@ -23,11 +27,20 @@ type Grant = {
   authorizationHash: Hex;
   authorization: SerializedDomainDiscountAuthorization;
   createdAt: string;
+  campaign?: string;
+};
+
+type BetaStatus = {
+  campaign: string;
+  issued: number;
+  limit: number;
+  remaining: number;
 };
 
 type GrantsResponse = {
   context?: DiscountContext;
   grants?: Grant[];
+  beta?: BetaStatus;
   error?: string;
 };
 
@@ -50,6 +63,8 @@ export function AdminDomainDiscountGrants({
   const signing = useSignTypedData();
   const [context, setContext] = useState<DiscountContext>();
   const [grants, setGrants] = useState<Grant[]>([]);
+  const [betaStatus, setBetaStatus] = useState<BetaStatus>();
+  const [grantType, setGrantType] = useState<"beta" | "custom">("beta");
   const [beneficiary, setBeneficiary] = useState("");
   const [name, setName] = useState("");
   const [termYears, setTermYears] = useState(1);
@@ -86,6 +101,7 @@ export function AdminDomainDiscountGrants({
       setReauthenticationRequired(false);
       setContext(body.context);
       setGrants(body.grants || []);
+      setBetaStatus(body.beta);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Discount grants could not be loaded");
     } finally {
@@ -117,13 +133,18 @@ export function AdminDomainDiscountGrants({
         name,
         beneficiary,
         product: 0,
-        termYears,
-        discountBps: Math.round(discountPercent * 100),
-        maxUses,
+        termYears: grantType === "beta" ? 1 : termYears,
+        discountBps: grantType === "beta"
+          ? 10_000
+          : Math.round(discountPercent * 100),
+        maxUses: grantType === "beta" ? 1 : maxUses,
         validAfter: now - 30,
         deadline: now + validDays * 24 * 60 * 60,
         nonce: randomNonce(),
       });
+      if (grantType === "beta" && !/^[a-z]{5}\.xdc$/.test(built.name)) {
+        throw new Error("Beta grants are limited to five-letter .xdc names");
+      }
       setStatus("Confirm the exact discount grant in your wallet…");
       const signature = await signing.signTypedDataAsync(
         domainDiscountTypedData({
@@ -141,6 +162,9 @@ export function AdminDomainDiscountGrants({
           name: built.name,
           authorization: serializeDomainDiscountAuthorization(built.authorization),
           signature,
+          campaign: grantType === "beta"
+            ? BETA_REGISTRATION_CAMPAIGN
+            : undefined,
         }),
       });
       const body = (await response.json()) as { grant?: Grant; error?: string };
@@ -153,11 +177,14 @@ export function AdminDomainDiscountGrants({
       }
       setGrants((current) => [body.grant as Grant, ...current.filter((grant) => grant.id !== body.grant?.id)]);
       setStatus(
-        discountPercent === 100
+        grantType === "beta"
+          ? `${built.name} is approved as a gas-only five-letter beta registration.`
+          : discountPercent === 100
           ? `${built.name} can now be registered by the beneficiary for gas only.`
           : `${built.name} now has a ${discountPercent.toFixed(2)}% beneficiary discount.`,
       );
       setName("");
+      await refresh();
     } catch (cause) {
       setStatus("");
       setError(cause instanceof Error ? cause.message : "Discount grant failed");
@@ -190,6 +217,15 @@ export function AdminDomainDiscountGrants({
         transaction and cannot be reused for another name or wallet.
       </p>
 
+      <div className="mt-5 rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950">
+        <p className="font-semibold">Five-letter launch beta</p>
+        <p className="mt-1">
+          {betaStatus
+            ? `${betaStatus.issued} of ${betaStatus.limit} wallet places issued · ${betaStatus.remaining} remaining`
+            : `Up to ${BETA_REGISTRATION_LIMIT} wallets · one five-letter name · one year · 100% discount`}
+        </p>
+      </div>
+
       {context ? (
         <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
           <p>Network: chain ID {context.chainId}</p>
@@ -199,6 +235,17 @@ export function AdminDomainDiscountGrants({
       ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <label className="grid gap-2 text-sm md:col-span-2">
+          <span className="font-semibold text-slate-950">Grant type</span>
+          <select
+            className="rounded-md border border-black/10 bg-white px-3 py-3"
+            value={grantType}
+            onChange={(event) => setGrantType(event.target.value as "beta" | "custom")}
+          >
+            <option value="beta">Five-letter launch beta</option>
+            <option value="custom">Custom discount grant</option>
+          </select>
+        </label>
         <label className="grid gap-2 text-sm md:col-span-2">
           <span className="font-semibold text-slate-950">Beneficiary wallet</span>
           <input
@@ -217,10 +264,11 @@ export function AdminDomainDiscountGrants({
             placeholder="example.xdc"
           />
         </label>
-        <SelectField label="Registration term" value={termYears} onChange={setTermYears}
+        <SelectField label="Registration term" value={grantType === "beta" ? 1 : termYears} onChange={setTermYears}
+          disabled={grantType === "beta"}
           options={[{ value: 1, label: "1 year" }, { value: 3, label: "3 years" }, { value: 5, label: "5 years" }, { value: 10, label: "10 years" }]} />
-        <NumberField label="Discount (%)" value={discountPercent} min={0.01} max={100} step={0.01} onChange={setDiscountPercent} />
-        <NumberField label="Maximum uses" value={maxUses} min={1} max={10} step={1} onChange={setMaxUses} />
+        <NumberField label="Discount (%)" value={grantType === "beta" ? 100 : discountPercent} min={0.01} max={100} step={0.01} onChange={setDiscountPercent} disabled={grantType === "beta"} />
+        <NumberField label="Maximum uses" value={grantType === "beta" ? 1 : maxUses} min={1} max={10} step={1} onChange={setMaxUses} disabled={grantType === "beta"} />
         <NumberField label="Expires after (days)" value={validDays} min={1} max={31} step={1} onChange={setValidDays} />
       </div>
 
@@ -264,13 +312,14 @@ export function AdminDomainDiscountGrants({
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="text-xs uppercase text-slate-500">
-                <tr><th className="pb-2">Name</th><th className="pb-2">Beneficiary</th><th className="pb-2">Discount</th><th className="pb-2">Term</th><th className="pb-2">Uses</th><th className="pb-2">Expires</th></tr>
+                <tr><th className="pb-2">Name</th><th className="pb-2">Beneficiary</th><th className="pb-2">Type</th><th className="pb-2">Discount</th><th className="pb-2">Term</th><th className="pb-2">Uses</th><th className="pb-2">Expires</th></tr>
               </thead>
               <tbody>
                 {grants.map((grant) => (
                   <tr key={grant.id} className="border-t border-slate-100">
                     <td className="py-3 font-medium">{grant.name}</td>
                     <td className="py-3 font-mono text-xs">{shortAddress(grant.authorization.beneficiary)}</td>
+                    <td className="py-3">{grant.campaign === BETA_REGISTRATION_CAMPAIGN ? "Beta" : "Custom"}</td>
                     <td className="py-3">{(grant.authorization.discountBps / 100).toFixed(2)}%</td>
                     <td className="py-3">{grant.authorization.termYears} year(s)</td>
                     <td className="py-3">Up to {grant.authorization.maxUses}</td>
@@ -304,22 +353,22 @@ async function hasActiveDiscountSignerSession(address: Address): Promise<boolean
     && session.permissions?.includes("discount:issue") === true;
 }
 
-function NumberField(props: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
+function NumberField(props: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; disabled?: boolean }) {
   return (
     <label className="grid gap-2 text-sm">
       <span className="font-semibold text-slate-950">{props.label}</span>
       <input type="number" className="rounded-md border border-black/10 bg-white px-3 py-3" value={props.value}
-        min={props.min} max={props.max} step={props.step}
+        min={props.min} max={props.max} step={props.step} disabled={props.disabled}
         onChange={(event) => props.onChange(Number(event.target.value))} />
     </label>
   );
 }
 
-function SelectField(props: { label: string; value: number; options: Array<{ value: number; label: string }>; onChange: (value: number) => void }) {
+function SelectField(props: { label: string; value: number; options: Array<{ value: number; label: string }>; onChange: (value: number) => void; disabled?: boolean }) {
   return (
     <label className="grid gap-2 text-sm">
       <span className="font-semibold text-slate-950">{props.label}</span>
-      <select className="rounded-md border border-black/10 bg-white px-3 py-3" value={props.value}
+      <select className="rounded-md border border-black/10 bg-white px-3 py-3 disabled:bg-slate-100" value={props.value} disabled={props.disabled}
         onChange={(event) => props.onChange(Number(event.target.value))}>
         {props.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>

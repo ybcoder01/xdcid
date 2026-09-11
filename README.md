@@ -123,6 +123,12 @@ The first API version exposes public XDC mainnet reads and short-lived payment a
 
 The repository SDK supports both direct on-chain reads/write preparation and typed HTTP integration for browser, Node.js, and Web2 services. See [`sdk/README.md`](sdk/README.md) and the deployed [`/docs`](https://xdcid.xyz/docs) page.
 
+New top-level registrations use the server-enforced `registration-rollout`
+mode (`closed`, `beta`, or `public`). In beta mode, only a pre-approved wallet
+and its exact five-letter name can receive a one-year, single-use 100% discount
+quote. Renewals remain available. See [`docs/feature-flags.md`](docs/feature-flags.md)
+for the rollout and operator procedure.
+
 The name endpoint accepts either a bare label or a `.xdc` name. The optional `years` parameter must be an integer from 1 through 100 and controls the total registration-price quote.
 
 ### XDC AI gateway upstream

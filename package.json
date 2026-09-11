@@ -36,12 +36,14 @@
     "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem"
   },
   "dependencies": {
+    "@flags-sdk/vercel": "^1.4.7",
     "@neondatabase/serverless": "1.1.0",
     "@openzeppelin/contracts": "5.0.2",
     "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "5.101.2",
     "drizzle-orm": "0.45.2",
     "encoding": "0.1.13",
+    "flags": "^4.3.0",
     "next": "16.2.11",
     "pino-pretty": "10.3.1",
     "qrcode": "1.5.3",
