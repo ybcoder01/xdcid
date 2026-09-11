@@ -16,9 +16,10 @@ export const SUPPORTED_REGISTRATION_TERMS: readonly RegistrationTerm[] = [
   10,
 ];
 
-export const PRICING_POLICY_VERSION = 1;
+export const PRICING_POLICY_VERSION = 2;
 
 export const PRICING_POLICY = {
+  twoCharacterAnnualUsdMicros: 50_000_000n,
   threeCharacterAnnualUsdMicros: 20_000_000n,
   fourCharacterAnnualUsdMicros: 10_000_000n,
   standardAnnualUsdMicros: 5_000_000n,
@@ -48,9 +49,10 @@ export function isRegistrationTerm(value: number): value is RegistrationTerm {
 }
 
 export function annualNamePriceUsdMicros(labelLength: number): bigint {
-  if (!Number.isSafeInteger(labelLength) || labelLength < 3 || labelLength > 63) {
-    throw new Error("label length must be between 3 and 63");
+  if (!Number.isSafeInteger(labelLength) || labelLength < 2 || labelLength > 63) {
+    throw new Error("label length must be between 2 and 63");
   }
+  if (labelLength === 2) return PRICING_POLICY.twoCharacterAnnualUsdMicros;
   if (labelLength === 3) return PRICING_POLICY.threeCharacterAnnualUsdMicros;
   if (labelLength === 4) return PRICING_POLICY.fourCharacterAnnualUsdMicros;
   return PRICING_POLICY.standardAnnualUsdMicros;

@@ -40,3 +40,16 @@ Before merging `dev` into `main`:
 - Database migrations are reviewed for backward compatibility and rollback.
 - Any contract deployment or activation is explicitly approved.
 - Production environment variables are unchanged unless the release requires and documents the change.
+
+## Documentation and integration checklist
+
+Documentation is part of the feature, not a follow-up release. For every change to public behavior, review all of these surfaces in the same pull request:
+
+- Update `/docs` when a user or integrator gains, loses, or changes a workflow.
+- Update `frontend/public/openapi.yaml` when an HTTP route, input, response, error, authentication rule, or status code changes.
+- Update `sdk/src`, `sdk/README.md`, and SDK tests when an integration can be represented safely in the public client.
+- Update the root README when public deployment addresses, supported products, setup, or top-level architecture changes.
+- Update the focused file under `docs/` for operational, security, deployment, or rollback behavior.
+- Mark a documentation surface as not applicable in the pull-request checklist instead of silently skipping it.
+
+Never document a secret, private key, revocation token, authenticated RPC URL, database URL, or server-only credential. Public contract addresses and transaction hashes are safe to document after verification.

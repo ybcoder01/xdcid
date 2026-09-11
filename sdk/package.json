@@ -1,7 +1,7 @@
 {
   "name": "@xdcid/sdk",
-  "version": "0.1.0",
-  "description": "XDCID name resolution and multichain address SDK for XDC mainnet",
+  "version": "0.2.0",
+  "description": "XDCID resolution, quote, Pay Link, and transaction-preparation SDK",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -15,6 +15,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js"
     },
     "./cctp": {
       "types": "./dist/cctp.d.ts",

@@ -26,12 +26,13 @@ test("normalizes bare and suffixed names", () => {
 });
 
 test("reports validation errors without throwing from parseXdcidName", () => {
-  assert.equal(parseXdcidName("ab").valid, false);
+  assert.equal(parseXdcidName("ab").valid, true);
+  assert.equal(parseXdcidName("a").valid, false);
   assert.equal(parseXdcidName("-alice").valid, false);
   assert.equal(parseXdcidName("ali_ce").valid, false);
   assert.equal(parseXdcidName("alice.xdc.xdc").valid, false);
   assert.throws(
-    () => normalizeName("ab"),
+    () => normalizeName("a"),
     (error) => error instanceof XdcidSdkError && error.code === "INVALID_NAME"
   );
 });
@@ -44,6 +45,14 @@ test("exposes the verified resolver and initial multichain network metadata", ()
   assert.deepEqual(
     SUPPORTED_MULTICHAIN_NETWORKS.map(({ chainId }) => chainId),
     [50, 1, 8453, 42161, 137]
+  );
+  assert.equal(
+    XDCID_CONTRACTS.registrar,
+    getAddress("0xdEaf1742614908a8d170f4c9520c3cd1e967ef36")
+  );
+  assert.equal(
+    XDCID_CONTRACTS.subdomainRegistrar,
+    getAddress("0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7")
   );
 });
 
@@ -173,21 +182,119 @@ test("verifies reverse records against the current registry owner", async () => 
   assert.equal(await stale.reverseResolve(address), null);
 });
 
-test("returns availability and a multi-year total price", async () => {
-  const price = 10n * 10n ** 18n;
+test("returns on-chain availability and delegates current pricing to the quote API", async () => {
   const sdk = new XdcidClient(
     mockClient(({ functionName }) => {
       if (functionName === "available") return true;
       if (functionName === "expiryOf") return 0n;
-      if (functionName === "price") return price;
       throw new Error("Unexpected read");
     })
   );
 
   const result = await sdk.checkAvailability("alice", 3);
   assert.equal(result.available, true);
-  assert.equal(result.pricePerYear, price);
-  assert.equal(result.totalPrice, price * 3n);
+  assert.equal(result.pricePerYear, null);
+  assert.equal(result.totalPrice, null);
+});
+
+test("prepares identity management calls without submitting them", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  const target = getAddress("0x9999999999999999999999999999999999999999");
+
+  assert.deepEqual(sdk.prepareTransferName("ai", target).args, [nodeForName("ai"), target]);
+  assert.equal(sdk.prepareSetResolver("ai").functionName, "setResolver");
+  assert.equal(sdk.prepareSetAddress("ai", target).functionName, "setAddress");
+  assert.deepEqual(sdk.prepareSetText("ai", "website", "https://example.com").args, [
+    nodeForName("ai"),
+    "website",
+    "https://example.com"
+  ]);
+  assert.deepEqual(sdk.prepareSetPrimaryName("AI").args, ["ai.xdc", nodeForName("ai")]);
+});
+
+test("prepares a signed XDC registration payment plan", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  const payer = getAddress("0x1111111111111111111111111111111111111111");
+  const data = {
+    authorizedForPayment: true,
+    chainId: 50,
+    registrar: XDCID_CONTRACTS.registrar,
+    policy: XDCID_CONTRACTS.pricingPolicy,
+    product: "registration",
+    name: "ai.xdc",
+    paymentCurrency: "XDC",
+    quote: {
+      node: nodeForName("ai"),
+      payer,
+      nameOwner: payer,
+      product: 0,
+      termYears: "1",
+      paymentToken: zeroAddress,
+      paymentAmount: "1000",
+      usdMicros: "50000000",
+      policyVersion: "2",
+      nonce: "0",
+      issuedAt: "1",
+      deadline: String(Math.floor(Date.now() / 1000) + 600)
+    },
+    signature: "0x1234"
+  };
+
+  const plan = sdk.prepareRegistrarPayment(data);
+  assert.equal(plan.approval, null);
+  assert.equal(plan.transaction.functionName, "registerWithQuote");
+  assert.equal(plan.transaction.value, 1000n);
+  assert.equal(plan.transaction.args[0], "ai.xdc");
+});
+
+test("prepares a gas-only registration with a matching discount grant", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  const payer = getAddress("0x1111111111111111111111111111111111111111");
+  const deadline = String(Math.floor(Date.now() / 1000) + 600);
+  const node = nodeForName("beta");
+  const plan = sdk.prepareRegistrarPayment({
+    authorizedForPayment: true,
+    chainId: 50,
+    registrar: XDCID_CONTRACTS.registrar,
+    policy: XDCID_CONTRACTS.pricingPolicy,
+    product: "registration",
+    name: "beta.xdc",
+    paymentCurrency: "XDC",
+    quote: {
+      node,
+      payer,
+      nameOwner: payer,
+      product: 0,
+      termYears: "1",
+      paymentToken: zeroAddress,
+      paymentAmount: "0",
+      usdMicros: "0",
+      policyVersion: "2",
+      nonce: "1",
+      issuedAt: "1",
+      deadline
+    },
+    signature: "0x1234",
+    discount: {
+      authorizationContract: XDCID_CONTRACTS.discountAuthorization,
+      authorization: {
+        node,
+        beneficiary: payer,
+        product: 0,
+        termYears: "1",
+        discountBps: 10_000,
+        maxUses: 1,
+        validAfter: "0",
+        deadline,
+        nonce: "2"
+      },
+      signature: "0x5678"
+    }
+  });
+
+  assert.equal(plan.approval, null);
+  assert.equal(plan.transaction.functionName, "registerWithDiscountQuote");
+  assert.equal(plan.transaction.value, 0n);
 });
 
 test("rejects clients connected to another chain", async () => {
