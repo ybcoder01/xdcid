@@ -35,7 +35,7 @@ const EMPTY_DRAFT: Draft = {
 };
 
 export default function AddressBookPage() {
-  const { address, isConnected } = useAccount();
+  const { address } = useAccount();
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const [sessionAddress, setSessionAddress] = useState<Address>();
   const [expiresAt, setExpiresAt] = useState("");
@@ -216,7 +216,7 @@ export default function AddressBookPage() {
         </div>
       </section>
 
-      {!isConnected ? (
+      {!address ? (
         <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950">
           <h2 className="text-xl font-semibold">Connect your wallet first</h2>
           <p className="mt-2 text-sm">The connected wallet determines which encrypted address book can be opened.</p>
