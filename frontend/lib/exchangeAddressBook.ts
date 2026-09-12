@@ -1,5 +1,8 @@
 import { getAddress, isAddress, type Address } from "viem";
-import { MAINNET_PAYMENT_NETWORKS } from "../config/paymentNetworks";
+import {
+  MAINNET_PAYMENT_NETWORKS,
+  type PaymentNetwork,
+} from "../config/paymentNetworks";
 
 export const EXCHANGE_ADDRESS_BOOK_ASSETS = ["USDC", "XDC", "ETH", "POL"] as const;
 export type ExchangeAddressBookAsset = (typeof EXCHANGE_ADDRESS_BOOK_ASSETS)[number];
@@ -68,6 +71,27 @@ export function assetMatchesNetwork(asset: ExchangeAddressBookAsset, chainId: nu
   if (asset === "USDC") return SUPPORTED_CHAIN_IDS.has(chainId);
   const network = MAINNET_PAYMENT_NETWORKS.find((candidate) => candidate.chainId === chainId);
   return network?.nativeSymbol === asset;
+}
+
+export function paymentSelectionForSavedEntry(
+  entry: ExchangeAddressBookEntry,
+  activeNetworks: readonly PaymentNetwork[],
+): { chainId: number; token: "USDC" | "NATIVE" } | null {
+  const savedNetwork = MAINNET_PAYMENT_NETWORKS.find(
+    (candidate) => candidate.chainId === entry.chainId,
+  );
+  if (!savedNetwork) return null;
+
+  const activeNetwork = activeNetworks.find(
+    (candidate) => candidate.circleDomain === savedNetwork.circleDomain,
+  );
+  if (!activeNetwork) return null;
+
+  if (entry.asset === "USDC") {
+    return { chainId: activeNetwork.chainId, token: "USDC" };
+  }
+  if (!assetMatchesNetwork(entry.asset, entry.chainId)) return null;
+  return { chainId: activeNetwork.chainId, token: "NATIVE" };
 }
 
 function normalizedText(value: unknown, label: string, min: number, max: number): string {
