@@ -3,13 +3,12 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useDisconnect } from "wagmi";
-import { BaseNetworkLogo } from "./BaseNetworkLogo";
-import { TokenLogo, nativeTokenForChain } from "./TokenLogo";
+import { NetworkLogo } from "./NetworkLogo";
 
 export const PRIMARY_NAME_CHANGED_EVENT = "xdcid:primary-name-changed";
 
 export function WalletButton({ compact = false }: { compact?: boolean }) {
-  const { address } = useAccount();
+  const { address, status: accountStatus } = useAccount();
   const { disconnect } = useDisconnect();
   const primaryName = usePrimaryXnsName(address);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -46,24 +45,23 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         openConnectModal,
       }) => {
         const ready = mounted && authenticationStatus !== "loading";
-        const connected = ready && account && chain && (!authenticationStatus || authenticationStatus === "authenticated");
+        const connected = ready && accountStatus === "connected" && account && chain && (!authenticationStatus || authenticationStatus === "authenticated");
         const width = compact ? "w-[8.75rem] sm:w-44" : "min-w-[10rem] max-w-[15rem]";
 
         if (!connected) {
+          const restoring = accountStatus === "connecting" || accountStatus === "reconnecting";
           return (
             <button
               type="button"
               className={(compact ? "h-11 rounded-2xl px-3 text-sm " : "h-12 rounded-2xl px-5 text-base ") + width + " whitespace-nowrap bg-slate-950 font-semibold text-white shadow-sm disabled:opacity-50"}
-              disabled={!ready}
+              disabled={!ready || restoring}
               onClick={openConnectModal}
             >
-              Connect wallet
+              {restoring ? "Restoring wallet…" : "Connect wallet"}
             </button>
           );
         }
 
-        const iconUrl = typeof chain.iconUrl === "string" ? chain.iconUrl : undefined;
-        const isBaseNetwork = chain.id === 8453 || chain.id === 84532;
         const displayName = primaryName || account.displayName;
         return (
           <div ref={accountMenuRef} className={width + " relative"}>
@@ -74,13 +72,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
                 onClick={openChainModal}
                 aria-label={"Change network from " + chain.name}
               >
-                {isBaseNetwork ? (
-                  <BaseNetworkLogo size={24} />
-                ) : iconUrl ? (
-                  <span aria-hidden="true" className="block h-6 w-6 rounded-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${iconUrl})` }} />
-                ) : (
-                  <TokenLogo symbol={nativeTokenForChain(chain.id)} size={24} />
-                )}
+                <NetworkLogo chainId={chain.id} size={24} />
               </button>
               <span className="h-5 w-px shrink-0 bg-slate-200" aria-hidden="true" />
               <button

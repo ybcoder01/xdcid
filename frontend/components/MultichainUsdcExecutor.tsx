@@ -1,5 +1,6 @@
 "use client";
 
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   formatUnits,
@@ -129,7 +130,8 @@ export function MultichainUsdcExecutor({
     "idle" | "checking" | "ready" | "error"
   >("idle");
 
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, status: accountStatus } = useAccount();
+  const { openConnectModal } = useConnectModal();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const sourceClient = usePublicClient({ chainId: sourceChainId });
@@ -714,11 +716,11 @@ export function MultichainUsdcExecutor({
             "mt-4 w-full rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
           }
           disabled={
-            !ready ||
-            !isConnected ||
-            (automaticForwarding && quoteStatus !== "ready")
+            isConnected
+              ? !ready || (automaticForwarding && quoteStatus !== "ready")
+              : accountStatus !== "disconnected" || !openConnectModal
           }
-          onClick={startTransfer}
+          onClick={isConnected ? startTransfer : openConnectModal}
         >
           {isConnected
             ? automaticForwarding
@@ -728,7 +730,9 @@ export function MultichainUsdcExecutor({
               : crossChain
                 ? "Continue with " + amount + " USDC"
                 : "Pay " + amount + " USDC"
-            : "Connect wallet to pay"}
+            : accountStatus === "connecting" || accountStatus === "reconnecting"
+              ? "Restoring wallet…"
+              : "Connect wallet to pay"}
         </button>
       ) : null}
 
