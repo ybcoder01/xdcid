@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAddress, type Address } from "viem";
 import { useAccount, useSignMessage } from "wagmi";
@@ -197,7 +198,7 @@ export default function AddressBookPage() {
       <section className="rounded-3xl border border-teal-100 bg-gradient-to-br from-white via-white to-teal-50 p-6 shadow-sm md:p-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Send · Private destination vault</p>
-          <a className="rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50" href="/send">Back to Send</a>
+          <Link className="rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-50" href="/send">Back to Send</Link>
         </div>
         <div className="mt-3 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
@@ -287,7 +288,7 @@ function DestinationCard(props: { entry: ExchangeAddressBookEntry; busy: boolean
       {props.entry.memo ? <button className="mt-2 block w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-950" onClick={() => copy(props.entry.memo || "")}><span className="font-semibold">Memo/tag:</span> {props.entry.memo}</button> : null}
       {props.entry.notes ? <p className="mt-3 text-xs leading-5 text-neutral-600">{props.entry.notes}</p> : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        <a href={`/send?destination=${props.entry.id}`} className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white">Use in Send</a>
+        <Link href={`/send?destination=${props.entry.id}`} className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white">Use in Send</Link>
         <button disabled={props.busy} onClick={props.onEdit} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Edit</button>
         <button disabled={props.busy} onClick={props.onRemove} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700">Remove</button>
       </div>
