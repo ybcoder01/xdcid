@@ -27,6 +27,7 @@ import { xdcMainnet } from "../config/contracts";
 import { getRpcTransport } from "../config/rpcTransports";
 import { PAYMENT_NETWORK_ENV } from "../config/paymentNetworks";
 import { BASE_NETWORK_ICON_URL } from "./BaseNetworkLogo";
+import { WalletDiagnostics } from "./WalletDiagnostics";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 const defaultWalletChain =
@@ -93,10 +94,11 @@ const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={config} reconnectOnMount={false}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider initialChain={defaultWalletChain}>
           {children}
+          {PAYMENT_NETWORK_ENV === "testnet" ? <WalletDiagnostics /> : null}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

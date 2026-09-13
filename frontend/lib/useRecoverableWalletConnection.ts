@@ -2,25 +2,25 @@
 
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useState } from "react";
-import { useAccount, useDisconnect } from "wagmi";
+import { useAccount, useConfig } from "wagmi";
 
 const RESTORE_TIMEOUT_MS = 6_000;
 
 export function useRecoverableWalletConnection() {
   const { status } = useAccount();
-  const { disconnect } = useDisconnect();
+  const config = useConfig();
   const { openConnectModal } = useConnectModal();
-  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+  const [connectionTimedOut, setConnectionTimedOut] = useState(false);
   const [openAfterReset, setOpenAfterReset] = useState(false);
 
   useEffect(() => {
-    if (status !== "reconnecting") {
-      setRestoreTimedOut(false);
+    if (status !== "connecting" && status !== "reconnecting") {
+      setConnectionTimedOut(false);
       return;
     }
 
     const timeout = window.setTimeout(
-      () => setRestoreTimedOut(true),
+      () => setConnectionTimedOut(true),
       RESTORE_TIMEOUT_MS
     );
     return () => window.clearTimeout(timeout);
@@ -32,18 +32,31 @@ export function useRecoverableWalletConnection() {
     openConnectModal?.();
   }, [openAfterReset, openConnectModal, status]);
 
-  const requestConnection = useCallback(() => {
-    if (status === "reconnecting") {
+  const requestConnection = useCallback(async () => {
+    if (status === "connecting" || status === "reconnecting") {
+      const { connections, current } = config.state;
+      const connector = current ? connections.get(current)?.connector : undefined;
+      config.setState((existing) => ({
+        ...existing,
+        connections: new Map(),
+        current: null,
+        status: "disconnected"
+      }));
+      try {
+        await config.storage?.removeItem("recentConnectorId");
+      } catch {
+        // The in-memory reset is sufficient if persistent storage is unavailable.
+      }
+      void Promise.resolve(connector?.disconnect()).catch(() => undefined);
       setOpenAfterReset(true);
-      disconnect();
       return;
     }
     openConnectModal?.();
-  }, [disconnect, openConnectModal, status]);
+  }, [config, openConnectModal, status]);
 
   return {
     canRequestConnection: Boolean(openConnectModal),
     requestConnection,
-    restoreTimedOut
+    connectionTimedOut
   };
 }
