@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress, keccak256, parseEther, parseUnits, stringToHex, zeroAddress, type Hash } from "viem";
 import {
@@ -472,9 +473,9 @@ export default function SendPage() {
                     ))}
                   </select>
                 </label>
-                <a className="rounded-xl border border-teal-700 bg-white px-4 py-3 text-center text-sm font-semibold text-teal-800 transition hover:bg-teal-50" href="/address-book">
+                <Link className="rounded-xl border border-teal-700 bg-white px-4 py-3 text-center text-sm font-semibold text-teal-800 transition hover:bg-teal-50" href="/address-book">
                   {vaultUnlocked ? "Manage" : "Open address book"}
-                </a>
+                </Link>
               </div>
               {selectedEntry && selectedEntryPayment ? (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
