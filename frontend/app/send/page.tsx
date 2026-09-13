@@ -82,6 +82,7 @@ export default function SendPage() {
   const [vaultUnlocked, setVaultUnlocked] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState("");
   const [walletSwitchStatus, setWalletSwitchStatus] = useState("");
+  const [pendingWalletChainId, setPendingWalletChainId] = useState<number | null>(null);
   const recordingHashes = useRef(new Set<string>());
 
   useEffect(() => installPaymentCompletionRetry(), []);
@@ -142,7 +143,7 @@ export default function SendPage() {
     || selectedEntryToken !== token
   );
 
-  const applySavedEntry = useCallback(async (entry: ExchangeAddressBookEntry) => {
+  const applySavedEntry = useCallback((entry: ExchangeAddressBookEntry) => {
     const selection = paymentSelectionForSavedEntry(entry, PAYMENT_NETWORKS);
     setSelectedEntryId(entry.id);
     setRecipient(entry.address);
@@ -151,19 +152,38 @@ export default function SendPage() {
     setSourceChainId(selection.chainId);
     setDestinationChainId(selection.chainId);
     setToken(selection.token);
+    setPendingWalletChainId(selection.chainId);
+  }, []);
 
-    if (!connectedAddress || connectedChainId === selection.chainId) return;
+  useEffect(() => {
+    if (!isConnected || !connectedAddress || pendingWalletChainId === null) return;
+    if (connectedChainId === pendingWalletChainId) {
+      setPendingWalletChainId(null);
+      setWalletSwitchStatus("");
+      return;
+    }
+    let active = true;
+    const requestedChainId = pendingWalletChainId;
+    setPendingWalletChainId(null);
     try {
-      await switchChainAsync({ chainId: selection.chainId });
-      setWalletSwitchStatus(
-        `Wallet switched to ${getPaymentNetwork(selection.chainId)?.name || "the saved network"}.`,
-      );
+      void switchChainAsync({ chainId: requestedChainId })
+        .then(() => {
+          if (active) setWalletSwitchStatus(
+            `Wallet switched to ${getPaymentNetwork(requestedChainId)?.name || "the saved network"}.`,
+          );
+        })
+        .catch(() => {
+          if (active) setWalletSwitchStatus(
+            `Route updated. Switch your wallet to ${getPaymentNetwork(requestedChainId)?.name || "the saved network"} before paying.`,
+          );
+        });
     } catch {
       setWalletSwitchStatus(
-        `Route updated. Switch your wallet to ${getPaymentNetwork(selection.chainId)?.name || "the saved network"} before paying.`,
+        `Route updated. Switch your wallet to ${getPaymentNetwork(requestedChainId)?.name || "the saved network"} before paying.`,
       );
     }
-  }, [connectedAddress, connectedChainId, switchChainAsync]);
+    return () => { active = false; };
+  }, [connectedAddress, connectedChainId, isConnected, pendingWalletChainId, switchChainAsync]);
 
   useEffect(() => {
     let active = true;
