@@ -1,6 +1,5 @@
 "use client";
 
-import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   formatUnits,
@@ -19,6 +18,7 @@ import {
   CCTP_TOKEN_MESSENGER_V2,
   getPaymentNetwork
 } from "../config/paymentNetworks";
+import { useRecoverableWalletConnection } from "../lib/useRecoverableWalletConnection";
 import {
   calculateCctpProtocolFee,
   calculateXdcidConvenienceFee,
@@ -131,7 +131,8 @@ export function MultichainUsdcExecutor({
   >("idle");
 
   const { address, isConnected, status: accountStatus } = useAccount();
-  const { openConnectModal } = useConnectModal();
+  const { canRequestConnection, requestConnection, restoreTimedOut } =
+    useRecoverableWalletConnection();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const sourceClient = usePublicClient({ chainId: sourceChainId });
@@ -718,9 +719,11 @@ export function MultichainUsdcExecutor({
           disabled={
             isConnected
               ? !ready || (automaticForwarding && quoteStatus !== "ready")
-              : accountStatus !== "disconnected" || !openConnectModal
+              : accountStatus === "connecting" ||
+                (accountStatus === "reconnecting" && !restoreTimedOut) ||
+                !canRequestConnection
           }
-          onClick={isConnected ? startTransfer : openConnectModal}
+          onClick={isConnected ? startTransfer : requestConnection}
         >
           {isConnected
             ? automaticForwarding
@@ -730,9 +733,13 @@ export function MultichainUsdcExecutor({
               : crossChain
                 ? "Continue with " + amount + " USDC"
                 : "Pay " + amount + " USDC"
-            : accountStatus === "connecting" || accountStatus === "reconnecting"
-              ? "Restoring wallet…"
-              : "Connect wallet to pay"}
+            : accountStatus === "connecting"
+              ? "Connecting wallet…"
+              : accountStatus === "reconnecting" && !restoreTimedOut
+                ? "Restoring wallet…"
+                : accountStatus === "reconnecting"
+                  ? "Reconnect wallet to pay"
+                  : "Connect wallet to pay"}
         </button>
       ) : null}
 

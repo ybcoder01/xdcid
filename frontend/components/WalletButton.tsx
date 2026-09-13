@@ -3,6 +3,7 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAccount, useDisconnect } from "wagmi";
+import { useRecoverableWalletConnection } from "../lib/useRecoverableWalletConnection";
 import { NetworkLogo } from "./NetworkLogo";
 
 export const PRIMARY_NAME_CHANGED_EVENT = "xdcid:primary-name-changed";
@@ -10,6 +11,8 @@ export const PRIMARY_NAME_CHANGED_EVENT = "xdcid:primary-name-changed";
 export function WalletButton({ compact = false }: { compact?: boolean }) {
   const { address, status: accountStatus } = useAccount();
   const { disconnect } = useDisconnect();
+  const { canRequestConnection, requestConnection, restoreTimedOut } =
+    useRecoverableWalletConnection();
   const primaryName = usePrimaryXnsName(address);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
@@ -42,22 +45,27 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         mounted,
         authenticationStatus,
         openChainModal,
-        openConnectModal,
       }) => {
         const ready = mounted && authenticationStatus !== "loading";
         const connected = ready && accountStatus === "connected" && account && chain && (!authenticationStatus || authenticationStatus === "authenticated");
         const width = compact ? "w-[8.75rem] sm:w-44" : "min-w-[10rem] max-w-[15rem]";
 
         if (!connected) {
-          const restoring = accountStatus === "connecting" || accountStatus === "reconnecting";
+          const waitingForRestore = accountStatus === "reconnecting" && !restoreTimedOut;
           return (
             <button
               type="button"
               className={(compact ? "h-11 rounded-2xl px-3 text-sm " : "h-12 rounded-2xl px-5 text-base ") + width + " whitespace-nowrap bg-slate-950 font-semibold text-white shadow-sm disabled:opacity-50"}
-              disabled={!ready || restoring}
-              onClick={openConnectModal}
+              disabled={!ready || accountStatus === "connecting" || waitingForRestore || !canRequestConnection}
+              onClick={requestConnection}
             >
-              {restoring ? "Restoring wallet…" : "Connect wallet"}
+              {accountStatus === "connecting"
+                ? "Connecting wallet…"
+                : waitingForRestore
+                  ? "Restoring wallet…"
+                  : accountStatus === "reconnecting"
+                    ? "Reconnect wallet"
+                    : "Connect wallet"}
             </button>
           );
         }
