@@ -131,7 +131,7 @@ export function MultichainUsdcExecutor({
   >("idle");
 
   const { address, isConnected, status: accountStatus } = useAccount();
-  const { canRequestConnection, requestConnection, restoreTimedOut } =
+  const { canRequestConnection, requestConnection, connectionTimedOut } =
     useRecoverableWalletConnection();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
@@ -719,8 +719,8 @@ export function MultichainUsdcExecutor({
           disabled={
             isConnected
               ? !ready || (automaticForwarding && quoteStatus !== "ready")
-              : accountStatus === "connecting" ||
-                (accountStatus === "reconnecting" && !restoreTimedOut) ||
+              : ((accountStatus === "connecting" || accountStatus === "reconnecting") &&
+                  !connectionTimedOut) ||
                 !canRequestConnection
           }
           onClick={isConnected ? startTransfer : requestConnection}
@@ -733,11 +733,11 @@ export function MultichainUsdcExecutor({
               : crossChain
                 ? "Continue with " + amount + " USDC"
                 : "Pay " + amount + " USDC"
-            : accountStatus === "connecting"
+            : accountStatus === "connecting" && !connectionTimedOut
               ? "Connecting wallet…"
-              : accountStatus === "reconnecting" && !restoreTimedOut
+              : accountStatus === "reconnecting" && !connectionTimedOut
                 ? "Restoring wallet…"
-                : accountStatus === "reconnecting"
+                : accountStatus === "connecting" || accountStatus === "reconnecting"
                   ? "Reconnect wallet to pay"
                   : "Connect wallet to pay"}
         </button>

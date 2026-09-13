@@ -11,7 +11,7 @@ export const PRIMARY_NAME_CHANGED_EVENT = "xdcid:primary-name-changed";
 export function WalletButton({ compact = false }: { compact?: boolean }) {
   const { address, status: accountStatus } = useAccount();
   const { disconnect } = useDisconnect();
-  const { canRequestConnection, requestConnection, restoreTimedOut } =
+  const { canRequestConnection, requestConnection, connectionTimedOut } =
     useRecoverableWalletConnection();
   const primaryName = usePrimaryXnsName(address);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -51,19 +51,21 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         const width = compact ? "w-[8.75rem] sm:w-44" : "min-w-[10rem] max-w-[15rem]";
 
         if (!connected) {
-          const waitingForRestore = accountStatus === "reconnecting" && !restoreTimedOut;
+          const waitingForConnection =
+            (accountStatus === "connecting" || accountStatus === "reconnecting") &&
+            !connectionTimedOut;
           return (
             <button
               type="button"
               className={(compact ? "h-11 rounded-2xl px-3 text-sm " : "h-12 rounded-2xl px-5 text-base ") + width + " whitespace-nowrap bg-slate-950 font-semibold text-white shadow-sm disabled:opacity-50"}
-              disabled={!ready || accountStatus === "connecting" || waitingForRestore || !canRequestConnection}
+              disabled={!ready || waitingForConnection || !canRequestConnection}
               onClick={requestConnection}
             >
-              {accountStatus === "connecting"
+              {accountStatus === "connecting" && !connectionTimedOut
                 ? "Connecting wallet…"
-                : waitingForRestore
+                : accountStatus === "reconnecting" && !connectionTimedOut
                   ? "Restoring wallet…"
-                  : accountStatus === "reconnecting"
+                  : accountStatus === "connecting" || accountStatus === "reconnecting"
                     ? "Reconnect wallet"
                     : "Connect wallet"}
             </button>

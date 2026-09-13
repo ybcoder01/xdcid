@@ -10,17 +10,17 @@ export function useRecoverableWalletConnection() {
   const { status } = useAccount();
   const { disconnect } = useDisconnect();
   const { openConnectModal } = useConnectModal();
-  const [restoreTimedOut, setRestoreTimedOut] = useState(false);
+  const [connectionTimedOut, setConnectionTimedOut] = useState(false);
   const [openAfterReset, setOpenAfterReset] = useState(false);
 
   useEffect(() => {
-    if (status !== "reconnecting") {
-      setRestoreTimedOut(false);
+    if (status !== "connecting" && status !== "reconnecting") {
+      setConnectionTimedOut(false);
       return;
     }
 
     const timeout = window.setTimeout(
-      () => setRestoreTimedOut(true),
+      () => setConnectionTimedOut(true),
       RESTORE_TIMEOUT_MS
     );
     return () => window.clearTimeout(timeout);
@@ -33,7 +33,7 @@ export function useRecoverableWalletConnection() {
   }, [openAfterReset, openConnectModal, status]);
 
   const requestConnection = useCallback(() => {
-    if (status === "reconnecting") {
+    if (status === "connecting" || status === "reconnecting") {
       setOpenAfterReset(true);
       disconnect();
       return;
@@ -44,6 +44,6 @@ export function useRecoverableWalletConnection() {
   return {
     canRequestConnection: Boolean(openConnectModal),
     requestConnection,
-    restoreTimedOut
+    connectionTimedOut
   };
 }
