@@ -716,9 +716,20 @@ export default function PayRequestPage() {
                             : !hasOwner
                               ? "The XNS ID is unregistered or expired."
                               : paymentAddress
-                                ? paymentAddress + (paymentDestination?.source === "evm-default" ? " (default EVM address)" : "")
+                                ? paymentAddress +
+                                  (paymentDestination?.source === "multichain"
+                                    ? ` (${destinationNetwork?.name || "destination network"} address)`
+                                    : paymentDestination?.source === "evm-default"
+                                      ? " (default EVM address)"
+                                      : "")
                                 : "No payment address is set for the destination network."}
                 </p>
+                {paymentAddress && hasOwner ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    One XDCID can resolve to a different receiving address on
+                    each supported network.
+                  </p>
+                ) : null}
                 {paymentAddress && (
                   <a className="mt-2 inline-block font-semibold text-teal-700 underline" href={(explorerUrls[route.destinationChainId] || "https://xdcscan.com") + "/address/" + paymentAddress} target="_blank" rel="noreferrer">
                     Verify on {destinationNetwork?.name || "destination explorer"}

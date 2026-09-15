@@ -156,6 +156,17 @@ export function MultichainAddressManager({
         </button>
       </div>
 
+      <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm text-slate-800">
+        <p className="font-semibold text-slate-950">
+          One ID, different receiving addresses
+        </p>
+        <p className="mt-1 leading-6">
+          {name} can resolve to a different address on each supported network.
+          Payments use the destination network&apos;s address when one is set;
+          otherwise, they use your default EVM address.
+        </p>
+      </div>
+
       <div className="mt-5 grid gap-3">
         {supportedMultichainNetworks.map((network) => {
           const currentAddress = currentAddresses[network.chainId];

@@ -726,6 +726,25 @@ export function MultichainUsdcExecutor({
         </div>
       ) : null}
 
+      {crossChain && phase !== "complete" ? (
+        <div
+          className={
+            checkout
+              ? "mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950"
+              : "mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950"
+          }
+          role="note"
+        >
+          <p className="font-semibold">Exchange deposit warning</p>
+          <p className="mt-1">
+            Do not send cross-chain USDC directly to a centralized exchange
+            deposit address. Some exchanges may not credit funds delivered
+            through smart contracts. Use a self-custody wallet you control,
+            then transfer to the exchange using a supported network.
+          </p>
+        </div>
+      ) : null}
+
       {!checkout && phase === "idle" ? (
         <button
           className={

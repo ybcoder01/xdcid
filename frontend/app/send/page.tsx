@@ -532,7 +532,14 @@ export default function SendPage() {
                     <p className="mt-3 break-all text-xs text-neutral-600">
                       Receiving address: {destination.address}
                       <br />
-                      Record: {destination.source === "direct-wallet" ? "direct wallet address" : destination.source === "multichain" ? "destination-chain record" : "default EVM record"}
+                      Address source: {destination.source === "direct-wallet" ? "direct wallet address" : destination.source === "multichain" ? routeState.route.destination.name + " address configured for this XDCID" : "default EVM address"}
+                      {!directRecipient ? (
+                        <>
+                          <br />
+                          One XDCID can use a different receiving address on each
+                          supported network.
+                        </>
+                      ) : null}
                     </p>
                   ) : null}
                 </div>

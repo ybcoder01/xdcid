@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   formatEther,
@@ -87,6 +88,7 @@ export function SignedRegistrationControls(props: {
   const [termYears, setTermYears] = useState<Term>(1);
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [status, setStatus] = useState("");
+  const [registrationHash, setRegistrationHash] = useState<Hex | "">("");
   const [busy, setBusy] = useState(false);
   const expectedChainId = props.expectedChainId ?? 50;
   const registrarAddress = props.registrarAddress ?? addresses.registrar;
@@ -127,6 +129,7 @@ export function SignedRegistrationControls(props: {
 
   async function register() {
     if (!props.enabled || !isConnected || !address || !client) return;
+    setRegistrationHash("");
     if (chainId !== expectedChainId) {
       setStatus(
         "Requesting a switch to " +
@@ -282,6 +285,7 @@ export function SignedRegistrationControls(props: {
       }
 
       saveName(address, props.name);
+      setRegistrationHash(transactionHash);
       setStatus("Registration confirmed: " + transactionHash);
       trackRegistration("confirmed", currency, termYears);
     } catch (error) {
@@ -347,6 +351,25 @@ export function SignedRegistrationControls(props: {
       {status && (
         <p className="mt-3 break-all text-xs text-neutral-600">{status}</p>
       )}
+      {registrationHash && expectedChainId === 50 ? (
+        <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50 p-4">
+          <p className="text-sm font-semibold text-slate-950">
+            One step remaining: set your Primary ID
+          </p>
+          <p className="mt-1 text-xs leading-5 text-neutral-700">
+            Set {props.name} as your Primary ID so supported wallets and apps
+            can identify this address by name. Primary selection enables
+            address-to-name reverse resolution; your name-to-address resolution
+            works independently.
+          </p>
+          <Link
+            className="mt-3 inline-flex rounded-lg bg-teal-700 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-800"
+            href="/dashboard"
+          >
+            Go to Dashboard
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

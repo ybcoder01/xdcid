@@ -161,7 +161,9 @@ export default function Home() {
               Your identity across every network
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-600">
-              One XDCID connects your profile, payments, applications, and receiving addresses across the networks you use.
+              One XDCID connects your profile, payments, and applications—and
+              can point to a different receiving address on each supported
+              network.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a className="rounded-xl bg-[#0b6670] px-6 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-[#084f57]" href="#register">
@@ -335,7 +337,10 @@ export default function Home() {
           <div className="mt-8 grid gap-5">
             <div>
               <p className="text-3xl font-semibold">One .XDC</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">A readable identity for wallets, profiles, payments, applications, and multichain records.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                One readable identity with a chain-specific receiving address
+                wherever you need one.
+              </p>
             </div>
             <div className="grid gap-3 text-sm">
               <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Ownership</span><span>Your wallet</span></div>
