@@ -37,6 +37,7 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../../components/MultichainUsdcExecutor";
+import { CctpTransferTimeNotice } from "../../../components/CctpTransferTimeNotice";
 import { TokenLogo, nativeTokenForChain } from "../../../components/TokenLogo";
 import { ExchangeDepositWarning } from "../../../components/ExchangeDepositWarning";
 import { WalletButton } from "../../../components/WalletButton";
@@ -555,7 +556,13 @@ export default function PayRequestPage() {
         ) : null}
 
         {token === "USDC" && crossChain ? (
-          <ExchangeDepositWarning compact />
+          <div>
+            <ExchangeDepositWarning compact />
+            <CctpTransferTimeNotice
+              compact
+              sourceChainId={route.sourceChainId}
+            />
+          </div>
         ) : null}
 
         {reference || memo ? (

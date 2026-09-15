@@ -13,6 +13,7 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../components/MultichainUsdcExecutor";
+import { CctpTransferTimeNotice } from "../../components/CctpTransferTimeNotice";
 import { ExchangeDepositWarning } from "../../components/ExchangeDepositWarning";
 import {
   activeRegistryAddress,
@@ -388,7 +389,10 @@ export default function SendPage() {
           </p>
 
           {token === "USDC" && sourceChainId !== destinationChainId ? (
-            <ExchangeDepositWarning />
+            <div>
+              <ExchangeDepositWarning />
+              <CctpTransferTimeNotice sourceChainId={sourceChainId} />
+            </div>
           ) : null}
 
           <div className="mt-8 grid gap-4">
