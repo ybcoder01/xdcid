@@ -45,10 +45,14 @@ export function CrossChainPaymentNotice({
             !
           </span>
           <div className={compact ? "text-xs leading-5" : "text-sm leading-6"}>
-            <p className="font-semibold text-amber-950">Exchange deposits</p>
+            <p className="font-semibold text-amber-950">
+              Do not send to an exchange
+            </p>
             <p className="mt-0.5 text-slate-600">
-              Do not send directly to a centralized exchange. Smart-contract
-              transfers may not be credited. Send to a self-custody wallet first.
+              Cross-chain USDC transactions use smart contracts. Do not send
+              directly to a centralized exchange deposit address, because your
+              deposit may not be credited. Send to a self-custody wallet you
+              control first.
             </p>
           </div>
         </div>
