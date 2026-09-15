@@ -38,6 +38,7 @@ import {
   type PaymentCompletionMetadata
 } from "../../../components/MultichainUsdcExecutor";
 import { TokenLogo, nativeTokenForChain } from "../../../components/TokenLogo";
+import { ExchangeDepositWarning } from "../../../components/ExchangeDepositWarning";
 import { WalletButton } from "../../../components/WalletButton";
 import { PaymentReceiptDialog } from "../../../components/PaymentReceiptDialog";
 import { parseXnsName } from "../../../lib/names";
@@ -551,6 +552,10 @@ export default function PayRequestPage() {
               <p className="truncate text-[11px] font-semibold text-slate-700">{destinationNetwork.name}</p>
             </div>
           </div>
+        ) : null}
+
+        {token === "USDC" && crossChain ? (
+          <ExchangeDepositWarning compact />
         ) : null}
 
         {reference || memo ? (

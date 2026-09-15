@@ -13,6 +13,7 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../components/MultichainUsdcExecutor";
+import { ExchangeDepositWarning } from "../../components/ExchangeDepositWarning";
 import {
   activeRegistryAddress,
   activeResolverSuiteAvailable,
@@ -385,6 +386,10 @@ export default function SendPage() {
           <p className="mt-2 text-sm text-neutral-600">
             Resolve an XNS ID or pay a verified EVM wallet address directly.
           </p>
+
+          {token === "USDC" && sourceChainId !== destinationChainId ? (
+            <ExchangeDepositWarning />
+          ) : null}
 
           <div className="mt-8 grid gap-4">
             <label className="grid gap-2 text-sm">
