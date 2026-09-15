@@ -44,6 +44,7 @@ import {
   estimateAdaptiveGasFees,
   isBaseFeeTooLowError
 } from "../../lib/gasFeePolicy";
+import { trackPayment } from "../../lib/productAnalytics";
 
 const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 const DEFAULT_SOURCE_CHAIN_ID =
@@ -74,6 +75,7 @@ export default function SendPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
   const recordingHashes = useRef(new Set<string>());
+  const analyticsHashes = useRef(new Set<string>());
 
   useEffect(() => installPaymentCompletionRetry(), []);
   const { chainId: connectedChainId, isConnected } = useAccount();
@@ -278,11 +280,35 @@ export default function SendPage() {
   }, [destination, destinationChainId, directRecipient, name, paymentReference, sourceChainId, token, units]);
 
   useEffect(() => {
-    if (nativeReceipt.isSuccess && hash) void recordSettlement(hash);
-  }, [hash, nativeReceipt.isSuccess, recordSettlement]);
+    if (!nativeReceipt.isSuccess || !hash) return;
+    void recordSettlement(hash);
+    if (analyticsHashes.current.has(hash)) return;
+    analyticsHashes.current.add(hash);
+    trackPayment(
+      "send",
+      "confirmed",
+      sourceNetwork?.nativeSymbol || "other",
+      sourceChainId,
+      destinationChainId,
+    );
+  }, [
+    destinationChainId,
+    hash,
+    nativeReceipt.isSuccess,
+    recordSettlement,
+    sourceChainId,
+    sourceNetwork?.nativeSymbol,
+  ]);
 
   async function sendNative() {
     if (!canSendNative || !destination || !sourceClient) return;
+    trackPayment(
+      "send",
+      "started",
+      sourceNetwork?.nativeSymbol || "other",
+      sourceChainId,
+      destinationChainId,
+    );
     const request = {
       to: destination.address,
       value: parseEther(amount)
@@ -294,13 +320,23 @@ export default function SendPage() {
     try {
       await sendTransactionAsync({ ...request, ...initialFees });
     } catch (cause) {
-      if (!isBaseFeeTooLowError(cause)) return;
+      if (!isBaseFeeTooLowError(cause)) {
+        trackPayment("send", "failed", sourceNetwork?.nativeSymbol || "other", sourceChainId, destinationChainId);
+        return;
+      }
       const refreshedFees = await estimateAdaptiveGasFees(
         sourceClient,
         sourceChainId
       );
-      if (refreshedFees.maxFeePerGas === undefined) return;
-      await sendTransactionAsync({ ...request, ...refreshedFees });
+      if (refreshedFees.maxFeePerGas === undefined) {
+        trackPayment("send", "failed", sourceNetwork?.nativeSymbol || "other", sourceChainId, destinationChainId);
+        return;
+      }
+      try {
+        await sendTransactionAsync({ ...request, ...refreshedFees });
+      } catch {
+        trackPayment("send", "failed", sourceNetwork?.nativeSymbol || "other", sourceChainId, destinationChainId);
+      }
     }
   }
 

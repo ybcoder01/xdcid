@@ -24,6 +24,7 @@ import {
   type PaymentRequest,
   type PaymentTransferMode,
 } from "../../lib/paymentRequests";
+import { trackPayLink } from "../../lib/productAnalytics";
 
 export default function PayLinksPage() {
   const [recipient, setRecipient] = useState("");
@@ -243,6 +244,7 @@ export default function PayLinksPage() {
         setCancellationLink(shortLink);
         setShortId(body.id);
         setShortLinkExpiresAt(body.expiresAt);
+        trackPayLink("created", token, sourceChainId, destinationChainId);
       } catch (shortLinkError) {
         setPayLink(portableLink);
         setCancellationLink(portableLink);
@@ -252,9 +254,11 @@ export default function PayLinksPage() {
             : "Short Pay Link could not be created.") +
             " The portable signed link is available instead.",
         );
+        trackPayLink("created", token, sourceChainId, destinationChainId);
       }
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "The payment request could not be signed.");
+      trackPayLink("creation_failed", token, sourceChainId, destinationChainId);
     }
   }
 
@@ -357,6 +361,7 @@ export default function PayLinksPage() {
         throw new Error(body.error || "Payment request could not be cancelled.");
       }
       setRevoked(true);
+      trackPayLink("cancelled", token, sourceChainId, destinationChainId);
       setShortLinkNotice(
         "Payment request cancelled. Its short and portable links can no longer initiate payment.",
       );
