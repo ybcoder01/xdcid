@@ -3,6 +3,7 @@ import "@rainbow-me/rainbowkit/styles.css";
 import type { Metadata } from "next";
 import { Nav } from "../components/Nav";
 import { Providers } from "../components/Providers";
+import { PrivacyAnalytics } from "../components/PrivacyAnalytics";
 
 const title = "XDCID";
 const description = ".XDC names for identities, profiles, and payments on XDC";
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Nav />
           {children}
         </Providers>
+        <PrivacyAnalytics />
       </body>
     </html>
   );

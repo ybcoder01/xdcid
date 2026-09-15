@@ -70,6 +70,7 @@ import {
   paymentRequestRoute,
   type PaymentRequest,
 } from "../../../lib/paymentRequests";
+import { trackPayLink, trackPayment } from "../../../lib/productAnalytics";
 
 export default function PayRequestPage() {
   const params = useParams<{ name: string }>();
@@ -81,6 +82,7 @@ export default function PayRequestPage() {
   const [shortPayload, setShortPayload] = useState<{ request: string; signature: string }>();
   const [shortLinkLoading, setShortLinkLoading] = useState(false);
   const [shortLinkError, setShortLinkError] = useState("");
+  const openedAnalyticsKey = useRef("");
 
   useEffect(() => {
     let current = true;
@@ -220,6 +222,28 @@ export default function PayRequestPage() {
   const destinationNetwork = getPaymentNetwork(route.destinationChainId);
   const crossChain = route.sourceChainId !== route.destinationChainId;
 
+  useEffect(() => {
+    if (requestError || awaitingShortLink) return;
+    const analyticsKey = signedRequestId || (legacyRequest ? `legacy:${params.name}` : "");
+    if (!analyticsKey || openedAnalyticsKey.current === analyticsKey) return;
+    openedAnalyticsKey.current = analyticsKey;
+    trackPayLink(
+      "opened",
+      token,
+      route.sourceChainId,
+      route.destinationChainId,
+    );
+  }, [
+    awaitingShortLink,
+    legacyRequest,
+    params.name,
+    requestError,
+    route.destinationChainId,
+    route.sourceChainId,
+    signedRequestId,
+    token,
+  ]);
+
   const { address, isConnected, chainId } = useAccount();
   const verificationClient = usePublicClient({ chainId: XDC_CHAIN_ID });
   const accountClient = usePublicClient({ chainId: route.sourceChainId });
@@ -231,6 +255,7 @@ export default function PayRequestPage() {
   const [completedReceipt, setCompletedReceipt] = useState<PaymentReceiptRecord | null>(null);
   const [networkSwitchError, setNetworkSwitchError] = useState("");
   const recordingHashes = useRef(new Set<string>());
+  const nativeAnalyticsOutcome = useRef<"" | "started" | "confirmed" | "failed">("");
 
   useEffect(() => installPaymentCompletionRetry(), []);
   const nativePayment = useSendTransaction();
@@ -436,11 +461,49 @@ export default function PayRequestPage() {
   ]);
 
   useEffect(() => {
-    if (receipt.isSuccess && transactionHash) void recordSettlement(transactionHash);
-  }, [receipt.isSuccess, recordSettlement, transactionHash]);
+    if (!receipt.isSuccess || !transactionHash) return;
+    void recordSettlement(transactionHash);
+    if (nativeAnalyticsOutcome.current !== "confirmed") {
+      nativeAnalyticsOutcome.current = "confirmed";
+      trackPayment(
+        "pay_link",
+        "confirmed",
+        token,
+        route.sourceChainId,
+        route.destinationChainId,
+      );
+    }
+  }, [
+    receipt.isSuccess,
+    recordSettlement,
+    route.destinationChainId,
+    route.sourceChainId,
+    token,
+    transactionHash,
+  ]);
+
+  useEffect(() => {
+    if (!paymentError || nativeAnalyticsOutcome.current === "failed") return;
+    nativeAnalyticsOutcome.current = "failed";
+    trackPayment(
+      "pay_link",
+      "failed",
+      token,
+      route.sourceChainId,
+      route.destinationChainId,
+    );
+  }, [paymentError, route.destinationChainId, route.sourceChainId, token]);
 
   function pay() {
     if (!paymentAddress || !canPay || !nativeXdcPayment) return;
+    nativeAnalyticsOutcome.current = "started";
+    trackPayment(
+      "pay_link",
+      "started",
+      token,
+      route.sourceChainId,
+      route.destinationChainId,
+    );
     nativePayment.sendTransaction({ to: paymentAddress, value });
   }
 
@@ -581,6 +644,7 @@ export default function PayRequestPage() {
                     : "payer-choice"
               }
               presentation="checkout"
+              analyticsChannel="pay_link"
             />
           </div>
         )}

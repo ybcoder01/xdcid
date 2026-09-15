@@ -32,6 +32,7 @@ import {
   type SerializedDomainDiscountAuthorization,
 } from "../lib/domainDiscounts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
+import { trackRegistration } from "../lib/productAnalytics";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -146,6 +147,7 @@ export function SignedRegistrationControls(props: {
 
     setBusy(true);
     setStatus("Requesting a short-lived payment quote…");
+    trackRegistration("started", currency, termYears);
     try {
       const response = await fetch("/api/v1/registrar/quote", {
         method: "POST",
@@ -281,8 +283,10 @@ export function SignedRegistrationControls(props: {
 
       saveName(address, props.name);
       setStatus("Registration confirmed: " + transactionHash);
+      trackRegistration("confirmed", currency, termYears);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Registration failed");
+      trackRegistration("failed", currency, termYears);
     } finally {
       setBusy(false);
     }
