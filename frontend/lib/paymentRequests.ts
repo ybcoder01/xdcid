@@ -156,7 +156,7 @@ export function validatePaymentRequest(
 
   const parsedName = parseXnsName(request.name);
   if (!parsedName.isValid || parsedName.name !== request.name) {
-    return "Payment request contains an invalid or non-canonical XNS ID.";
+    return "Payment request contains an invalid or non-canonical XDCID name.";
   }
 
   if (request.token !== "XDC" && request.token !== "USDC") {

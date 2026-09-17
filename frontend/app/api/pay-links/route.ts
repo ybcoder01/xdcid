@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       args: [node]
     }) as Address;
     if (owner === zeroAddress) {
-      return json({ error: "XNS ID is not currently registered" }, 403);
+      return json({ error: "XDCID name is not currently registered" }, 403);
     }
     const verification = await verifyPaymentRequestSignature(
       client,
@@ -133,7 +133,7 @@ function getXdcClient() {
         "https://rpc.apothem.network,https://erpc.apothem.network"
       : process.env.XDC_RPC_URLS ||
         process.env.XDC_MAINNET_RPC_URL ||
-        "https://rpc.xdcrpc.com,https://earpc.xinfin.network")
+        "https://earpc.xinfin.network,https://rpc.xinfin.network,https://rpc.xdcrpc.com")
   )
     .split(",")
     .map((value) => value.trim())
@@ -141,7 +141,13 @@ function getXdcClient() {
   const timeout = Number(process.env.XDC_RPC_TIMEOUT_MS || 3_500);
   return createPublicClient({
     transport: fallback(
-      urls.map((url) => http(url, { timeout, retryCount: 0 }))
+      urls.map((url) => http(url, {
+        fetchOptions: {
+          headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" }
+        },
+        timeout,
+        retryCount: 0
+      }))
     )
   });
 }

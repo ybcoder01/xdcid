@@ -15,6 +15,6 @@ export async function GET(request: Request, context: RouteContext) {
 
     return apiSuccess(data);
   } catch (error) {
-    return handleApiError(error, "XNS name lookup failed");
+    return handleApiError(error, "XDCID name lookup failed");
   }
 }

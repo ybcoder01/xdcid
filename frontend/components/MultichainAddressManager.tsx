@@ -100,7 +100,7 @@ export function MultichainAddressManager({
       )
     );
     setStatusMessage(
-      "The connected address has been filled for every network. Save each network separately."
+      "The connected address has been filled for all five supported networks. Save each network separately."
     );
   }
 
@@ -154,6 +154,17 @@ export function MultichainAddressManager({
         >
           Use my wallet for all
         </button>
+      </div>
+
+      <div className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm text-slate-800">
+        <p className="font-semibold text-slate-950">
+          One ID, different receiving addresses
+        </p>
+        <p className="mt-1 leading-6">
+          {name} can resolve to a different address on each supported network.
+          Payments use the destination network&apos;s address when one is set;
+          otherwise, they use your default EVM address.
+        </p>
       </div>
 
       <div className="mt-5 grid gap-3">
@@ -233,7 +244,7 @@ export function MultichainAddressManager({
       <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         A standard wallet account normally uses the same address across EVM
         networks. Smart-contract wallets may use a different address or may not
-        be deployed on every network. Always verify that you control each
+        be deployed on all five supported networks. Always verify that you control each
         destination address.
       </div>
 

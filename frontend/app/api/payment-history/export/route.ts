@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       "Payment channel",
       "Completion method",
       "Status",
-      "XNS ID",
+      "XDCID name",
       "Sender",
       "Receiver",
       "Source network",

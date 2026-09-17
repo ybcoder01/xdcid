@@ -39,6 +39,7 @@ import {
   estimateAdaptiveGasFees,
   isBaseFeeTooLowError
 } from "../lib/gasFeePolicy";
+import { trackPayment } from "../lib/productAnalytics";
 
 type Phase =
   | "idle"
@@ -80,6 +81,7 @@ type MultichainUsdcExecutorProps = {
   ) => void | Promise<void>;
   requestedTransferMode?: "standard" | "automatic" | "payer-choice";
   presentation?: "default" | "checkout";
+  analyticsChannel?: "send" | "pay_link";
 };
 
 const phaseLabels: Record<Phase, string> = {
@@ -105,7 +107,8 @@ export function MultichainUsdcExecutor({
   paymentReference = "",
   onCompleted,
   requestedTransferMode = "payer-choice",
-  presentation = "default"
+  presentation = "default",
+  analyticsChannel = "send"
 }: MultichainUsdcExecutorProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const reportedSettlement = useRef("");
@@ -273,7 +276,7 @@ export function MultichainUsdcExecutor({
     setAttestation(null);
 
     if (!ready || !source || !destination) {
-      setError("Complete the payment details and XNS resolution first");
+      setError("Complete the payment details and XDCID resolution first");
       return;
     }
     if (!isConnected || !address) {
@@ -284,6 +287,14 @@ export function MultichainUsdcExecutor({
       setError("Source network client is unavailable");
       return;
     }
+
+    trackPayment(
+      analyticsChannel,
+      "started",
+      "USDC",
+      sourceChainId,
+      destinationChainId,
+    );
 
     try {
       const units = parseMainnetUsdcAmount(amount);
@@ -347,6 +358,7 @@ export function MultichainUsdcExecutor({
         setReceiveHash(transferHash);
         await sourceClient.waitForTransactionReceipt({ hash: transferHash });
         setPhase("complete");
+        trackPayment(analyticsChannel, "confirmed", "USDC", sourceChainId, destinationChainId);
         return;
       }
 
@@ -448,6 +460,7 @@ export function MultichainUsdcExecutor({
         );
         setReceiveHash(forwardedMintHash);
         setPhase("complete");
+        trackPayment(analyticsChannel, "confirmed", "USDC", sourceChainId, destinationChainId);
         return;
       }
 
@@ -470,6 +483,7 @@ export function MultichainUsdcExecutor({
     } catch (cause) {
       setError(readError(cause));
       setPhase("idle");
+      trackPayment(analyticsChannel, "failed", "USDC", sourceChainId, destinationChainId);
     }
   }
 
@@ -490,6 +504,7 @@ export function MultichainUsdcExecutor({
         );
         setReceiveHash(forwardedMintHash);
         setPhase("complete");
+        trackPayment(analyticsChannel, "confirmed", "USDC", sourceChainId, destinationChainId);
         return;
       }
       const nextAttestation = await waitForMainnetAttestation(
@@ -501,6 +516,7 @@ export function MultichainUsdcExecutor({
     } catch (cause) {
       setError(readError(cause));
       setPhase("idle");
+      trackPayment(analyticsChannel, "failed", "USDC", sourceChainId, destinationChainId);
     }
   }
 
@@ -590,9 +606,11 @@ export function MultichainUsdcExecutor({
       setReceiveHash(nextReceiveHash);
       await destinationClient.waitForTransactionReceipt({ hash: nextReceiveHash });
       setPhase("complete");
+      trackPayment(analyticsChannel, "confirmed", "USDC", sourceChainId, destinationChainId);
     } catch (cause) {
       setError(readError(cause));
       setPhase("ready");
+      trackPayment(analyticsChannel, "failed", "USDC", sourceChainId, destinationChainId);
     }
   }
 
@@ -610,10 +628,10 @@ export function MultichainUsdcExecutor({
             {crossChain
               ? "USDC will be burned on " +
                 (source?.name || "the source") +
-                " and minted to the XNS-resolved address on " +
+                " and minted to the XDCID-resolved address on " +
                 (destination?.name || "the destination") +
                 "."
-              : "USDC will be transferred directly to the XNS-resolved address."}
+              : "USDC will be transferred directly to the XDCID-resolved address."}
           </p>
         </>
       ) : null}

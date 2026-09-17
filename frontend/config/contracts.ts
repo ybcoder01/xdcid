@@ -15,7 +15,7 @@ export const xdcMainnet = {
   iconBackground: "#183E72",
   nativeCurrency: { name: "XDC", symbol: "XDC", decimals: 18 },
   rpcUrls: {
-    default: { http: [process.env.NEXT_PUBLIC_XDC_RPC_URL || "https://rpc.xdcrpc.com"] }
+    default: { http: [process.env.NEXT_PUBLIC_XDC_RPC_URL || "https://earpc.xinfin.network"] }
   },
   blockExplorers: {
     default: { name: "XDCScan", url: "https://xdcscan.com" }
@@ -42,7 +42,15 @@ export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
   resolver: (process.env.NEXT_PUBLIC_XNS_RESOLVER || xnsAddresses.resolver) as `0x${string}`,
+  verifiedResolver: (
+    process.env.NEXT_PUBLIC_XNS_RESOLVER_V2 ||
+    "0x0000000000000000000000000000000000000000"
+  ) as `0x${string}`,
   reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`,
+  verifiedReverseResolver: (
+    process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2 ||
+    "0x0000000000000000000000000000000000000000"
+  ) as `0x${string}`,
   multichainResolver: (
     process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER || MULTICHAIN_RESOLVER_ADDRESS
   ) as `0x${string}`,
@@ -94,6 +102,18 @@ export const legacyRegistrarAddress = (
 // deployed resolver suite. Dev therefore resolves registered names to their
 // registry owner as the safe EVM-wide fallback and never calls mainnet resolvers.
 export const activeResolverSuiteAvailable = !isTestnetEnvironment;
+
+// The original forward resolver does not bind records to the owner who wrote
+// them, so it must never be trusted after a name transfer or re-registration.
+// Profile reads and writes remain disabled until Resolver V2 is deployed and
+// this dedicated address is configured.
+export const verifiedResolverAvailable =
+  !isTestnetEnvironment && addresses.verifiedResolver !==
+    "0x0000000000000000000000000000000000000000";
+
+export const verifiedReverseResolverAvailable =
+  !isTestnetEnvironment && addresses.verifiedReverseResolver !==
+    "0x0000000000000000000000000000000000000000";
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
@@ -315,8 +335,6 @@ export const zeroAddress = "0x0000000000000000000000000000000000000000";
 export const contractsConfigured =
   addresses.registry !== zeroAddress &&
   addresses.registrar !== zeroAddress &&
-  addresses.resolver !== zeroAddress &&
-  addresses.reverseResolver !== zeroAddress &&
   addresses.multichainResolver !== zeroAddress;
 
 export const registrarAbi = [

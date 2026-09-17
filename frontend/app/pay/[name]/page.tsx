@@ -18,8 +18,7 @@ import {
   activeXnsChainId,
   addresses,
   multichainResolverAbi,
-  registryAbi,
-  resolverAbi
+  registryAbi
 } from "../../../config/contracts";
 import { getPaymentNetwork } from "../../../config/paymentNetworks";
 
@@ -37,6 +36,7 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../../components/MultichainUsdcExecutor";
+import { CrossChainPaymentNotice } from "../../../components/CrossChainPaymentNotice";
 import { TokenLogo, nativeTokenForChain } from "../../../components/TokenLogo";
 import { WalletButton } from "../../../components/WalletButton";
 import { PaymentReceiptDialog } from "../../../components/PaymentReceiptDialog";
@@ -70,6 +70,7 @@ import {
   paymentRequestRoute,
   type PaymentRequest,
 } from "../../../lib/paymentRequests";
+import { trackPayLink, trackPayment } from "../../../lib/productAnalytics";
 
 export default function PayRequestPage() {
   const params = useParams<{ name: string }>();
@@ -81,6 +82,7 @@ export default function PayRequestPage() {
   const [shortPayload, setShortPayload] = useState<{ request: string; signature: string }>();
   const [shortLinkLoading, setShortLinkLoading] = useState(false);
   const [shortLinkError, setShortLinkError] = useState("");
+  const openedAnalyticsKey = useRef("");
 
   useEffect(() => {
     let current = true;
@@ -155,7 +157,7 @@ export default function PayRequestPage() {
   const memoError = awaitingShortLink ? undefined : validatePayMemo(memo);
   const expiryError = awaitingShortLink ? undefined : validatePayExpiry(expires);
   const pathError = signedRequest && parsedName.isValid && signedRequest.name !== parsedName.name
-    ? "The signed XNS ID does not match this checkout URL."
+    ? "The signed XDCID name does not match this checkout URL."
     : undefined;
   const requestError = !parsedName.isValid
     ? parsedName.error
@@ -220,6 +222,28 @@ export default function PayRequestPage() {
   const destinationNetwork = getPaymentNetwork(route.destinationChainId);
   const crossChain = route.sourceChainId !== route.destinationChainId;
 
+  useEffect(() => {
+    if (requestError || awaitingShortLink) return;
+    const analyticsKey = signedRequestId || (legacyRequest ? `legacy:${params.name}` : "");
+    if (!analyticsKey || openedAnalyticsKey.current === analyticsKey) return;
+    openedAnalyticsKey.current = analyticsKey;
+    trackPayLink(
+      "opened",
+      token,
+      route.sourceChainId,
+      route.destinationChainId,
+    );
+  }, [
+    awaitingShortLink,
+    legacyRequest,
+    params.name,
+    requestError,
+    route.destinationChainId,
+    route.sourceChainId,
+    signedRequestId,
+    token,
+  ]);
+
   const { address, isConnected, chainId } = useAccount();
   const verificationClient = usePublicClient({ chainId: XDC_CHAIN_ID });
   const accountClient = usePublicClient({ chainId: route.sourceChainId });
@@ -231,6 +255,7 @@ export default function PayRequestPage() {
   const [completedReceipt, setCompletedReceipt] = useState<PaymentReceiptRecord | null>(null);
   const [networkSwitchError, setNetworkSwitchError] = useState("");
   const recordingHashes = useRef(new Set<string>());
+  const nativeAnalyticsOutcome = useRef<"" | "started" | "confirmed" | "failed">("");
 
   useEffect(() => installPaymentCompletionRetry(), []);
   const nativePayment = useSendTransaction();
@@ -275,14 +300,6 @@ export default function PayRequestPage() {
     args: node ? [node] : undefined,
     query: { enabled: !!node },
   });
-  const resolvedAddress = useReadContract({
-    chainId: XDC_CHAIN_ID,
-    address: addresses.resolver,
-    abi: resolverAbi,
-    functionName: "addresses",
-    args: node ? [node] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable },
-  });
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
@@ -311,7 +328,7 @@ export default function PayRequestPage() {
         if (!current) return;
         setSignatureVerification(verification);
         if (!verification.valid) {
-          setSignatureError(verification.error || "Payment request signature is not authorized by the current XNS owner.");
+          setSignatureError(verification.error || "Payment request signature is not authorized by the current XDCID owner.");
         }
       })
       .catch(() => {
@@ -345,19 +362,15 @@ export default function PayRequestPage() {
   const paymentDestination = useMemo(() => selectPaymentDestination({
     destinationChainId: route.destinationChainId,
     multichainAddress: typeof multichainAddress.data === "string" ? multichainAddress.data : undefined,
-    defaultEvmAddress:
-      activeResolverSuiteAvailable && typeof resolvedAddress.data === "string"
-        ? resolvedAddress.data
-        : typeof owner.data === "string"
-          ? owner.data
-          : undefined,
-  }), [route.destinationChainId, multichainAddress.data, owner.data, resolvedAddress.data]);
+    currentOwner:
+      typeof owner.data === "string" ? owner.data : undefined,
+  }), [route.destinationChainId, multichainAddress.data, owner.data]);
   const paymentAddress = paymentDestination?.address;
   const resolving =
-    owner.isLoading || expiry.isLoading || resolvedAddress.isLoading ||
+    owner.isLoading || expiry.isLoading ||
     multichainAddress.isLoading || registry.isChecking;
   const resolutionFailed =
-    owner.isError || expiry.isError || resolvedAddress.isError ||
+    owner.isError || expiry.isError ||
     multichainAddress.isError || registry.isError;
   const signaturePending = Boolean(
     signedRequest && signedPayload.signature && !signatureError &&
@@ -436,11 +449,49 @@ export default function PayRequestPage() {
   ]);
 
   useEffect(() => {
-    if (receipt.isSuccess && transactionHash) void recordSettlement(transactionHash);
-  }, [receipt.isSuccess, recordSettlement, transactionHash]);
+    if (!receipt.isSuccess || !transactionHash) return;
+    void recordSettlement(transactionHash);
+    if (nativeAnalyticsOutcome.current !== "confirmed") {
+      nativeAnalyticsOutcome.current = "confirmed";
+      trackPayment(
+        "pay_link",
+        "confirmed",
+        token,
+        route.sourceChainId,
+        route.destinationChainId,
+      );
+    }
+  }, [
+    receipt.isSuccess,
+    recordSettlement,
+    route.destinationChainId,
+    route.sourceChainId,
+    token,
+    transactionHash,
+  ]);
+
+  useEffect(() => {
+    if (!paymentError || nativeAnalyticsOutcome.current === "failed") return;
+    nativeAnalyticsOutcome.current = "failed";
+    trackPayment(
+      "pay_link",
+      "failed",
+      token,
+      route.sourceChainId,
+      route.destinationChainId,
+    );
+  }, [paymentError, route.destinationChainId, route.sourceChainId, token]);
 
   function pay() {
     if (!paymentAddress || !canPay || !nativeXdcPayment) return;
+    nativeAnalyticsOutcome.current = "started";
+    trackPayment(
+      "pay_link",
+      "started",
+      token,
+      route.sourceChainId,
+      route.destinationChainId,
+    );
     nativePayment.sendTransaction({ to: paymentAddress, value });
   }
 
@@ -488,6 +539,13 @@ export default function PayRequestPage() {
               <p className="truncate text-[11px] font-semibold text-slate-700">{destinationNetwork.name}</p>
             </div>
           </div>
+        ) : null}
+
+        {token === "USDC" && crossChain ? (
+          <CrossChainPaymentNotice
+            compact
+            sourceChainId={route.sourceChainId}
+          />
         ) : null}
 
         {reference || memo ? (
@@ -581,6 +639,7 @@ export default function PayRequestPage() {
                     : "payer-choice"
               }
               presentation="checkout"
+              analyticsChannel="pay_link"
             />
           </div>
         )}
@@ -629,7 +688,7 @@ export default function PayRequestPage() {
                   <p className="font-semibold text-slate-900">Signed request</p>
                   <p className="mt-1 break-all text-slate-600">
                     {signaturePending
-                      ? "Checking the current XNS owner signature..."
+                      ? "Checking the current XDCID owner signature..."
                       : signatureVerification?.valid
                         ? (signatureVerification.accountType === "contract"
                             ? "Verified smart account (ERC-1271): "
@@ -642,7 +701,7 @@ export default function PayRequestPage() {
                 <p className="font-semibold text-slate-900">Recipient</p>
                 <p className="mt-1 break-all text-slate-600">
                   {resolving
-                    ? "Resolving the XNS ID on-chain..."
+                    ? "Resolving the XDCID name on-chain..."
                       : resolutionFailed
                         ? "The registry status could not be verified."
                         : registry.status?.state === "legacy"
@@ -650,11 +709,22 @@ export default function PayRequestPage() {
                           : registry.status?.state === "collision"
                             ? "Payment blocked: this name exists in both registries and requires review."
                             : !hasOwner
-                              ? "The XNS ID is unregistered or expired."
+                              ? "The XDCID name is unregistered or expired."
                               : paymentAddress
-                                ? paymentAddress + (paymentDestination?.source === "evm-default" ? " (default EVM address)" : "")
+                                ? paymentAddress +
+                                  (paymentDestination?.source === "multichain"
+                                    ? ` (${destinationNetwork?.name || "destination network"} address)`
+                                    : paymentDestination?.source === "registry-owner"
+                                      ? " (current XDCID owner)"
+                                      : "")
                                 : "No payment address is set for the destination network."}
                 </p>
+                {paymentAddress && hasOwner ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    One XDCID can resolve to a different receiving address on
+                    each supported network.
+                  </p>
+                ) : null}
                 {paymentAddress && (
                   <a className="mt-2 inline-block font-semibold text-teal-700 underline" href={(explorerUrls[route.destinationChainId] || "https://xdcscan.com") + "/address/" + paymentAddress} target="_blank" rel="noreferrer">
                     Verify on {destinationNetwork?.name || "destination explorer"}

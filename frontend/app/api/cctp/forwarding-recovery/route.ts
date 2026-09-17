@@ -349,6 +349,9 @@ function getPaymentClient(chainId: number) {
     transport: fallback(
       urls.map((url) =>
         http(url, {
+          fetchOptions: {
+            headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" }
+          },
           timeout,
           retryCount: 0
         })

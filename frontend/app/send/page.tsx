@@ -15,13 +15,13 @@ import {
   MultichainUsdcExecutor,
   type PaymentCompletionMetadata
 } from "../../components/MultichainUsdcExecutor";
+import { CrossChainPaymentNotice } from "../../components/CrossChainPaymentNotice";
 import {
   activeRegistryAddress,
   activeResolverSuiteAvailable,
   addresses,
   multichainResolverAbi,
-  registryAbi,
-  resolverAbi
+  registryAbi
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
@@ -50,6 +50,7 @@ import {
   paymentSelectionForSavedEntry,
   type ExchangeAddressBookEntry,
 } from "../../lib/exchangeAddressBook";
+import { trackPayment } from "../../lib/productAnalytics";
 
 const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 const DEFAULT_SOURCE_CHAIN_ID =
@@ -85,6 +86,7 @@ export default function SendPage() {
   const [walletSwitchStatus, setWalletSwitchStatus] = useState("");
   const [pendingWalletChainId, setPendingWalletChainId] = useState<number | null>(null);
   const recordingHashes = useRef(new Set<string>());
+  const analyticsHashes = useRef(new Set<string>());
 
   useEffect(() => installPaymentCompletionRetry(), []);
   const { address: connectedAddress, chainId: connectedChainId, isConnected } = useAccount();
@@ -259,15 +261,6 @@ export default function SendPage() {
     query: { enabled: !!node }
   });
 
-  const xdcDefaultAddress = useReadContract({
-    chainId: XDC_CHAIN_ID,
-    address: addresses.resolver,
-    abi: resolverAbi,
-    functionName: "addresses",
-    args: node ? [node] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable }
-  });
-
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
@@ -293,18 +286,13 @@ export default function SendPage() {
               typeof multichainAddress.data === "string"
                 ? multichainAddress.data
                 : undefined,
-            defaultEvmAddress:
-              activeResolverSuiteAvailable && typeof xdcDefaultAddress.data === "string"
-                ? xdcDefaultAddress.data
-                : typeof owner.data === "string"
-                  ? owner.data
-                  : undefined
+            currentOwner:
+              typeof owner.data === "string" ? owner.data : undefined
           }),
     [
       destinationChainId,
       directRecipient,
       multichainAddress.data,
-      xdcDefaultAddress.data,
       owner.data
     ]
   );
@@ -312,13 +300,11 @@ export default function SendPage() {
   const readsLoading =
     owner.isLoading ||
     expiry.isLoading ||
-    xdcDefaultAddress.isLoading ||
     multichainAddress.isLoading ||
     registry.isChecking;
   const readsFailed =
     owner.isError ||
     expiry.isError ||
-    xdcDefaultAddress.isError ||
     multichainAddress.isError ||
     registry.isError;
 
@@ -380,11 +366,35 @@ export default function SendPage() {
   }, [destination, destinationChainId, directRecipient, name, paymentReference, sourceChainId, token, units]);
 
   useEffect(() => {
-    if (nativeReceipt.isSuccess && hash) void recordSettlement(hash);
-  }, [hash, nativeReceipt.isSuccess, recordSettlement]);
+    if (!nativeReceipt.isSuccess || !hash) return;
+    void recordSettlement(hash);
+    if (analyticsHashes.current.has(hash)) return;
+    analyticsHashes.current.add(hash);
+    trackPayment(
+      "send",
+      "confirmed",
+      sourceNetwork?.nativeSymbol || "other",
+      sourceChainId,
+      destinationChainId,
+    );
+  }, [
+    destinationChainId,
+    hash,
+    nativeReceipt.isSuccess,
+    recordSettlement,
+    sourceChainId,
+    sourceNetwork?.nativeSymbol,
+  ]);
 
   async function sendNative() {
     if (!canSendNative || !destination || !sourceClient) return;
+    trackPayment(
+      "send",
+      "started",
+      sourceNetwork?.nativeSymbol || "other",
+      sourceChainId,
+      destinationChainId,
+    );
     const request = {
       to: destination.address,
       value: parseEther(amount)
@@ -396,13 +406,23 @@ export default function SendPage() {
     try {
       await sendTransactionAsync({ ...request, ...initialFees });
     } catch (cause) {
-      if (!isBaseFeeTooLowError(cause)) return;
+      if (!isBaseFeeTooLowError(cause)) {
+        trackPayment("send", "failed", sourceNetwork?.nativeSymbol || "other", sourceChainId, destinationChainId);
+        return;
+      }
       const refreshedFees = await estimateAdaptiveGasFees(
         sourceClient,
         sourceChainId
       );
-      if (refreshedFees.maxFeePerGas === undefined) return;
-      await sendTransactionAsync({ ...request, ...refreshedFees });
+      if (refreshedFees.maxFeePerGas === undefined) {
+        trackPayment("send", "failed", sourceNetwork?.nativeSymbol || "other", sourceChainId, destinationChainId);
+        return;
+      }
+      try {
+        await sendTransactionAsync({ ...request, ...refreshedFees });
+      } catch {
+        trackPayment("send", "failed", sourceNetwork?.nativeSymbol || "other", sourceChainId, destinationChainId);
+      }
     }
   }
 
@@ -416,7 +436,7 @@ export default function SendPage() {
   }
 
   const resolutionMessage = directRecipient
-    ? "Direct wallet address. XNS resolution is not required."
+    ? "Direct wallet address. XDCID resolution is not required."
     : !isValid
       ? validationError
       : readsLoading
@@ -446,11 +466,15 @@ export default function SendPage() {
             </span>
           </div>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">
-            Send to an XNS ID or wallet
+            Send to an XDCID or wallet
           </h1>
           <p className="mt-2 text-sm text-neutral-600">
-            Resolve an XNS ID or pay a verified EVM wallet address directly.
+            Resolve an XDCID name or pay a verified EVM wallet address directly.
           </p>
+
+          {token === "USDC" && sourceChainId !== destinationChainId ? (
+            <CrossChainPaymentNotice sourceChainId={sourceChainId} />
+          ) : null}
 
           <div className="mt-8 grid gap-4">
             <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/90 to-white p-4">
@@ -659,8 +683,17 @@ export default function SendPage() {
                       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Receiving address</p>
                       <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-800">{destination.address}</p>
                       <p className="mt-2 text-xs text-slate-500">
-                        {destination.source === "direct-wallet" ? "Direct wallet address" : destination.source === "multichain" ? "Destination-chain record" : "Default EVM record"}
+                        {destination.source === "direct-wallet"
+                          ? "Direct wallet address"
+                          : destination.source === "multichain"
+                            ? routeState.route.destination.name + " address configured for this XDCID"
+                            : "Current XDCID owner"}
                       </p>
+                      {!directRecipient ? (
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          One XDCID can use a different receiving address on each supported network.
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -724,7 +757,7 @@ export default function SendPage() {
             </div>
           ) : (
             <p className="mt-5 text-sm text-neutral-600">
-              Enter an XNS ID or wallet address to preview the destination and payment route.
+              Enter an XDCID name or wallet address to preview the destination and payment route.
             </p>
           )}
         </aside>
