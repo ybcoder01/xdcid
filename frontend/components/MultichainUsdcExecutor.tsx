@@ -273,7 +273,7 @@ export function MultichainUsdcExecutor({
     setAttestation(null);
 
     if (!ready || !source || !destination) {
-      setError("Complete the payment details and XNS resolution first");
+      setError("Complete the payment details and XDCID resolution first");
       return;
     }
     if (!isConnected || !address) {
@@ -625,10 +625,10 @@ export function MultichainUsdcExecutor({
             {crossChain
               ? "USDC will be burned on " +
                 (source?.name || "the source") +
-                " and minted to the XNS-resolved address on " +
+                " and minted to the XDCID-resolved address on " +
                 (destination?.name || "the destination") +
                 "."
-              : "USDC will be transferred directly to the XNS-resolved address."}
+              : "USDC will be transferred directly to the XDCID-resolved address."}
           </p>
         </>
       ) : null}

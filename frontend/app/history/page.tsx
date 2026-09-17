@@ -237,7 +237,7 @@ export default function PaymentHistoryPage() {
             </select>
           </label>
           <label className="text-sm font-semibold text-slate-700">
-            XNS ID
+            XDCID name
             <input value={filters.name} onChange={(event) => setFilters({ ...filters, name: event.target.value })} placeholder="alice.xdc" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-normal" />
           </label>
           <NetworkSelect label="Source network" value={filters.sourceChainId} onChange={(sourceChainId) => setFilters({ ...filters, sourceChainId })} />

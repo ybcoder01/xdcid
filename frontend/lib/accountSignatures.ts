@@ -52,7 +52,7 @@ export async function verifyPaymentRequestSignature(
         valid,
         accountType,
         signer: expectedSigner,
-        error: valid ? undefined : "The signature was not created by the current XNS owner.",
+        error: valid ? undefined : "The signature was not created by the current XDCID owner.",
       };
     }
 
@@ -106,7 +106,7 @@ export async function verifyPaymentCancellationSignature(
         valid,
         accountType,
         signer: expectedSigner,
-        error: valid ? undefined : "The cancellation was not signed by the current XNS owner.",
+        error: valid ? undefined : "The cancellation was not signed by the current XDCID owner.",
       };
     }
 

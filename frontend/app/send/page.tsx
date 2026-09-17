@@ -19,8 +19,7 @@ import {
   activeResolverSuiteAvailable,
   addresses,
   multichainResolverAbi,
-  registryAbi,
-  resolverAbi
+  registryAbi
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
@@ -162,15 +161,6 @@ export default function SendPage() {
     query: { enabled: !!node }
   });
 
-  const xdcDefaultAddress = useReadContract({
-    chainId: XDC_CHAIN_ID,
-    address: addresses.resolver,
-    abi: resolverAbi,
-    functionName: "addresses",
-    args: node ? [node] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable }
-  });
-
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
@@ -196,18 +186,13 @@ export default function SendPage() {
               typeof multichainAddress.data === "string"
                 ? multichainAddress.data
                 : undefined,
-            defaultEvmAddress:
-              activeResolverSuiteAvailable && typeof xdcDefaultAddress.data === "string"
-                ? xdcDefaultAddress.data
-                : typeof owner.data === "string"
-                  ? owner.data
-                  : undefined
+            currentOwner:
+              typeof owner.data === "string" ? owner.data : undefined
           }),
     [
       destinationChainId,
       directRecipient,
       multichainAddress.data,
-      xdcDefaultAddress.data,
       owner.data
     ]
   );
@@ -215,13 +200,11 @@ export default function SendPage() {
   const readsLoading =
     owner.isLoading ||
     expiry.isLoading ||
-    xdcDefaultAddress.isLoading ||
     multichainAddress.isLoading ||
     registry.isChecking;
   const readsFailed =
     owner.isError ||
     expiry.isError ||
-    xdcDefaultAddress.isError ||
     multichainAddress.isError ||
     registry.isError;
 
@@ -351,7 +334,7 @@ export default function SendPage() {
   }
 
   const resolutionMessage = directRecipient
-    ? "Direct wallet address. XNS resolution is not required."
+    ? "Direct wallet address. XDCID resolution is not required."
     : !isValid
       ? validationError
       : readsLoading
@@ -381,10 +364,10 @@ export default function SendPage() {
             </span>
           </div>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950 md:text-4xl">
-            Send to an XNS ID or wallet
+            Send to an XDCID or wallet
           </h1>
           <p className="mt-2 text-sm text-neutral-600">
-            Resolve an XNS ID or pay a verified EVM wallet address directly.
+            Resolve an XDCID name or pay a verified EVM wallet address directly.
           </p>
 
           {token === "USDC" && sourceChainId !== destinationChainId ? (
@@ -537,7 +520,7 @@ export default function SendPage() {
                     <p className="mt-3 break-all text-xs text-neutral-600">
                       Receiving address: {destination.address}
                       <br />
-                      Address source: {destination.source === "direct-wallet" ? "direct wallet address" : destination.source === "multichain" ? routeState.route.destination.name + " address configured for this XDCID" : "default EVM address"}
+                      Address source: {destination.source === "direct-wallet" ? "direct wallet address" : destination.source === "multichain" ? routeState.route.destination.name + " address configured for this XDCID" : "current XDCID owner"}
                       {!directRecipient ? (
                         <>
                           <br />
@@ -608,7 +591,7 @@ export default function SendPage() {
             </div>
           ) : (
             <p className="mt-5 text-sm text-neutral-600">
-              Enter an XNS ID or wallet address to preview the destination and payment route.
+              Enter an XDCID name or wallet address to preview the destination and payment route.
             </p>
           )}
         </aside>

@@ -1,13 +1,13 @@
 # XDCID Pay Links
 
-XDCID Pay Links are creator-signed, non-custodial payment requests addressed to an XNS ID.
+XDCID Pay Links are creator-signed, non-custodial payment requests addressed to an XDCID name.
 
 ## Flow
 
-1. A payee opens `/pay`, enters an XNS ID, amount, token, source network, destination network, transfer method, optional memo, and optional expiry.
-2. The browser signs a versioned EIP-712 request with the current XNS owner wallet.
+1. A payee opens `/pay`, enters an XDCID name, amount, token, source network, destination network, transfer method, optional memo, and optional expiry.
+2. The browser signs a versioned EIP-712 request with the current XDCID owner wallet.
 3. The link may contain the encoded signed request directly or use the existing short-link store.
-4. A payer opens the link. XDCID verifies the signature against the current XNS owner on XDC and resolves the receiving address configured for the destination network.
+4. A payer opens the link. XDCID verifies the signature against the current XDCID owner on XDC and resolves the receiving address configured for the destination network.
 5. The payer reviews the route and approves the payment in their own wallet.
 
 The application never receives a private key, signs a payment transaction, takes custody, reserves funds, or guarantees payment.
@@ -19,7 +19,7 @@ The application never receives a private key, signs a payment transaction, takes
 - Native USDC cross-chain requests can use Standard CCTP, Automatic forwarding, or allow the payer to choose at checkout.
 - All 20 directional cross-chain pairs among the five supported networks use the capabilities introduced in Phase 1.
 
-XNS ownership and Pay Link authorization are always verified on XDC. The receiving address is selected for the destination network; when no chain-specific address is configured, the resolver may use the XNS ID's default EVM address.
+XDCID ownership and Pay Link authorization are always verified on XDC. The receiving address is selected for the destination network; when no chain-specific address is configured, the resolver may use the XDCID name's default EVM address.
 
 ## Request versions
 
@@ -34,7 +34,7 @@ Long links keep request fields in the URL. Short links store only the encoded re
 ## Safety boundaries
 
 - Expired, malformed, modified, or unauthorized signed requests cannot enable payment.
-- Unregistered and expired XNS IDs cannot receive payment.
+- Unregistered and expired XDCID names cannot receive payment.
 - Legacy-only names and unresolved registry collisions remain blocked.
 - The destination address and route are shown before wallet review.
 - Token amounts reject signs, scientific notation, zero, and excess decimal precision.
@@ -44,9 +44,9 @@ Long links keep request fields in the URL. Short links store only the encoded re
 
 - The creator can paste either a short or portable signed Pay Link and sign a gasless EIP-712 cancellation on XDC Network.
 - Cancellation is keyed to the exact signed request, including its nonce and route, so it disables both URL formats.
-- The API verifies the original request and cancellation against the current XNS owner, including ERC-1271 smart accounts.
+- The API verifies the original request and cancellation against the current XDCID owner, including ERC-1271 smart accounts.
 - Checkout verifies cancellation status before enabling payment and fails closed when that status is unavailable.
-- The cancellation registry stores the request identifier, XNS ID, nonce, timestamp, and cancellation signature. It does not store private keys or API keys.
+- The cancellation registry stores the request identifier, XDCID name, nonce, timestamp, and cancellation signature. It does not store private keys or API keys.
 - Existing token-based short-link revocation remains available for backward compatibility.
 
 Cancellation prevents the XDCID checkout from initiating a future payment. It cannot recall funds, reverse a completed blockchain transaction, or stop a transaction that the payer already approved before the cancellation became visible.

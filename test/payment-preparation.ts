@@ -3,7 +3,7 @@ import { PAYMENT_NETWORKS } from "../frontend/config/paymentNetworks";
 import { selectPaymentDestination } from "../frontend/lib/paymentPreparation";
 
 const multichainAddress = "0x1111111111111111111111111111111111111111";
-const defaultEvmAddress = "0x2222222222222222222222222222222222222222";
+const currentOwner = "0x2222222222222222222222222222222222222222";
 
 describe("payment destination selection", () => {
   it("prefers the destination-chain address record", () => {
@@ -11,7 +11,7 @@ describe("payment destination selection", () => {
       selectPaymentDestination({
         destinationChainId: 8453,
         multichainAddress,
-        defaultEvmAddress
+        currentOwner
       })
     ).to.deep.equal({
       address: multichainAddress,
@@ -20,15 +20,15 @@ describe("payment destination selection", () => {
   });
 
   for (const network of PAYMENT_NETWORKS) {
-    it(`falls back to the default EVM address on ${network.name}`, () => {
+    it(`falls back to the current registry owner on ${network.name}`, () => {
       expect(
         selectPaymentDestination({
           destinationChainId: network.chainId,
-          defaultEvmAddress
+          currentOwner
         })
       ).to.deep.equal({
-        address: defaultEvmAddress,
-        source: "evm-default"
+        address: currentOwner,
+        source: "registry-owner"
       });
     });
   }
@@ -37,7 +37,7 @@ describe("payment destination selection", () => {
     expect(
       selectPaymentDestination({
         destinationChainId: 999_999,
-        defaultEvmAddress
+        currentOwner
       })
     ).to.equal(null);
   });
@@ -54,7 +54,7 @@ describe("payment destination selection", () => {
       selectPaymentDestination({
         destinationChainId: 50,
         multichainAddress: "0x0000000000000000000000000000000000000000",
-        defaultEvmAddress: "0x0000000000000000000000000000000000000000"
+        currentOwner: "0x0000000000000000000000000000000000000000"
       })
     ).to.equal(null);
   });

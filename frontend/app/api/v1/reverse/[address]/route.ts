@@ -14,6 +14,6 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return apiSuccess(data);
   } catch (error) {
-    return handleApiError(error, "XNS reverse lookup failed");
+    return handleApiError(error, "XDCID reverse lookup failed");
   }
 }

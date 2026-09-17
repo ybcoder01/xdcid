@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { isAddress, keccak256, stringToHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
-import { activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, registryAbi, resolverAbi, reverseResolverAbi } from "../../../config/contracts";
+import { activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, registryAbi, resolverAbi, reverseResolverAbi, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
 import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
@@ -35,31 +35,31 @@ export default function NamePage() {
   });
 
   const resolvedAddress = useReadContract({
-    address: addresses.resolver,
+    address: addresses.verifiedResolver,
     abi: resolverAbi,
     functionName: "addresses",
     args: node ? [node] : undefined,
-    query: { enabled: isValid && !!node && activeResolverSuiteAvailable }
+    query: { enabled: isValid && !!node && verifiedResolverAvailable }
   });
 
   const primaryName = useReadContract({
-    address: addresses.reverseResolver,
+    address: addresses.verifiedReverseResolver,
     abi: reverseResolverAbi,
     functionName: "primaryNames",
     args: address ? [address] : undefined,
-    query: { enabled: !!address && activeResolverSuiteAvailable }
+    query: { enabled: !!address && verifiedReverseResolverAvailable }
   });
 
   const textReads = useReadContracts({
-    contracts: node && activeResolverSuiteAvailable
+    contracts: node && verifiedResolverAvailable
       ? textKeys.map((key) => ({
-          address: addresses.resolver,
+          address: addresses.verifiedResolver,
           abi: resolverAbi,
           functionName: "text",
           args: [node, key]
         }))
       : [],
-    query: { enabled: isValid && !!node && activeResolverSuiteAvailable }
+    query: { enabled: isValid && !!node && verifiedResolverAvailable }
   });
 
   const isOwner = useMemo(
@@ -70,7 +70,7 @@ export default function NamePage() {
   function saveAddress() {
     if (!node || !isAddress(addr)) return;
     writeContract({
-      address: addresses.resolver,
+      address: addresses.verifiedResolver,
       abi: resolverAbi,
       functionName: "setAddress",
       args: [node, addr]
@@ -80,7 +80,7 @@ export default function NamePage() {
   function saveText(key: string) {
     if (!node) return;
     writeContract({
-      address: addresses.resolver,
+      address: addresses.verifiedResolver,
       abi: resolverAbi,
       functionName: "setText",
       args: [node, key, records[key] || ""]
@@ -90,7 +90,7 @@ export default function NamePage() {
   function setPrimaryName() {
     if (!node) return;
     writeContract({
-      address: addresses.reverseResolver,
+      address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
       functionName: "setPrimaryName",
       args: [name, node]
@@ -148,17 +148,17 @@ export default function NamePage() {
         <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Edit records</h2>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-neutral-50 p-3">
-            <p className="text-sm text-neutral-600">Primary name: {primaryName.data || "Not set"}</p>
-            <button className="rounded-md border border-black/10 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={isPending} onClick={setPrimaryName}>
+            <p className="text-sm text-neutral-600">Primary name: {verifiedReverseResolverAvailable ? primaryName.data || "Not set" : "Available after Resolver V2 activation"}</p>
+            <button className="rounded-md border border-black/10 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50" disabled={isPending || !verifiedReverseResolverAvailable} onClick={setPrimaryName}>
               Set primary
             </button>
           </div>
-          <div className="mt-4 flex gap-2">
+          {verifiedResolverAvailable && <div className="mt-4 flex gap-2">
             <input className="min-w-0 flex-1 rounded-md border border-black/10 px-3 py-2" value={addr} onChange={(event) => setAddr(event.target.value)} placeholder="0x address" />
             <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50" disabled={isPending} onClick={saveAddress}>
               Save
             </button>
-          </div>
+          </div>}
           <div className="mt-4 rounded-md border border-black/10 bg-neutral-50 p-3">
             <p className="text-sm font-semibold text-slate-950">Transfer ownership</p>
             <p className="mt-1 text-xs text-neutral-600">Move this .XDC name to another wallet after an off-chain sale or agreement.</p>
@@ -178,7 +178,7 @@ export default function NamePage() {
               </button>
             </div>
           </div>
-          <div className="mt-4 grid gap-3">
+          {verifiedResolverAvailable && <div className="mt-4 grid gap-3">
             {textKeys.map((key) => (
               <div className="flex gap-2" key={key}>
                 <input
@@ -192,7 +192,7 @@ export default function NamePage() {
                 </button>
               </div>
             ))}
-          </div>
+          </div>}
         </section>
       )}
     </main>

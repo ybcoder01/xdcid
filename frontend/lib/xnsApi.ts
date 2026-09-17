@@ -14,6 +14,8 @@ import {
   registryAbi,
   resolverAbi,
   reverseResolverAbi,
+  verifiedReverseResolverAvailable,
+  verifiedResolverAvailable,
   xdcMainnet
 } from "../config/contracts";
 import {
@@ -122,13 +124,35 @@ export async function getNameData(input: string, years: number) {
       functionName: "price",
       args: [parsed.name]
     }).catch(() => null);
+    const resolvedAddressPromise = verifiedResolverAvailable
+      ? xdcClient.readContract({
+          address: addresses.verifiedResolver,
+          abi: resolverAbi,
+          functionName: "addresses",
+          args: [node]
+        })
+      : Promise.resolve(zeroAddress);
+    const profilePromise = verifiedResolverAvailable
+      ? Promise.allSettled(
+          profileKeys.map((key) =>
+            xdcClient.readContract({
+              address: addresses.verifiedResolver,
+              abi: resolverAbi,
+              functionName: "text",
+              args: [node, key]
+            })
+          )
+        )
+      : Promise.resolve(
+          profileKeys.map(() => ({ status: "fulfilled" as const, value: "" }))
+        );
     const [
       owner,
       expiry,
       available,
       pricePerYear,
       resolvedAddress,
-      profileValues,
+      profileResults,
       legacyRegistered
     ] = await Promise.all([
       xdcClient.readContract({
@@ -150,22 +174,8 @@ export async function getNameData(input: string, years: number) {
         args: [parsed.name]
       }),
       pricePerYearPromise,
-      xdcClient.readContract({
-        address: addresses.resolver,
-        abi: resolverAbi,
-        functionName: "addresses",
-        args: [node]
-      }),
-      Promise.all(
-        profileKeys.map((key) =>
-          xdcClient.readContract({
-            address: addresses.resolver,
-            abi: resolverAbi,
-            functionName: "text",
-            args: [node, key]
-          })
-        )
-      ),
+      resolvedAddressPromise,
+      profilePromise,
       xdcClient.readContract({
         address: legacyXdcDomainsAddress,
         abi: legacyXdcDomainsAbi,
@@ -193,7 +203,11 @@ export async function getNameData(input: string, years: number) {
     const profile = Object.fromEntries(
       profileKeys.map((key, index) => [
         key,
-        registered && profileValues[index] ? profileValues[index] : null
+        registered &&
+        profileResults[index]?.status === "fulfilled" &&
+        profileResults[index].value
+          ? profileResults[index].value
+          : null
       ])
     ) as Profile;
 
@@ -206,7 +220,9 @@ export async function getNameData(input: string, years: number) {
       registered,
       owner: registered ? getAddress(owner) : null,
       resolvedAddress:
-        registered && resolvedAddress !== zeroAddress ? getAddress(resolvedAddress) : null,
+        registered
+          ? getAddress(resolvedAddress !== zeroAddress ? resolvedAddress : owner)
+          : null,
       registry: {
         ...registryClassification,
         xdcid: {
@@ -256,9 +272,12 @@ export async function getReverseData(input: string) {
   if (isTestnetEnvironment) {
     return { address, name: null, verified: false };
   }
+  if (!verifiedReverseResolverAvailable) {
+    return { address, name: null, verified: false };
+  }
   return withShortCache("reverse:" + address.toLowerCase(), async () => {
     const storedName = await xdcClient.readContract({
-      address: addresses.reverseResolver,
+      address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
       functionName: "primaryNames",
       args: [address]
