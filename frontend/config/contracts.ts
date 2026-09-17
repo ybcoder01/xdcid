@@ -32,6 +32,12 @@ export const apothemRegistration = {
 export const apothemSubdomainRegistrar =
   "0xa2135729ce122ef93158FCc4C69683155e6707d3" as `0x${string}`;
 
+const configuredVerifiedResolver = process.env.NEXT_PUBLIC_XNS_RESOLVER_V2;
+const configuredVerifiedReverseResolver =
+  process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2;
+const configuredMultichainResolver =
+  process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER;
+
 // Verified mainnet XNSPricingPolicyV2 deployment. This lets the frontend select
 // the correct tuple ABI immediately after the policy address is switched, while
 // the explicit public generation setting remains available for future policies.
@@ -43,16 +49,16 @@ export const addresses = {
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
   resolver: (process.env.NEXT_PUBLIC_XNS_RESOLVER || xnsAddresses.resolver) as `0x${string}`,
   verifiedResolver: (
-    process.env.NEXT_PUBLIC_XNS_RESOLVER_V2 ||
+    configuredVerifiedResolver ||
     "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`,
   reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`,
   verifiedReverseResolver: (
-    process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2 ||
+    configuredVerifiedReverseResolver ||
     "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`,
   multichainResolver: (
-    process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER || MULTICHAIN_RESOLVER_ADDRESS
+    configuredMultichainResolver || MULTICHAIN_RESOLVER_ADDRESS
   ) as `0x${string}`,
   pricingPolicy: (
     process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
@@ -98,22 +104,27 @@ export const legacyRegistrarAddress = (
     : xnsAddresses.registrar)
 ) as `0x${string}`;
 
-// Apothem currently has the registry and signed registrar, but no separately
-// deployed resolver suite. Dev therefore resolves registered names to their
-// registry owner as the safe EVM-wide fallback and never calls mainnet resolvers.
-export const activeResolverSuiteAvailable = !isTestnetEnvironment;
+// Resolver capabilities are enabled independently. This prevents a testnet
+// deployment from ever falling back to the mainnet multichain resolver while
+// still allowing the verified forward and reverse resolvers to be exercised.
+export const multichainResolverAvailable =
+  !isTestnetEnvironment ||
+  (!!configuredMultichainResolver &&
+    configuredMultichainResolver !==
+      "0x0000000000000000000000000000000000000000");
 
-// The original forward resolver does not bind records to the owner who wrote
-// them, so it must never be trusted after a name transfer or re-registration.
-// Profile reads and writes remain disabled until Resolver V2 is deployed and
-// this dedicated address is configured.
 export const verifiedResolverAvailable =
-  !isTestnetEnvironment && addresses.verifiedResolver !==
+  addresses.verifiedResolver !==
     "0x0000000000000000000000000000000000000000";
 
 export const verifiedReverseResolverAvailable =
-  !isTestnetEnvironment && addresses.verifiedReverseResolver !==
+  addresses.verifiedReverseResolver !==
     "0x0000000000000000000000000000000000000000";
+
+export const activeResolverSuiteAvailable =
+  verifiedResolverAvailable ||
+  verifiedReverseResolverAvailable ||
+  multichainResolverAvailable;
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";

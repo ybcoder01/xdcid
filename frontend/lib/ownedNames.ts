@@ -432,8 +432,8 @@ export async function getOwnedNamesData(
       }
 
       let primaryName: string | null = null;
-      if (!isApothem && verifiedReverseResolverAvailable) {
-        const storedPrimary = await xdcClient.readContract({
+      if (verifiedReverseResolverAvailable) {
+        const storedPrimary = await activeClient.readContract({
           address: addresses.verifiedReverseResolver,
           abi: reverseResolverAbi,
           functionName: "primaryNames",

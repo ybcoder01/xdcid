@@ -18,7 +18,7 @@ import {
 import { CrossChainPaymentNotice } from "../../components/CrossChainPaymentNotice";
 import {
   activeRegistryAddress,
-  activeResolverSuiteAvailable,
+  multichainResolverAvailable,
   addresses,
   multichainResolverAbi,
   registryAbi
@@ -267,7 +267,7 @@ export default function SendPage() {
     abi: multichainResolverAbi,
     functionName: "addressFor",
     args: node ? [node, BigInt(destinationChainId)] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable }
+    query: { enabled: !!node && multichainResolverAvailable }
   });
 
   const expired = expiry.data

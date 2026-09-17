@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { isAddress, keccak256, stringToHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
-import { activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, registryAbi, resolverAbi, reverseResolverAbi, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
+import { activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
 import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
@@ -140,8 +140,24 @@ export default function NamePage() {
         ))}
       </div>
 
-      {isOwner && node && activeResolverSuiteAvailable && (
+      {isOwner && node && multichainResolverAvailable && (
         <MultichainAddressManager name={name} node={node} />
+      )}
+
+      {isOwner && node && !multichainResolverAvailable && (
+        <section className="mt-8 rounded-md border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">
+            Five-network records
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">
+            Multichain destinations are not active on this network yet
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-amber-950">
+            Default address, profile, primary ID and ownership controls are
+            available below. Five-network destination records will appear here
+            after the Apothem multichain resolver is configured.
+          </p>
+        </section>
       )}
 
       {isOwner && activeResolverSuiteAvailable && (

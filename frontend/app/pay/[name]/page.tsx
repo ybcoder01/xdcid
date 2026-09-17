@@ -14,7 +14,7 @@ import {
 } from "wagmi";
 import {
   activeRegistryAddress,
-  activeResolverSuiteAvailable,
+  multichainResolverAvailable,
   activeXnsChainId,
   addresses,
   multichainResolverAbi,
@@ -306,7 +306,7 @@ export default function PayRequestPage() {
     abi: multichainResolverAbi,
     functionName: "addressFor",
     args: node ? [node, BigInt(route.destinationChainId)] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable },
+    query: { enabled: !!node && multichainResolverAvailable },
   });
 
   useEffect(() => {
