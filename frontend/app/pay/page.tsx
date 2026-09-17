@@ -379,13 +379,13 @@ export default function PayLinksPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">XDCID Payment Requests</p>
       <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950">Create a verifiable payment request</h1>
       <p className="mt-4 max-w-2xl text-lg text-slate-600">
-        Sign a route-aware USDC request with the current XNS owner account. Same-chain XDC remains available on XDC Network. Signing is gasless and XDCID never holds funds.
+        Sign a route-aware USDC request with the current XDCID owner account. Same-chain XDC remains available on XDC Network. Signing is gasless and XDCID never holds funds.
       </p>
 
       <section className="mt-10 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="grid gap-6 md:grid-cols-2">
           <label className="block md:col-span-2">
-            <span className="text-sm font-semibold text-slate-800">Receive with XNS ID</span>
+            <span className="text-sm font-semibold text-slate-800">Receive with XDCID</span>
             <input className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" placeholder="alice.xdc" value={recipient} onChange={(event) => setRecipient(event.target.value)} />
             {nameError && <span className="mt-2 block text-sm text-red-600">{nameError}</span>}
           </label>
@@ -490,7 +490,7 @@ export default function PayLinksPage() {
           <p className="text-sm font-semibold text-slate-700">Owner verification</p>
           <p className="mt-2 text-sm text-slate-600">
             {!isConnected
-              ? "Connect the wallet or smart account that currently owns this XNS ID."
+              ? "Connect the wallet or smart account that currently owns this XDCID name."
               : wrongNetwork
                 ? "Switch to XDC Network (chain ID 50)."
                 : resolving
@@ -502,10 +502,10 @@ export default function PayLinksPage() {
                       : registry.status?.state === "collision"
                         ? "This name exists in both registries and is blocked pending review."
                         : domainExpired
-                          ? "This XNS ID is unregistered or expired."
+                          ? "This XDCID name is unregistered or expired."
                           : ownerMatches
-                            ? "Connected account matches the current XNS owner."
-                            : "Connected account is not the current XNS owner."}
+                            ? "Connected account matches the current XDCID owner."
+                            : "Connected account is not the current XDCID owner."}
           </p>
           <button type="button" disabled={!canCreate} onClick={createSignedLink} className="mt-5 rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
             {signRequest.isPending ? "Waiting for wallet signature..." : "Sign payment request"}
@@ -561,7 +561,7 @@ export default function PayLinksPage() {
         <section className="mt-8 border-t border-slate-200 pt-8">
           <h2 className="text-2xl font-bold text-slate-950">Cancel an existing request</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Paste either the short or portable Pay Link. The current XNS owner must sign the cancellation on XDC Network. No gas is required.
+            Paste either the short or portable Pay Link. The current XDCID owner must sign the cancellation on XDC Network. No gas is required.
           </p>
           <input
             className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3"

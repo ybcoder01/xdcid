@@ -47,8 +47,9 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_REQUESTS = 12;
 const DEFAULT_RPC_TIMEOUT_MS = 3_500;
 const DEFAULT_XDC_RPC_URLS = [
-  "https://rpc.xdcrpc.com",
   "https://earpc.xinfin.network",
+  "https://rpc.xinfin.network",
+  "https://rpc.xdcrpc.com",
 ];
 
 type RateLimitEntry = { count: number; resetAt: number };
@@ -598,7 +599,13 @@ function quoteClient() {
   );
   return createPublicClient({
     transport: fallback(
-      urls.map((url) => http(url, { timeout, retryCount: 0 })),
+      urls.map((url) => http(url, {
+        fetchOptions: {
+          headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" },
+        },
+        timeout,
+        retryCount: 0,
+      })),
       { rank: false, retryCount: 0 },
     ),
   });

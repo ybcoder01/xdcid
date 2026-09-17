@@ -3,7 +3,13 @@ import { isTestnetEnvironment, xdcMainnet } from "../config/contracts";
 
 const DEFAULT_RPC_URLS = isTestnetEnvironment
   ? ["https://rpc.apothem.network", "https://erpc.apothem.network"]
-  : ["https://rpc.xdcrpc.com", "https://earpc.xinfin.network"];
+  : [
+      "https://earpc.xinfin.network",
+      "https://rpc.xinfin.network",
+      "https://rpc.xdcrpc.com"
+    ];
+
+const RATE_LIMITED_PUBLIC_RPC_HOSTS = new Set(["rpc.xdcrpc.com"]);
 
 function boundedInteger(
   value: string | undefined,
@@ -43,13 +49,24 @@ function configuredRpcUrls(): string[] {
     ...DEFAULT_RPC_URLS
   ];
 
-  return Array.from(
+  const urls = Array.from(
     new Set(
       candidates
         .map((value) => value?.trim())
         .filter((value): value is string => value !== undefined && isHttpUrl(value))
     )
   );
+
+  // rpc.xdcrpc.com regularly returns JSON-RPC rate-limit errors inside HTTP 200
+  // responses. Viem correctly treats those as contract errors rather than
+  // transport failures, so transport fallback is not guaranteed to advance.
+  // Keep it as a last-resort endpoint even if an older deployment environment
+  // still lists it first.
+  return urls.sort((left, right) => {
+    const leftLimited = RATE_LIMITED_PUBLIC_RPC_HOSTS.has(new URL(left).hostname);
+    const rightLimited = RATE_LIMITED_PUBLIC_RPC_HOSTS.has(new URL(right).hostname);
+    return Number(leftLimited) - Number(rightLimited);
+  });
 }
 
 export const xdcRpcTimeoutMs = boundedInteger(
@@ -74,13 +91,18 @@ export const xdcClient = createPublicClient({
   transport: fallback(
     xdcRpcUrls.map((url) =>
       http(url, {
-        retryCount: 0,
+        fetchOptions: {
+          headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" }
+        },
+        retryCount: 1,
+        retryDelay: 150,
         timeout: xdcRpcTimeoutMs
       })
     ),
     {
       rank: false,
-      retryCount: 0
+      retryCount: 1,
+      retryDelay: 150
     }
   )
 });

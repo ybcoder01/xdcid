@@ -18,8 +18,7 @@ import {
   activeXnsChainId,
   addresses,
   multichainResolverAbi,
-  registryAbi,
-  resolverAbi
+  registryAbi
 } from "../../../config/contracts";
 import { getPaymentNetwork } from "../../../config/paymentNetworks";
 
@@ -158,7 +157,7 @@ export default function PayRequestPage() {
   const memoError = awaitingShortLink ? undefined : validatePayMemo(memo);
   const expiryError = awaitingShortLink ? undefined : validatePayExpiry(expires);
   const pathError = signedRequest && parsedName.isValid && signedRequest.name !== parsedName.name
-    ? "The signed XNS ID does not match this checkout URL."
+    ? "The signed XDCID name does not match this checkout URL."
     : undefined;
   const requestError = !parsedName.isValid
     ? parsedName.error
@@ -301,14 +300,6 @@ export default function PayRequestPage() {
     args: node ? [node] : undefined,
     query: { enabled: !!node },
   });
-  const resolvedAddress = useReadContract({
-    chainId: XDC_CHAIN_ID,
-    address: addresses.resolver,
-    abi: resolverAbi,
-    functionName: "addresses",
-    args: node ? [node] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable },
-  });
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
@@ -337,7 +328,7 @@ export default function PayRequestPage() {
         if (!current) return;
         setSignatureVerification(verification);
         if (!verification.valid) {
-          setSignatureError(verification.error || "Payment request signature is not authorized by the current XNS owner.");
+          setSignatureError(verification.error || "Payment request signature is not authorized by the current XDCID owner.");
         }
       })
       .catch(() => {
@@ -371,19 +362,15 @@ export default function PayRequestPage() {
   const paymentDestination = useMemo(() => selectPaymentDestination({
     destinationChainId: route.destinationChainId,
     multichainAddress: typeof multichainAddress.data === "string" ? multichainAddress.data : undefined,
-    defaultEvmAddress:
-      activeResolverSuiteAvailable && typeof resolvedAddress.data === "string"
-        ? resolvedAddress.data
-        : typeof owner.data === "string"
-          ? owner.data
-          : undefined,
-  }), [route.destinationChainId, multichainAddress.data, owner.data, resolvedAddress.data]);
+    currentOwner:
+      typeof owner.data === "string" ? owner.data : undefined,
+  }), [route.destinationChainId, multichainAddress.data, owner.data]);
   const paymentAddress = paymentDestination?.address;
   const resolving =
-    owner.isLoading || expiry.isLoading || resolvedAddress.isLoading ||
+    owner.isLoading || expiry.isLoading ||
     multichainAddress.isLoading || registry.isChecking;
   const resolutionFailed =
-    owner.isError || expiry.isError || resolvedAddress.isError ||
+    owner.isError || expiry.isError ||
     multichainAddress.isError || registry.isError;
   const signaturePending = Boolean(
     signedRequest && signedPayload.signature && !signatureError &&
@@ -701,7 +688,7 @@ export default function PayRequestPage() {
                   <p className="font-semibold text-slate-900">Signed request</p>
                   <p className="mt-1 break-all text-slate-600">
                     {signaturePending
-                      ? "Checking the current XNS owner signature..."
+                      ? "Checking the current XDCID owner signature..."
                       : signatureVerification?.valid
                         ? (signatureVerification.accountType === "contract"
                             ? "Verified smart account (ERC-1271): "
@@ -714,7 +701,7 @@ export default function PayRequestPage() {
                 <p className="font-semibold text-slate-900">Recipient</p>
                 <p className="mt-1 break-all text-slate-600">
                   {resolving
-                    ? "Resolving the XNS ID on-chain..."
+                    ? "Resolving the XDCID name on-chain..."
                       : resolutionFailed
                         ? "The registry status could not be verified."
                         : registry.status?.state === "legacy"
@@ -722,13 +709,13 @@ export default function PayRequestPage() {
                           : registry.status?.state === "collision"
                             ? "Payment blocked: this name exists in both registries and requires review."
                             : !hasOwner
-                              ? "The XNS ID is unregistered or expired."
+                              ? "The XDCID name is unregistered or expired."
                               : paymentAddress
                                 ? paymentAddress +
                                   (paymentDestination?.source === "multichain"
                                     ? ` (${destinationNetwork?.name || "destination network"} address)`
-                                    : paymentDestination?.source === "evm-default"
-                                      ? " (default EVM address)"
+                                    : paymentDestination?.source === "registry-owner"
+                                      ? " (current XDCID owner)"
                                       : "")
                                 : "No payment address is set for the destination network."}
                 </p>

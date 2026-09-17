@@ -16,6 +16,7 @@ import {
   apothemRegistration,
   registryAbi,
   reverseResolverAbi,
+  verifiedReverseResolverAvailable,
   xdcMainnet
 } from "../config/contracts";
 import { ApiInputError, ApiServiceError } from "./apiResponse";
@@ -56,7 +57,12 @@ const apothem = defineChain({
 const apothemClient = createPublicClient({
   chain: apothem,
   transport: fallback(
-    apothem.rpcUrls.default.http.map((url) => http(url, { timeout: 8_000 }))
+    apothem.rpcUrls.default.http.map((url) => http(url, {
+      fetchOptions: {
+        headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" }
+      },
+      timeout: 8_000
+    }))
   )
 });
 
@@ -426,9 +432,9 @@ export async function getOwnedNamesData(
       }
 
       let primaryName: string | null = null;
-      if (!isApothem) {
+      if (!isApothem && verifiedReverseResolverAvailable) {
         const storedPrimary = await xdcClient.readContract({
-          address: addresses.reverseResolver,
+          address: addresses.verifiedReverseResolver,
           abi: reverseResolverAbi,
           functionName: "primaryNames",
           args: [address]

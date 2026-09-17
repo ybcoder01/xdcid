@@ -1,7 +1,7 @@
 import { getAddress, isAddress, zeroAddress, type Address } from "viem";
 import { getPaymentNetwork } from "../config/paymentNetworks";
 
-export type PaymentAddressSource = "multichain" | "evm-default";
+export type PaymentAddressSource = "multichain" | "registry-owner";
 
 export type PaymentDestination = {
   address: Address;
@@ -16,7 +16,7 @@ function validAddress(value: string | undefined): Address | null {
 export function selectPaymentDestination(input: {
   destinationChainId: number;
   multichainAddress?: string;
-  defaultEvmAddress?: string;
+  currentOwner?: string;
 }): PaymentDestination | null {
   const multichainAddress = validAddress(input.multichainAddress);
   if (multichainAddress) {
@@ -25,8 +25,8 @@ export function selectPaymentDestination(input: {
 
   if (!getPaymentNetwork(input.destinationChainId)) return null;
 
-  const defaultEvmAddress = validAddress(input.defaultEvmAddress);
-  return defaultEvmAddress
-    ? { address: defaultEvmAddress, source: "evm-default" }
+  const currentOwner = validAddress(input.currentOwner);
+  return currentOwner
+    ? { address: currentOwner, source: "registry-owner" }
     : null;
 }

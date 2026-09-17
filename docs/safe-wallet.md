@@ -9,14 +9,14 @@ XDCID supports Safe smart accounts on XDC Network through the existing wallet, p
 
 The dedicated Safe option is hidden outside the Safe Wallet browser environment, so it does not duplicate the ordinary wallet list. Both connection paths require XDC Network mainnet, chain ID 50. WalletConnect remains enabled only when the public `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` deployment variable is configured.
 
-## Safe-owned XNS IDs
+## Safe-owned XDCID names
 
 To create a signed Pay Link for a Safe-owned name:
 
-1. The Safe address must be the current on-chain owner of the XNS ID.
+1. The Safe address must be the current on-chain owner of the XDCID name.
 2. XDCID requests the existing EIP-712 Payment Request signature from the connected Safe.
 3. Safe owners approve the request according to the Safe's current threshold and policy.
-4. Checkout detects that the XNS owner is a contract and calls `isValidSignature(bytes32,bytes)`.
+4. Checkout detects that the XDCID owner is a contract and calls `isValidSignature(bytes32,bytes)`.
 5. Payment is enabled only when the Safe returns the ERC-1271 magic value `0x1626ba7e`.
 
 A revert, incorrect magic value, unavailable RPC response, changed owner set, changed threshold, or changed validation policy fails closed and blocks the Pay Link.
@@ -33,7 +33,7 @@ Before describing Safe support as production-validated, complete this test with 
 
 1. Open XDCID from Safe Wallet and confirm the active Safe address is connected on chain ID 50.
 2. Connect the same Safe through WalletConnect and confirm the address is unchanged.
-3. Use an XNS ID owned by that Safe to create a signed XDC Pay Link.
+3. Use an XDCID name owned by that Safe to create a signed XDC Pay Link.
 4. Confirm checkout reports successful ERC-1271 verification.
 5. Submit a low-value payment and verify that it remains pending until the Safe threshold is satisfied.
 6. Approve and execute the proposal, then compare the receipt recipient, amount, payer, and transaction hash with XDCScan.

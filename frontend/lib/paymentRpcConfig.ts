@@ -10,7 +10,7 @@ export const PAYMENT_RPC_CONFIG: Readonly<Record<number, PaymentRpcConfig>> = {
   },
   50: {
     environment: "XDC_RPC_URLS",
-    fallbackUrls: "https://rpc.xdcrpc.com,https://earpc.xinfin.network"
+    fallbackUrls: "https://earpc.xinfin.network,https://rpc.xinfin.network,https://rpc.xdcrpc.com"
   },
   137: {
     environment: "POLYGON_RPC_URLS",

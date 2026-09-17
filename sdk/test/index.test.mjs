@@ -38,6 +38,8 @@ test("reports validation errors without throwing from parseXdcidName", () => {
 });
 
 test("exposes the verified resolver and initial multichain network metadata", () => {
+  assert.equal(XDCID_CONTRACTS.resolver, null);
+  assert.equal(XDCID_CONTRACTS.reverseResolver, null);
   assert.equal(
     XDCID_CONTRACTS.multichainResolver,
     getAddress("0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240")
@@ -56,7 +58,7 @@ test("exposes the verified resolver and initial multichain network metadata", ()
   );
 });
 
-test("resolves an active name and its configured payment address", async () => {
+test("resolves an active name through the owner-bound multichain resolver", async () => {
   const owner = getAddress("0x1111111111111111111111111111111111111111");
   const paymentAddress = getAddress("0x2222222222222222222222222222222222222222");
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 3_600);
@@ -64,7 +66,7 @@ test("resolves an active name and its configured payment address", async () => {
     mockClient(({ functionName }) => {
       if (functionName === "ownerOf") return owner;
       if (functionName === "expiryOf") return expiry;
-      if (functionName === "addresses") return paymentAddress;
+      if (functionName === "addressFor") return paymentAddress;
       throw new Error("Unexpected read");
     })
   );
@@ -144,7 +146,7 @@ test("does not resolve expired or zero-owner names", async () => {
     mockClient(({ functionName }) => {
       if (functionName === "ownerOf") return zeroAddress;
       if (functionName === "expiryOf") return 1n;
-      if (functionName === "addresses") return zeroAddress;
+      if (functionName === "addressFor") return zeroAddress;
       throw new Error("Unexpected read");
     })
   );
@@ -156,6 +158,21 @@ test("does not resolve expired or zero-owner names", async () => {
   assert.equal(result.address, null);
 });
 
+test("falls back to the current owner when no owner-bound XDC record exists", async () => {
+  const owner = getAddress("0x1111111111111111111111111111111111111111");
+  const expiry = BigInt(Math.floor(Date.now() / 1000) + 3_600);
+  const sdk = new XdcidClient(
+    mockClient(({ functionName }) => {
+      if (functionName === "ownerOf") return owner;
+      if (functionName === "expiryOf") return expiry;
+      if (functionName === "addressFor") return zeroAddress;
+      throw new Error("Unexpected read");
+    })
+  );
+
+  assert.equal(await sdk.resolveAddress("alice.xdc"), owner);
+});
+
 test("verifies reverse records against the current registry owner", async () => {
   const address = getAddress("0x3333333333333333333333333333333333333333");
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 3_600);
@@ -165,7 +182,11 @@ test("verifies reverse records against the current registry owner", async () => 
       if (functionName === "ownerOf") return address;
       if (functionName === "expiryOf") return expiry;
       throw new Error("Unexpected read");
-    })
+    }),
+    {
+      ...XDCID_CONTRACTS,
+      reverseResolver: address
+    }
   );
   assert.equal((await verified.reverseResolve(address))?.name, "alice.xdc");
 
@@ -177,7 +198,11 @@ test("verifies reverse records against the current registry owner", async () => 
       }
       if (functionName === "expiryOf") return expiry;
       throw new Error("Unexpected read");
-    })
+    }),
+    {
+      ...XDCID_CONTRACTS,
+      reverseResolver: address
+    }
   );
   assert.equal(await stale.reverseResolve(address), null);
 });
@@ -198,8 +223,12 @@ test("returns on-chain availability and delegates current pricing to the quote A
 });
 
 test("prepares identity management calls without submitting them", () => {
-  const sdk = new XdcidClient(mockClient(() => zeroAddress));
   const target = getAddress("0x9999999999999999999999999999999999999999");
+  const sdk = new XdcidClient(mockClient(() => zeroAddress), {
+    ...XDCID_CONTRACTS,
+    resolver: target,
+    reverseResolver: target
+  });
 
   assert.deepEqual(sdk.prepareTransferName("ai", target).args, [nodeForName("ai"), target]);
   assert.equal(sdk.prepareSetResolver("ai").functionName, "setResolver");
@@ -210,6 +239,22 @@ test("prepares identity management calls without submitting them", () => {
     "https://example.com"
   ]);
   assert.deepEqual(sdk.prepareSetPrimaryName("AI").args, ["ai.xdc", nodeForName("ai")]);
+});
+
+test("fails closed for profile writes until Resolver V2 is configured", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  assert.throws(
+    () => sdk.prepareSetAddress("ai", "0x9999999999999999999999999999999999999999"),
+    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CONFIG"
+  );
+  assert.throws(
+    () => sdk.prepareSetText("ai", "website", "https://example.com"),
+    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CONFIG"
+  );
+  assert.throws(
+    () => sdk.prepareSetPrimaryName("ai"),
+    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CONFIG"
+  );
 });
 
 test("prepares a signed XDC registration payment plan", () => {

@@ -50,8 +50,10 @@ export const DEFAULT_RPC_URLS = [
 export type XdcidContracts = {
   registry: Address;
   registrar: Address;
-  resolver: Address;
-  reverseResolver: Address;
+  /** Owner-bound Resolver V2. Null until the verified deployment is activated. */
+  resolver: Address | null;
+  /** Owner-verified Reverse Resolver V2. Null until activated. */
+  reverseResolver: Address | null;
   multichainResolver: Address;
   pricingPolicy: Address;
   discountAuthorization: Address;
@@ -61,8 +63,8 @@ export type XdcidContracts = {
 export const XDCID_CONTRACTS: XdcidContracts = {
   registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
   registrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
-  resolver: "0x52bfa70B30190050F77033Fe427De8B3d4A8F453",
-  reverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f",
+  resolver: null,
+  reverseResolver: null,
   multichainResolver: MULTICHAIN_RESOLVER_ADDRESS,
   pricingPolicy: "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94",
   discountAuthorization: "0x9EE907230d351264403555fA6967EA44Ba31A5d1",
@@ -585,7 +587,7 @@ export class XdcidClient {
   async resolveName(value: string): Promise<ResolutionResult> {
     const name = normalizeName(value);
     const node = nodeForName(name);
-    const [owner, expiry, resolvedAddress] = await Promise.all([
+    const [owner, expiry, xdcAddress] = await Promise.all([
       this.read<Address>({
         address: this.contracts.registry,
         abi: registryAbi,
@@ -599,10 +601,10 @@ export class XdcidClient {
         args: [node]
       }),
       this.read<Address>({
-        address: this.contracts.resolver,
-        abi: resolverAbi,
-        functionName: "addresses",
-        args: [node]
+        address: this.contracts.multichainResolver,
+        abi: multichainResolverAbi,
+        functionName: "addressFor",
+        args: [node, BigInt(XDC_CHAIN_ID)]
       })
     ]);
 
@@ -616,7 +618,9 @@ export class XdcidClient {
       registered,
       expired,
       owner: registered ? getAddress(owner) : null,
-      address: registered && resolvedAddress !== zeroAddress ? getAddress(resolvedAddress) : null,
+      address: registered
+        ? getAddress(xdcAddress !== zeroAddress ? xdcAddress : owner)
+        : null,
       expiry
     };
   }
@@ -707,6 +711,12 @@ export class XdcidClient {
   }
 
   prepareSetResolver(value: string, resolver = this.contracts.resolver) {
+    if (!resolver) {
+      throw new XdcidSdkError(
+        "INVALID_CONFIG",
+        "Owner-bound Resolver V2 is not configured"
+      );
+    }
     const target = assertNonZeroAddress(resolver, "Resolver");
     return {
       chainId: XDC_CHAIN_ID,
@@ -718,10 +728,11 @@ export class XdcidClient {
   }
 
   prepareSetAddress(value: string, target: string) {
+    const resolver = this.requireVerifiedResolver();
     const address = assertNonZeroAddress(target, "Resolved address");
     return {
       chainId: XDC_CHAIN_ID,
-      address: this.contracts.resolver,
+      address: resolver,
       abi: xdcidResolverAbi,
       functionName: "setAddress" as const,
       args: [nodeForName(value), address] as const
@@ -729,12 +740,13 @@ export class XdcidClient {
   }
 
   prepareSetText(value: string, key: ProfileKey, text: string) {
+    const resolver = this.requireVerifiedResolver();
     if (!PROFILE_KEYS.includes(key)) {
       throw new XdcidSdkError("INVALID_CONFIG", "Unsupported profile key");
     }
     return {
       chainId: XDC_CHAIN_ID,
-      address: this.contracts.resolver,
+      address: resolver,
       abi: xdcidResolverAbi,
       functionName: "setText" as const,
       args: [nodeForName(value), key, text] as const
@@ -742,10 +754,11 @@ export class XdcidClient {
   }
 
   prepareSetPrimaryName(value: string) {
+    const reverseResolver = this.requireVerifiedReverseResolver();
     const name = normalizeName(value);
     return {
       chainId: XDC_CHAIN_ID,
-      address: this.contracts.reverseResolver,
+      address: reverseResolver,
       abi: xdcidReverseResolverAbi,
       functionName: "setPrimaryName" as const,
       args: [name, nodeForName(name)] as const
@@ -868,6 +881,7 @@ export class XdcidClient {
     }
 
     const address = getAddress(value);
+    if (!this.contracts.reverseResolver) return null;
     const storedName = await this.read<string>({
       address: this.contracts.reverseResolver,
       abi: reverseResolverAbi,
@@ -942,16 +956,18 @@ export class XdcidClient {
     const resolution = await this.resolveName(value);
     if (!resolution.registered || !resolution.owner) return null;
 
-    const values = await Promise.all(
-      PROFILE_KEYS.map((key) =>
-        this.read<string>({
-          address: this.contracts.resolver,
-          abi: resolverAbi,
-          functionName: "text",
-          args: [resolution.node, key]
-        })
-      )
-    );
+    const values = this.contracts.resolver
+      ? await Promise.all(
+          PROFILE_KEYS.map((key) =>
+            this.read<string>({
+              address: this.contracts.resolver as Address,
+              abi: resolverAbi,
+              functionName: "text",
+              args: [resolution.node, key]
+            })
+          )
+        )
+      : PROFILE_KEYS.map(() => "");
 
     const records = Object.fromEntries(
       PROFILE_KEYS.map((key, index) => [key, values[index]])
@@ -986,6 +1002,26 @@ export class XdcidClient {
       })();
     }
     return this.chainValidation;
+  }
+
+  private requireVerifiedResolver(): Address {
+    if (!this.contracts.resolver) {
+      throw new XdcidSdkError(
+        "INVALID_CONFIG",
+        "Owner-bound Resolver V2 is not configured"
+      );
+    }
+    return this.contracts.resolver;
+  }
+
+  private requireVerifiedReverseResolver(): Address {
+    if (!this.contracts.reverseResolver) {
+      throw new XdcidSdkError(
+        "INVALID_CONFIG",
+        "Owner-verified Reverse Resolver V2 is not configured"
+      );
+    }
+    return this.contracts.reverseResolver;
   }
 
   private async read<T>(request: ContractRead): Promise<T> {
@@ -1156,6 +1192,10 @@ function normalizeSubdomainLabel(value: string): string {
 function normalizeContracts(overrides?: Partial<XdcidContracts>): XdcidContracts {
   const contracts = { ...XDCID_CONTRACTS, ...overrides };
   for (const [name, address] of Object.entries(contracts)) {
+    if (address === null) {
+      if (name === "resolver" || name === "reverseResolver") continue;
+      throw new XdcidSdkError("INVALID_CONFIG", "Invalid " + name + " contract address");
+    }
     if (!isAddress(address) || address === zeroAddress) {
       throw new XdcidSdkError("INVALID_CONFIG", "Invalid " + name + " contract address");
     }
@@ -1163,8 +1203,10 @@ function normalizeContracts(overrides?: Partial<XdcidContracts>): XdcidContracts
   return {
     registry: getAddress(contracts.registry),
     registrar: getAddress(contracts.registrar),
-    resolver: getAddress(contracts.resolver),
-    reverseResolver: getAddress(contracts.reverseResolver),
+    resolver: contracts.resolver ? getAddress(contracts.resolver) : null,
+    reverseResolver: contracts.reverseResolver
+      ? getAddress(contracts.reverseResolver)
+      : null,
     multichainResolver: getAddress(contracts.multichainResolver),
     pricingPolicy: getAddress(contracts.pricingPolicy),
     discountAuthorization: getAddress(contracts.discountAuthorization),

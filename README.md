@@ -4,7 +4,9 @@
 
 # XDCID
 
-Wallet-native `.xdc` identities, multichain resolution, signed registration, subdomains, and Pay Links on XDC mainnet.
+Wallet-native `.xdc` identities, five-network destination resolution, signed registration, and Pay Links on XDC mainnet. Subdomains and the public npm SDK are upcoming products.
+
+User-facing copy uses **XDCID name** and **XDCID owner**. Legacy `XNS` identifiers remain in contract names and environment variables for backwards compatibility; see [`docs/terminology.md`](docs/terminology.md).
 
 ## Stack
 
@@ -85,7 +87,35 @@ NEXT_PUBLIC_XNS_REGISTRY=
 NEXT_PUBLIC_XNS_REGISTRAR=
 NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=
 NEXT_PUBLIC_XNS_RESOLVER=
+NEXT_PUBLIC_XNS_RESOLVER_V2=
 NEXT_PUBLIC_XNS_REVERSE_RESOLVER=
+NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=
+```
+
+`NEXT_PUBLIC_XNS_RESOLVER` identifies the historical resolver only. Payment
+resolution does not trust it because its records are not bound to the wallet
+that created them. Leave `NEXT_PUBLIC_XNS_RESOLVER_V2` unset until an
+`XNSResolverV2` deployment is verified. The historical reverse resolver is
+also excluded from trusted SDK/profile operations until
+`NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2` is configured. Until then, payments use an active
+chain-specific multichain record or fall back to the current registry owner.
+After activation, current owners must re-save profile and primary-name records;
+legacy records are not copied because their original author cannot be proven.
+
+Deploy the owner-bound resolver without activating it automatically:
+
+```bash
+XNS_REGISTRY_ADDRESS=0x... pnpm deploy:resolvers-v2:xdc
+```
+
+Verify bytecode publication and both Registry bindings before configuring the
+frontend:
+
+```bash
+XNS_REGISTRY_ADDRESS=0x... \
+RESOLVER_V2_ADDRESS=0x... \
+REVERSE_RESOLVER_V2_ADDRESS=0x... \
+pnpm verify:resolvers-v2:xdc
 ```
 
 ## Transfer Ownership
@@ -117,7 +147,7 @@ The first API version exposes public XDC mainnet reads and short-lived payment a
 - `GET /api/v1/addresses/{address}/names` returns the verified primary ID and active owned-name inventory.
 - `GET /api/v1/pricing/quote` returns informational USD policy pricing and a buffered XDC estimate.
 - `POST /api/v1/registrar/quote` returns a signed registration or renewal quote.
-- `POST /api/v1/subdomain/quote` returns a signed subdomain registration or renewal quote.
+- `POST /api/v1/subdomain/quote` is a pre-release endpoint for the upcoming subdomain product and is not part of the public launch contract.
 - `POST /api/pay-links` stores an already signed payment request and returns a short path plus private revocation token.
 - `GET /api/pay-links/cancellations/{requestId}` reports whether a payment request is active, cancelled, or paid.
 

@@ -25,7 +25,7 @@ const TRANSFER_TOPIC = keccak256(stringToHex("Transfer(address,address,uint256)"
 
 const RPC_URLS: Record<number, readonly string[]> = {
   1: ["https://rpc.mevblocker.io", "https://rpc.mevblocker.io/fullprivacy"],
-  50: ["https://rpc.xdcrpc.com", "https://earpc.xinfin.network"],
+  50: ["https://earpc.xinfin.network", "https://rpc.xinfin.network", "https://rpc.xdcrpc.com"],
   137: ["https://polygon.drpc.org", "https://polygon.publicnode.com"],
   8453: ["https://mainnet.base.org", "https://base-rpc.publicnode.com"],
   42161: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"],
@@ -240,6 +240,9 @@ function clientFor(network: PaymentNetwork) {
   return createPublicClient({
     chain,
     transport: fallback(urls.map((url) => http(url, {
+      fetchOptions: {
+        headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" }
+      },
       timeout: 8_000,
       retryCount: 1
     })))
