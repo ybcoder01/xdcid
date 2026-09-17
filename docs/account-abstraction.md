@@ -37,7 +37,7 @@ This avoids incorrectly presenting the bundler as the customer who paid.
 
 ## Security and privacy
 
-- Payment still moves directly to the address resolved by the XNS ID.
+- Payment still moves directly to the address resolved by the XDCID name.
 - XDCID never receives or holds payment funds.
 - The connected wallet remains the final confirmation surface.
 - Paymaster availability and sponsorship policy belong to the wallet or its provider.

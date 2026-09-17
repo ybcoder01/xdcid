@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Docs | XDCID",
-  description: "Integrate XDCID resolution, registration, subdomains, Pay Links, and wallet management."
+  title: "Documentation",
+  description: "Integrate production XDCID APIs and contracts, and review upcoming SDK and subdomain capabilities."
 };
 
 const publicEndpoints = [
@@ -35,12 +35,6 @@ const publicEndpoints = [
     path: "/api/v1/registrar/quote",
     title: "Registration or renewal quote",
     description: "Returns a short-lived signed quote bound to a payer, owner, name, policy, registrar, and nonce."
-  },
-  {
-    method: "POST",
-    path: "/api/v1/subdomain/quote",
-    title: "Subdomain quote",
-    description: "Returns an authorized registration or renewal quote after checking parent-controller and expiry rules."
   },
   {
     method: "POST",
@@ -77,8 +71,8 @@ const integrationGuides = [
   },
   {
     eyebrow: "Organizations",
-    title: "Issue and manage subdomains",
-    description: "Parent owners or approved operators can request a quote and prepare the matching subdomain registration or renewal transaction.",
+    title: "Preview subdomain integration (upcoming)",
+    description: "Subdomain contracts and integration helpers are under development and are not part of the public product launch.",
     code: 'const quote = await api.createSubdomainQuote({\n  parentName: "company.xdc", label: "alice",\n  action: "registration", termYears: 1,\n  paymentCurrency: "XDC", payer: account,\n  subdomainOwner: account\n});'
   },
   {
@@ -139,7 +133,7 @@ export default function DocsPage() {
           <div>
             <h1 className="text-4xl font-semibold leading-tight md:text-5xl">Build with XDCID</h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-              Resolve human-readable .xdc names, register and manage identities, issue subdomains, and integrate signed Pay Links on XDC mainnet.
+              Resolve human-readable .xdc names, integrate production APIs and contracts, and review clearly labelled preview tooling.
             </p>
           </div>
           <div className="rounded-md border border-white/10 bg-white/5 p-4 text-sm">
@@ -282,7 +276,7 @@ export default function DocsPage() {
         </p>
       </section>
 
-      <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+      <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8" id="public-api">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Public API</p>
         <h2 className="mt-3 text-3xl font-semibold text-slate-950">Public endpoints</h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
@@ -304,12 +298,15 @@ export default function DocsPage() {
 
       <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">TypeScript SDK</p>
-        <h2 className="mt-3 text-3xl font-semibold text-slate-950">One SDK for Web3 and Web2</h2>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <h2 className="text-3xl font-semibold text-slate-950">One SDK for Web3 and Web2</h2>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-900">Developer preview · Not on npm</span>
+        </div>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
           Use the on-chain client for resolution and owner-authorized transaction preparation, or the HTTP client for server and browser integrations. Signed quotes cover registration, renewal, discount grants, and subdomains; Pay Link helpers cover creation, status, lookup, and revocation.
         </p>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
-          Version 0.2 is available in this repository and compiled with the application. Public npm installation instructions will be added after the package is released.
+          Version 0.2 is available only from this repository for review and integration testing. <strong>Do not use <code>npm install @xdcid/sdk</code> yet:</strong> the package has not been published to npm.
         </p>
         <pre className="mt-5 overflow-x-auto rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-200">
           <code>{sdkExample}</code>

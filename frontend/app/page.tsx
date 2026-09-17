@@ -156,12 +156,13 @@ export default function Home() {
 
         <div className="relative grid items-center gap-12 lg:grid-cols-[0.88fr_1.12fr]">
           <div className="max-w-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#0b6670]">One name. Many connections.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#0b6670]">One name. Five networks.</p>
             <h1 className="mt-5 text-5xl font-semibold leading-[0.98] tracking-[-0.045em] text-[#131619] sm:text-6xl lg:text-7xl">
-              Your identity across every network
+              One XDCID. Five EVM networks.
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-slate-600">
-              One XDCID connects your profile, payments, applications, and receiving addresses across the networks you use.
+              Register and own your .xdc name on XDC Network, then set distinct
+              receiving addresses for XDC, Ethereum, Base, Arbitrum, and Polygon.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a className="rounded-xl bg-[#0b6670] px-6 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-[#084f57]" href="#register">
@@ -229,8 +230,31 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="mt-8 grid gap-4 md:grid-cols-2" aria-label="Choose how to use XDCID">
+        <article className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm md:p-7">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">For people and teams</p>
+          <h2 className="mt-3 text-2xl font-semibold text-slate-950">Claim and use an XDCID</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Register a .xdc name, configure five network destinations, receive payments, and manage your wallet-owned identity.
+          </p>
+          <a className="mt-5 inline-flex text-sm font-semibold text-[#0b6670] hover:text-[#084f57]" href="#register">
+            Start with a name →
+          </a>
+        </article>
+        <article className="rounded-2xl border border-slate-800 bg-slate-950 p-6 text-white shadow-sm md:p-7">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">For developers</p>
+          <h2 className="mt-3 text-2xl font-semibold">Integrate XDCID</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            Start with public HTTPS APIs and contract references. The TypeScript SDK and subdomain product are explicitly marked as upcoming.
+          </p>
+          <Link className="mt-5 inline-flex text-sm font-semibold text-teal-300 hover:text-teal-200" href="/developers">
+            Open the developer portal →
+          </Link>
+        </article>
+      </section>
+
       <section className="mt-10 grid gap-6 lg:grid-cols-[1fr_340px]" id="register">
-        <div className="rounded-2xl border border-black/10 bg-white/95 p-6 shadow-sm md:p-8">
+        <div className="min-w-0 rounded-2xl border border-black/10 bg-white/95 p-6 shadow-sm md:p-8">
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">{apothemMode ? "XDC Apothem test identity" : "XDC mainnet identity"}</p>
             <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950 md:text-4xl">Claim your .XDC name</h2>
@@ -330,12 +354,15 @@ export default function Home() {
           )}
         </div>
 
-        <aside className="rounded-2xl border border-black/10 bg-[#131619] p-6 text-white shadow-sm">
+        <aside className="min-w-0 rounded-2xl border border-black/10 bg-[#131619] p-6 text-white shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9ff3ff]">Connected identity</p>
           <div className="mt-8 grid gap-5">
             <div>
               <p className="text-3xl font-semibold">One .XDC</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">A readable identity for wallets, profiles, payments, applications, and multichain records.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                One readable identity with a chain-specific receiving address
+                wherever you need one.
+              </p>
             </div>
             <div className="grid gap-3 text-sm">
               <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Ownership</span><span>Your wallet</span></div>

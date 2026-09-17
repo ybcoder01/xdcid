@@ -9,8 +9,9 @@ const DEFAULT_RPC_URLS: Record<SupportedRpcChainId, readonly string[]> = {
     "https://rpc.mevblocker.io/fullprivacy",
   ],
   50: [
-    "https://rpc.xdcrpc.com",
     "https://earpc.xinfin.network",
+    "https://rpc.xinfin.network",
+    "https://rpc.xdcrpc.com",
   ],
   137: [
     "https://polygon.drpc.org",

@@ -15,7 +15,8 @@ import {
   addresses,
   registrarAbi,
   reverseResolverAbi,
-  signedRegistrarEnabled
+  signedRegistrarEnabled,
+  verifiedReverseResolverAvailable
 } from "../../config/contracts";
 import { PRIMARY_NAME_CHANGED_EVENT } from "../../components/WalletButton";
 
@@ -184,7 +185,7 @@ export default function Dashboard() {
     if (!selectedRecord) return;
 
     writeContract({
-      address: addresses.reverseResolver,
+      address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
       functionName: "setPrimaryName",
       args: [selectedRecord.name, selectedRecord.node]
@@ -222,9 +223,20 @@ export default function Dashboard() {
             Primary XDCID
           </h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Wallets and apps can use your verified primary ID for reverse
-            resolution. Current: {primaryName || "not selected"}.
+            Choose the name that supported wallets and apps should display when
+            they look up this address. This controls address-to-name reverse
+            resolution; name-to-address resolution works independently.
+            Current: {verifiedReverseResolverAvailable ? primaryName || "not selected" : "available after Resolver V2 activation"}.
           </p>
+          {!primaryName ? (
+            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <p className="font-semibold">Finish setting up your XDCID</p>
+              <p className="mt-1 text-xs leading-5">
+                Select one of your names below and set it as your Primary ID to
+                enable verified reverse lookup for this wallet.
+              </p>
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-3">
             <select
               className="min-w-64 rounded-md border border-black/20 bg-white px-4 py-3 text-sm"
@@ -241,6 +253,7 @@ export default function Dashboard() {
               className="rounded-md bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
               disabled={
                 !selectedRecord ||
+                !verifiedReverseResolverAvailable ||
                 selectedPrimary === primaryName ||
                 isPrimaryPending ||
                 primaryReceipt.isLoading
