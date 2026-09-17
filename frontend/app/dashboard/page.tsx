@@ -76,26 +76,34 @@ function NameRow({ record }: { record: OwnedName }) {
             : ""}
         </p>
       </div>
-      {signedRegistrarEnabled ? (
-        <SignedRenewalControls name={record.name} />
-      ) : (
-        <button
-          className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-          disabled={!price.data || isPending}
-          onClick={() =>
-            price.data &&
-            writeContract({
-              address: addresses.registrar,
-              abi: registrarAbi,
-              functionName: "renew",
-              args: [record.name, 1n],
-              value: price.data
-            })
-          }
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+          href={"/name/" + record.name}
         >
-          {isPending ? "Confirm in wallet" : "Renew"}
-        </button>
-      )}
+          Manage records
+        </Link>
+        {signedRegistrarEnabled ? (
+          <SignedRenewalControls name={record.name} />
+        ) : (
+          <button
+            className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+            disabled={!price.data || isPending}
+            onClick={() =>
+              price.data &&
+              writeContract({
+                address: addresses.registrar,
+                abi: registrarAbi,
+                functionName: "renew",
+                args: [record.name, 1n],
+                value: price.data
+              })
+            }
+          >
+            {isPending ? "Confirm in wallet" : "Renew"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -217,7 +225,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      {isConnected && names.length > 0 && !isTestnetDashboard && (
+      {isConnected && names.length > 0 && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
             Primary XDCID
@@ -269,7 +277,7 @@ export default function Dashboard() {
           </div>
           {primaryReceipt.isSuccess && (
             <p className="mt-3 text-sm text-teal-700">
-              Primary ID updated on XDC Network.
+              Primary ID updated on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
             </p>
           )}
           {primaryWriteError && (
