@@ -7,6 +7,7 @@ import {
   http,
   isAddress,
   keccak256,
+  parseAbiItem,
   stringToHex,
   type Address,
   type Hex
@@ -35,6 +36,11 @@ const MAINNET_REGISTRAR_HISTORY = [
   "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36"
 ] as const;
 const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
+// XNSRegistrarV2 was activated shortly before its first registration at block
+// 86,906,032. Starting just before that deployment keeps Apothem discovery
+// deterministic without relying on browser-local registration history.
+const APOTHEM_REGISTRAR_V2_START_BLOCK = 86_900_000n;
+const APOTHEM_LOG_BLOCK_RANGE = 1_000_000n;
 const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
@@ -105,8 +111,56 @@ const registrationAbi = [
       { name: "signature", type: "bytes" }
     ],
     outputs: []
+  },
+  {
+    type: "function",
+    name: "registerWithDiscountQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "nameOwner", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "signature", type: "bytes" },
+      {
+        name: "authorization",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "beneficiary", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "discountBps", type: "uint16" },
+          { name: "maxUses", type: "uint32" },
+          { name: "validAfter", type: "uint64" },
+          { name: "deadline", type: "uint64" },
+          { name: "nonce", type: "uint256" }
+        ]
+      },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
   }
 ] as const;
+
+const nameRegisteredEvent = parseAbiItem(
+  "event NameRegistered(bytes32 indexed node,address indexed nameOwner,address indexed payer,uint256 expiry,address paymentToken,uint256 paymentAmount,uint256 grossUsdMicros,uint256 netUsdMicros,uint16 discountBps,bytes32 quoteHash)"
+);
 
 type ExplorerTransaction = {
   to?: string;
@@ -260,7 +314,8 @@ function registeredName(
     const decoded = decodeFunctionData({ abi: registrationAbi, data: input });
     if (
       decoded.functionName !== "register" &&
-      decoded.functionName !== "registerWithQuote"
+      decoded.functionName !== "registerWithQuote" &&
+      decoded.functionName !== "registerWithDiscountQuote"
     ) {
       return null;
     }
@@ -272,13 +327,63 @@ function registeredName(
   }
 }
 
+async function loadApothemCatalog() {
+  const registrar = getAddress(apothemRegistration.registrar);
+  const latestBlock = await apothemClient.getBlockNumber();
+  const transactionHashes = new Set<Hex>();
+
+  for (
+    let fromBlock = APOTHEM_REGISTRAR_V2_START_BLOCK;
+    fromBlock <= latestBlock;
+    fromBlock += APOTHEM_LOG_BLOCK_RANGE
+  ) {
+    const toBlock =
+      fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n > latestBlock
+        ? latestBlock
+        : fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n;
+    const logs = await apothemClient.getLogs({
+      address: registrar,
+      event: nameRegisteredEvent,
+      fromBlock,
+      toBlock
+    });
+    logs.forEach((log) => {
+      if (log.transactionHash) transactionHashes.add(log.transactionHash);
+    });
+  }
+
+  const names = new Set<string>();
+  const hashes = Array.from(transactionHashes);
+  for (let start = 0; start < hashes.length; start += READ_BATCH_SIZE) {
+    const transactions = await Promise.all(
+      hashes.slice(start, start + READ_BATCH_SIZE).map((hash) =>
+        apothemClient.getTransaction({ hash })
+      )
+    );
+    transactions.forEach((transaction) => {
+      const name = registeredName(
+        { to: transaction.to ?? undefined, input: transaction.input },
+        registrar
+      );
+      if (name) names.add(name);
+    });
+  }
+
+  return Array.from(names).sort();
+}
+
 async function loadCatalog() {
-  if (useApothemIndex()) return [];
   if (catalog && Date.now() < catalogExpiresAt) return catalog;
   if (catalogRequest) return catalogRequest;
 
   catalogRequest = (async () => {
     try {
+      if (useApothemIndex()) {
+        catalog = await loadApothemCatalog();
+        catalogExpiresAt = Date.now() + CATALOG_TTL_MS;
+        return catalog;
+      }
+
       const registrars = registrarHistory();
       // XDCScan applies a shared request budget. Querying every historical
       // registrar concurrently causes otherwise valid requests to be rejected
