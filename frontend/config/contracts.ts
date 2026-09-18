@@ -25,7 +25,10 @@ export const xdcMainnet = {
 export const apothemRegistration = {
   chainId: 51,
   registry: "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1" as `0x${string}`,
-  registrar: "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d" as `0x${string}`,
+  registrar: (
+    process.env.NEXT_PUBLIC_XNS_REGISTRAR ||
+    "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
+  ) as `0x${string}`,
   pricingPolicy: "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81" as `0x${string}`,
 } as const;
 
