@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 
-describe("XNSRegistrarV2", function () {
+describe("XNSPrimaryRegistrar", function () {
   const quoteTypes = {
     Quote: [
       { name: "node", type: "bytes32" },
@@ -38,6 +38,12 @@ describe("XNSRegistrarV2", function () {
       await ethers.getSigners();
     const Registry = await ethers.getContractFactory("XNSRegistry");
     const registry = await Registry.deploy(owner.address);
+    const ReverseResolver = await ethers.getContractFactory(
+      "XNSReverseResolverV3",
+    );
+    const reverseResolver = await ReverseResolver.deploy(
+      await registry.getAddress(),
+    );
     const Legacy = await ethers.getContractFactory("MockLegacyRegistry");
     const legacy = await Legacy.deploy();
     const USDC = await ethers.getContractFactory("MockUSDC");
@@ -79,12 +85,13 @@ describe("XNSRegistrarV2", function () {
       discountSigner.address,
       predictedRegistrar,
     );
-    const Registrar = await ethers.getContractFactory("XNSRegistrarV2");
+    const Registrar = await ethers.getContractFactory("XNSPrimaryRegistrar");
     const registrar = await Registrar.deploy(
       await registry.getAddress(),
       await legacy.getAddress(),
       await policy.getAddress(),
       await authorization.getAddress(),
+      await reverseResolver.getAddress(),
       owner.address,
     );
     expect(await registrar.getAddress()).to.equal(predictedRegistrar);
@@ -162,10 +169,56 @@ describe("XNSRegistrarV2", function () {
       policy,
       authorization,
       registrar,
+      reverseResolver,
       authorizationDomain,
       makeQuote,
     };
   }
+
+  it("makes the first registered name primary without a second transaction", async function () {
+    const { alice, registrar, reverseResolver, makeQuote } = await fixture();
+    const made = await makeQuote({ name: "first.xdc" });
+
+    await registrar.connect(alice).registerWithQuote(
+      made.name,
+      made.quote,
+      made.signature,
+      { value: made.quote.paymentAmount },
+    );
+
+    expect(await reverseResolver.primaryNames(alice.address)).to.equal(
+      "first.xdc",
+    );
+  });
+
+  it("keeps the first primary until its owner selects another name", async function () {
+    const { alice, registrar, reverseResolver, makeQuote } = await fixture();
+    const first = await makeQuote({ name: "first.xdc" });
+    await registrar.connect(alice).registerWithQuote(
+      first.name,
+      first.quote,
+      first.signature,
+      { value: first.quote.paymentAmount },
+    );
+
+    const second = await makeQuote({ name: "second.xdc" });
+    await registrar.connect(alice).registerWithQuote(
+      second.name,
+      second.quote,
+      second.signature,
+      { value: second.quote.paymentAmount },
+    );
+    expect(await reverseResolver.primaryNames(alice.address)).to.equal(
+      "first.xdc",
+    );
+
+    await reverseResolver
+      .connect(alice)
+      .setPrimaryName(second.name, second.quote.node);
+    expect(await reverseResolver.primaryNames(alice.address)).to.equal(
+      "second.xdc",
+    );
+  });
 
   it("registers two-character names and forwards XDC", async function () {
     const { alice, treasury, registry, registrar, makeQuote } = await fixture();
