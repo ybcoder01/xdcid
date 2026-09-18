@@ -94,7 +94,7 @@ const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WagmiProvider config={config} reconnectOnMount={false}>
+    <WagmiProvider config={config} reconnectOnMount>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider initialChain={defaultWalletChain}>
           {children}
