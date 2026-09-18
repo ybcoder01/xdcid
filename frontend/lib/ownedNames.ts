@@ -36,6 +36,9 @@ const MAINNET_REGISTRAR_HISTORY = [
   "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36"
 ] as const;
 const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
+const APOTHEM_REGISTRAR_HISTORY = [
+  "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
+] as const;
 // XNSRegistrarV2 was activated shortly before its first registration at block
 // 86,906,032. Starting just before that deployment keeps Apothem discovery
 // deterministic without relying on browser-local registration history.
@@ -196,7 +199,14 @@ function useApothemIndex() {
 }
 
 function registrarHistory(): Address[] {
-  if (useApothemIndex()) return [getAddress(apothemRegistration.registrar)];
+  if (useApothemIndex()) {
+    const unique = new Set(
+      [...APOTHEM_REGISTRAR_HISTORY, apothemRegistration.registrar].map(
+        (value) => getAddress(value).toLowerCase()
+      )
+    );
+    return Array.from(unique, (value) => getAddress(value));
+  }
 
   const configured = (process.env.XDCID_REGISTRAR_HISTORY || "")
     .split(",")
@@ -328,39 +338,46 @@ function registeredName(
 }
 
 async function loadApothemCatalog() {
-  const registrar = getAddress(apothemRegistration.registrar);
+  const registrars = registrarHistory();
   const latestBlock = await apothemClient.getBlockNumber();
-  const transactionHashes = new Set<Hex>();
+  const transactionRegistrars = new Map<Hex, Address>();
 
-  for (
-    let fromBlock = APOTHEM_REGISTRAR_V2_START_BLOCK;
-    fromBlock <= latestBlock;
-    fromBlock += APOTHEM_LOG_BLOCK_RANGE
-  ) {
-    const toBlock =
-      fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n > latestBlock
-        ? latestBlock
-        : fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n;
-    const logs = await apothemClient.getLogs({
-      address: registrar,
-      event: nameRegisteredEvent,
-      fromBlock,
-      toBlock
-    });
-    logs.forEach((log) => {
-      if (log.transactionHash) transactionHashes.add(log.transactionHash);
-    });
+  for (const registrar of registrars) {
+    for (
+      let fromBlock = APOTHEM_REGISTRAR_V2_START_BLOCK;
+      fromBlock <= latestBlock;
+      fromBlock += APOTHEM_LOG_BLOCK_RANGE
+    ) {
+      const toBlock =
+        fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n > latestBlock
+          ? latestBlock
+          : fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n;
+      const logs = await apothemClient.getLogs({
+        address: registrar,
+        event: nameRegisteredEvent,
+        fromBlock,
+        toBlock
+      });
+      logs.forEach((log) => {
+        if (log.transactionHash) {
+          transactionRegistrars.set(log.transactionHash, registrar);
+        }
+      });
+    }
   }
 
   const names = new Set<string>();
-  const hashes = Array.from(transactionHashes);
+  const hashes = Array.from(transactionRegistrars.keys());
   for (let start = 0; start < hashes.length; start += READ_BATCH_SIZE) {
     const transactions = await Promise.all(
       hashes.slice(start, start + READ_BATCH_SIZE).map((hash) =>
         apothemClient.getTransaction({ hash })
       )
     );
-    transactions.forEach((transaction) => {
+    transactions.forEach((transaction, index) => {
+      const hash = hashes[start + index];
+      const registrar = transactionRegistrars.get(hash);
+      if (!registrar) return;
       const name = registeredName(
         { to: transaction.to ?? undefined, input: transaction.input },
         registrar
