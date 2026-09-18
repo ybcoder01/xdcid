@@ -118,6 +118,29 @@ export const PAYMENT_NETWORKS: readonly PaymentNetwork[] =
     ? TESTNET_PAYMENT_NETWORKS
     : MAINNET_PAYMENT_NETWORKS;
 
+const MULTICHAIN_RECORD_CHAIN_IDS: Readonly<Record<number, number>> = {
+  1: 1,
+  50: 50,
+  51: 50,
+  137: 137,
+  8453: 8453,
+  42161: 42161,
+  80002: 137,
+  84532: 8453,
+  421614: 42161,
+  11155111: 1
+};
+
+/**
+ * Multichain records represent the five XDCID network families. Dev payment
+ * routes use testnet chain IDs, but must resolve the corresponding canonical
+ * record written by the dashboard (for example Sepolia reads Ethereum's
+ * chain-1 record).
+ */
+export function multichainRecordChainId(paymentChainId: number): number | null {
+  return MULTICHAIN_RECORD_CHAIN_IDS[paymentChainId] ?? null;
+}
+
 export const CCTP_TOKEN_MESSENGER_V2 =
   PAYMENT_NETWORK_ENV === "testnet"
     ? ("0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA" as const)
