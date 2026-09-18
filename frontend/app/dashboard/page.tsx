@@ -211,7 +211,7 @@ export default function Dashboard() {
         </h1>
         <p className="mt-2 text-sm text-neutral-600">
           {isTestnetDashboard
-            ? "Test names created in this browser are verified directly against the Apothem registry."
+            ? "Test names are indexed from the Apothem registrar and ownership is verified directly against the registry."
             : "Names are indexed from XDCScan and ownership is verified directly against the XDCID registry."}
         </p>
         {isConnected && (
