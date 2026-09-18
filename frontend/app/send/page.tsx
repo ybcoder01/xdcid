@@ -25,6 +25,7 @@ import {
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
+  multichainRecordChainId,
   PAYMENT_NETWORK_ENV,
   PAYMENT_NETWORKS,
   USDC_DECIMALS
@@ -261,13 +262,23 @@ export default function SendPage() {
     query: { enabled: !!node }
   });
 
+  const destinationRecordChainId =
+    multichainRecordChainId(destinationChainId);
+
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
     abi: multichainResolverAbi,
     functionName: "addressFor",
-    args: node ? [node, BigInt(destinationChainId)] : undefined,
-    query: { enabled: !!node && multichainResolverAvailable }
+    args: node && destinationRecordChainId
+      ? [node, BigInt(destinationRecordChainId)]
+      : undefined,
+    query: {
+      enabled:
+        !!node &&
+        multichainResolverAvailable &&
+        destinationRecordChainId !== null
+    }
   });
 
   const expired = expiry.data
