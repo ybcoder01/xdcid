@@ -17,6 +17,40 @@ The Discount Authorization proposal becomes eligible on 20 September 2026 at
 14:20:11 UTC. The contract enforces this timestamp; the interface cannot
 bypass it.
 
+## Repeatable read-only preflight
+
+Run the same invariant checks used by the activation page without connecting a
+wallet or submitting a transaction:
+
+```bash
+pnpm preflight:primary-resolution:apothem
+```
+
+The command verifies bytecode, contract owners, immutable dependencies, the
+active Registry Registrar, the active and pending discount consumers, the
+pending signer, and the on-chain activation timestamp. It recognizes only
+three safe phases and exits non-zero for any unexpected state:
+
+- `READY_FOR_DISCOUNT_ACTIVATION`
+- `READY_FOR_REGISTRY_ACTIVATION`
+- `FULLY_ACTIVATED`
+
+The JSON output should be saved with the activation transaction hashes as the
+rollout record.
+
+## XDCScan source verification
+
+The three new contracts can be submitted for exact-match verification with:
+
+```bash
+XDCSCAN_API_KEY=... pnpm verify:primary-resolution:apothem
+```
+
+The script pins each contract path and its deployed constructor arguments. It
+does not deploy contracts or submit protocol transactions. XDCScan currently
+identifies the deployments as similar matches until exact verification is
+submitted with an explorer API key.
+
 ## Activation page
 
 The activation page is available only when both conditions are true:

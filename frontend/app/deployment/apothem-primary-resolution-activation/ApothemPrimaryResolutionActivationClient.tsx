@@ -48,6 +48,11 @@ type MetaMaskProvider = EIP1193Provider & {
   isMetaMask?: boolean;
   isRabby?: boolean;
   providers?: MetaMaskProvider[];
+  on?: (event: "accountsChanged" | "chainChanged", listener: () => void) => void;
+  removeListener?: (
+    event: "accountsChanged" | "chainChanged",
+    listener: () => void
+  ) => void;
 };
 
 type Status = {
@@ -82,6 +87,30 @@ export default function ApothemPrimaryResolutionActivationClient() {
     return () => window.clearInterval(timer);
   }, [status?.delayElapsed, status?.hasPending]);
 
+  useEffect(() => {
+    let provider: MetaMaskProvider;
+    try {
+      provider = injectedProvider();
+    } catch {
+      return;
+    }
+
+    const invalidatePreflight = () => {
+      setAccount(undefined);
+      setStatus(undefined);
+      setMessage(
+        "Wallet account or network changed. Connect the designated Apothem owner wallet and run the preflight again."
+      );
+    };
+
+    provider.on?.("accountsChanged", invalidatePreflight);
+    provider.on?.("chainChanged", invalidatePreflight);
+    return () => {
+      provider.removeListener?.("accountsChanged", invalidatePreflight);
+      provider.removeListener?.("chainChanged", invalidatePreflight);
+    };
+  }, []);
+
   const remainingSeconds = status
     ? Math.max(0, Number(status.activationTime) - Math.floor(now / 1_000))
     : 0;
@@ -107,6 +136,8 @@ export default function ApothemPrimaryResolutionActivationClient() {
       setNow(Date.now());
       setMessage(messageFor(next));
     } catch (cause) {
+      setAccount(undefined);
+      setStatus(undefined);
       setMessage(errorMessage(cause));
     }
   }
@@ -116,6 +147,7 @@ export default function ApothemPrimaryResolutionActivationClient() {
     setBusy(true);
     try {
       const provider = injectedProvider();
+      await assertConnectedOwner(provider, account);
       await ensureApothem(provider);
       const checked = await preflight(provider, account);
       if (!checked.hasPending || !checked.delayElapsed) {
@@ -158,6 +190,7 @@ export default function ApothemPrimaryResolutionActivationClient() {
     setBusy(true);
     try {
       const provider = injectedProvider();
+      await assertConnectedOwner(provider, account);
       await ensureApothem(provider);
       const checked = await preflight(provider, account);
       if (checked.consumer !== REGISTRAR) {
@@ -531,13 +564,25 @@ function formatCountdown(totalSeconds: number) {
     .join(" ");
 }
 
-function injectedProvider(): EIP1193Provider {
+function injectedProvider(): MetaMaskProvider {
   const root = (window as Window & { ethereum?: MetaMaskProvider }).ethereum;
   if (!root) throw new Error("No injected browser wallet was detected");
   if (!root.providers?.length) return root;
   return root.providers.find((provider: MetaMaskProvider) => provider.isRabby)
     ?? root.providers.find((provider: MetaMaskProvider) => provider.isMetaMask)
     ?? root.providers[0];
+}
+
+async function assertConnectedOwner(
+  provider: EIP1193Provider,
+  expectedAccount?: Address
+) {
+  const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
+  if (!accounts[0]) throw new Error("The owner wallet is no longer connected");
+  const selected = getAddress(accounts[0]);
+  if (selected !== OWNER || (expectedAccount && selected !== expectedAccount)) {
+    throw new Error("Select the designated Apothem owner wallet and run the preflight again");
+  }
 }
 
 async function ensureApothem(provider: EIP1193Provider) {
