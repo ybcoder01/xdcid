@@ -1,6 +1,6 @@
 "use client";
 
-import type React from "react";
+import { Fragment, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { connectorsForWallets, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import {
@@ -11,7 +11,7 @@ import {
   safeWallet,
   walletConnectWallet
 } from "@rainbow-me/rainbowkit/wallets";
-import { WagmiProvider, createConfig, http } from "wagmi";
+import { WagmiProvider, createConfig, http, useAccount } from "wagmi";
 import {
   arbitrum,
   base,
@@ -92,15 +92,25 @@ const config = createConfig({
 
 const queryClient = new QueryClient();
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={config} reconnectOnMount>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider initialChain={defaultWalletChain}>
-          {children}
+          <WalletSessionBoundary>{children}</WalletSessionBoundary>
           {PAYMENT_NETWORK_ENV === "testnet" ? <WalletDiagnostics /> : null}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );
+}
+
+function WalletSessionBoundary({ children }: { children: ReactNode }) {
+  const { address, status } = useAccount();
+  const walletSession =
+    status === "connected" && address
+      ? `connected:${address.toLowerCase()}`
+      : `wallet:${status}`;
+
+  return <Fragment key={walletSession}>{children}</Fragment>;
 }
