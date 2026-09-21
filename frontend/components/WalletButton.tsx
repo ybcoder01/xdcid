@@ -156,14 +156,15 @@ function usePrimaryXnsName(address?: string): string | null {
 
   useEffect(() => {
     const controller = new AbortController();
+    setPrimaryName(null);
     void refresh(controller.signal);
     function onPrimaryChanged(event: Event) {
       const detail = (event as CustomEvent<{ address?: string; name?: string }>).detail;
       if (detail?.address?.toLowerCase() === address?.toLowerCase() && detail.name) setPrimaryName(detail.name);
-      else void refresh();
+      else void refresh(controller.signal);
     }
     function onFocus() {
-      void refresh();
+      void refresh(controller.signal);
     }
     window.addEventListener(PRIMARY_NAME_CHANGED_EVENT, onPrimaryChanged);
     window.addEventListener("focus", onFocus);

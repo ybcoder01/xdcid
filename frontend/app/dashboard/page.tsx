@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
 import { loadNames, saveName } from "../../config/localNames";
@@ -110,6 +110,7 @@ function NameRow({ record }: { record: OwnedName }) {
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
+  const requestController = useRef<AbortController | null>(null);
   const [names, setNames] = useState<OwnedName[]>([]);
   const [primaryName, setPrimaryName] = useState<string | null>(null);
   const [selectedPrimary, setSelectedPrimary] = useState("");
@@ -124,15 +125,24 @@ export default function Dashboard() {
   const primaryReceipt = useWaitForTransactionReceipt({ hash: primaryHash });
 
   const loadOwnedNames = useCallback(async () => {
+    requestController.current?.abort();
+
     if (!address) {
       setNames([]);
       setPrimaryName(null);
       setSelectedPrimary("");
+      setIsLoading(false);
+      setLookupError("");
       return;
     }
 
+    const controller = new AbortController();
+    requestController.current = controller;
     setIsLoading(true);
     setLookupError("");
+    setNames([]);
+    setPrimaryName(null);
+    setSelectedPrimary("");
 
     try {
       const params = new URLSearchParams();
@@ -142,7 +152,7 @@ export default function Dashboard() {
       const query = params.size > 0 ? "?" + params.toString() : "";
       const response = await fetch(
         "/api/v1/addresses/" + address + "/names" + query,
-        { cache: "no-store" }
+        { cache: "no-store", signal: controller.signal }
       );
       const body = (await response.json()) as OwnedNamesResponse;
       if (!response.ok || !body.data) {
@@ -156,16 +166,24 @@ export default function Dashboard() {
         body.data.primaryName || body.data.names[0]?.name || ""
       );
     } catch (error) {
+      if (controller.signal.aborted) return;
       setLookupError(
         error instanceof Error ? error.message : "Unable to load wallet names"
       );
     } finally {
-      setIsLoading(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+        setIsLoading(false);
+      }
     }
   }, [address]);
 
   useEffect(() => {
     void loadOwnedNames();
+    return () => {
+      requestController.current?.abort();
+      requestController.current = null;
+    };
   }, [loadOwnedNames]);
 
   useEffect(() => {
