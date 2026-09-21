@@ -5,6 +5,10 @@ stack for XDC mainnet. It deploys the pricing policy, discount authorization,
 signed-quote registrar, and standalone subdomain registrar. Deployment does not
 activate the new registrar or change the existing registry.
 
+The typed [mainnet deployment manifest](./mainnet-deployment-manifest.md) is the
+authoritative checked-in record. The addresses below are explanatory copies;
+any deployment or activation must update and pass the manifest preflight.
+
 ## Fixed mainnet dependencies and pricing
 
 - Network: XDC mainnet, chain ID 50
@@ -50,7 +54,9 @@ The deployment page:
 6. Sign the four deployment transactions and the discount-consumer proposal.
 7. Save all four contract addresses and transaction hashes outside the browser.
 8. Verify the contracts with `pnpm verify:v2-stack:xdc`.
-9. Remove the Preview flag and redeploy or delete the Preview deployment.
+9. Record verified addresses in `sdk/src/deployment/deployments.ts` and run
+   `pnpm preflight:deployment:xdc`.
+10. Remove the Preview flag and redeploy or delete the Preview deployment.
 
 Do not enable the deployment flag in Production.
 

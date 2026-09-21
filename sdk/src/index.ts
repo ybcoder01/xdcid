@@ -22,13 +22,18 @@ import type {
   SerializedSubdomainQuote,
   SubdomainQuoteData
 } from "./api.js";
+import { XDC_MAINNET_DEPLOYMENT } from "./deployment/deployments.js";
+
+export { XDC_MAINNET_DEPLOYMENT } from "./deployment/deployments.js";
+export type { XdcidMainnetDeployment } from "./deployment/deployments.js";
 
 export const XDC_CHAIN_ID = 50;
 export const XDCID_SUFFIX = ".xdc";
 export const MIN_LABEL_LENGTH = 2;
 export const MAX_LABEL_LENGTH = 63;
 export const PROFILE_KEYS = ["avatar", "website", "twitter", "telegram", "bio"] as const;
-export const MULTICHAIN_RESOLVER_ADDRESS = "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240" as const;
+export const MULTICHAIN_RESOLVER_ADDRESS =
+  XDC_MAINNET_DEPLOYMENT.active.multichainResolver;
 
 export const SUPPORTED_MULTICHAIN_NETWORKS = [
   { key: "xdc", name: "XDC Network", chainId: 50 },
@@ -61,14 +66,14 @@ export type XdcidContracts = {
 };
 
 export const XDCID_CONTRACTS: XdcidContracts = {
-  registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
-  registrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
-  resolver: null,
-  reverseResolver: null,
+  registry: XDC_MAINNET_DEPLOYMENT.active.registry,
+  registrar: XDC_MAINNET_DEPLOYMENT.active.registrar,
+  resolver: XDC_MAINNET_DEPLOYMENT.candidate.ownerBoundForwardResolver,
+  reverseResolver: XDC_MAINNET_DEPLOYMENT.candidate.ownerVerifiedReverseResolver,
   multichainResolver: MULTICHAIN_RESOLVER_ADDRESS,
-  pricingPolicy: "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94",
-  discountAuthorization: "0x9EE907230d351264403555fA6967EA44Ba31A5d1",
-  subdomainRegistrar: "0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7"
+  pricingPolicy: XDC_MAINNET_DEPLOYMENT.active.pricingPolicy,
+  discountAuthorization: XDC_MAINNET_DEPLOYMENT.active.discountAuthorization,
+  subdomainRegistrar: XDC_MAINNET_DEPLOYMENT.active.subdomainRegistrar
 };
 
 export const xdcMainnet = defineChain({

@@ -11,6 +11,10 @@ The package supports two integration styles:
 
 Version `0.2.0` is available from this repository for review and integration testing. Publishing `@xdcid/sdk` to npm remains a separate release step.
 
+`XDC_MAINNET_DEPLOYMENT` exposes the typed public deployment manifest used by
+the SDK and first-party application. Its `candidate` addresses remain `null`
+until the next owner-bound mainnet stack is verified and approved.
+
 ## Requirements
 
 - Node.js 18+ or a modern browser with `fetch`

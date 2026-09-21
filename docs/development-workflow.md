@@ -40,6 +40,8 @@ Before merging `dev` into `main`:
   results, unresolved production gates, and rollback target. Do not treat a
   passing staging record as mainnet approval.
 - Contract addresses and chain IDs match the intended environment.
+- `pnpm preflight:deployment:xdc` passes at an approved mainnet RPC and its JSON
+  output is attached to the release evidence.
 - No secret, private key, API key, or database URL appears in the diff.
 - Database migrations are reviewed for backward compatibility and rollback.
 - Any contract deployment or activation is explicitly approved.

@@ -41,6 +41,7 @@
     "generate:apothem-multichain-resolver-deployment": "hardhat compile && node scripts/generate-apothem-multichain-resolver-deployment-bundle.mjs",
     "generate:apothem-primary-resolution-deployment": "hardhat compile && node scripts/generate-apothem-primary-resolution-deployment-bundle.mjs",
     "preflight:primary-resolution:apothem": "hardhat run scripts/preflight-apothem-primary-resolution.ts --network apothem",
+    "preflight:deployment:xdc": "hardhat run scripts/preflight-mainnet-deployment.ts --network xdc",
     "verify:primary-resolution:apothem": "hardhat run scripts/verify-apothem-primary-resolution.ts --network apothem",
     "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem"
   },

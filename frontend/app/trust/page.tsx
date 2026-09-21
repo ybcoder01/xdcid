@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { XDC_MAINNET_DEPLOYMENT } from "../../../sdk/src/deployment/deployments";
 
 export const metadata: Metadata = {
   title: "Trust Center",
@@ -9,22 +10,22 @@ export const metadata: Metadata = {
 const contracts = [
   {
     name: "Registry",
-    address: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
+    address: XDC_MAINNET_DEPLOYMENT.active.registry,
     control: "The protocol owner can change the authorized registrar. Name owners control transfers and resolver selection for their active names.",
   },
   {
     name: "Active Registrar V2",
-    address: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
+    address: XDC_MAINNET_DEPLOYMENT.active.registrar,
     control: "The owner can pause new registrations and renewals. Payment amounts, signer authorization, ownership, nonce, and expiry are checked on-chain.",
   },
   {
     name: "Pricing Policy V2",
-    address: "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94",
+    address: XDC_MAINNET_DEPLOYMENT.active.pricingPolicy,
     control: "Owner-governed configuration changes use a 48-hour delay before activation.",
   },
   {
     name: "Multichain Resolver",
-    address: "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240",
+    address: XDC_MAINNET_DEPLOYMENT.active.multichainResolver,
     control: "Only the current, unexpired name owner can set or clear chain-specific destination records.",
   },
 ];
@@ -67,7 +68,7 @@ export default function TrustPage() {
           ))}
         </div>
         <p className="mt-5 text-sm leading-6 text-slate-600">
-          The published Registry and active Registrar owner is <code className="break-all rounded bg-slate-100 px-1.5 py-1 text-xs text-slate-900">0xe82a4267CC310FC6Db334601671A043DFc8Ce06A</code>. Resolver contracts authorize individual name owners through the Registry and do not have a protocol-owner transfer role.
+          The published Registry and active Registrar owner is <code className="break-all rounded bg-slate-100 px-1.5 py-1 text-xs text-slate-900">{XDC_MAINNET_DEPLOYMENT.protocolOwner}</code>. Resolver contracts authorize individual name owners through the Registry and do not have a protocol-owner transfer role.
         </p>
       </section>
 

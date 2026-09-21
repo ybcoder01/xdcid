@@ -3,6 +3,7 @@ import test from "node:test";
 import { getAddress, keccak256, toBytes, zeroAddress } from "viem";
 import {
   SUPPORTED_MULTICHAIN_NETWORKS,
+  XDC_MAINNET_DEPLOYMENT,
   XDCID_CONTRACTS,
   XdcidClient,
   XdcidSdkError,
@@ -38,6 +39,12 @@ test("reports validation errors without throwing from parseXdcidName", () => {
 });
 
 test("exposes the verified resolver and initial multichain network metadata", () => {
+  assert.equal(XDC_MAINNET_DEPLOYMENT.chainId, 50);
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.active.registrar,
+    XDCID_CONTRACTS.registrar
+  );
+  assert.equal(XDC_MAINNET_DEPLOYMENT.candidate.primaryRegistrar, null);
   assert.equal(XDCID_CONTRACTS.resolver, null);
   assert.equal(XDCID_CONTRACTS.reverseResolver, null);
   assert.equal(
