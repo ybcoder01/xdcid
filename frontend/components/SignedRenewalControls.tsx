@@ -13,6 +13,7 @@ import {
   useAccount,
   useChainId,
   usePublicClient,
+  useSwitchChain,
   useWriteContract,
 } from "wagmi";
 import {
@@ -21,6 +22,7 @@ import {
   signedRegistrarAbi,
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
+import { walletActionErrorMessage } from "../lib/walletErrors";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -49,10 +51,20 @@ type ResponseBody = {
   error?: { message?: string };
 };
 
-export function SignedRenewalControls({ name }: { name: string }) {
+export function SignedRenewalControls(props: {
+  name: string;
+  expectedChainId?: number;
+  registrarAddress?: Address;
+  nativeCurrencyLabel?: string;
+  onRenewed?: () => void | Promise<void>;
+}) {
   const { address } = useAccount();
   const chainId = useChainId();
-  const client = usePublicClient();
+  const expectedChainId = props.expectedChainId ?? 50;
+  const registrarAddress = props.registrarAddress ?? addresses.registrar;
+  const nativeCurrencyLabel = props.nativeCurrencyLabel ?? "XDC";
+  const client = usePublicClient({ chainId: expectedChainId });
+  const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const [termYears, setTermYears] = useState<Term>(1);
   const [currency, setCurrency] = useState<Currency>("XDC");
@@ -61,9 +73,18 @@ export function SignedRenewalControls({ name }: { name: string }) {
 
   async function renew() {
     if (!address || !client) return;
-    if (chainId !== 50) {
-      setStatus("Switch your wallet to XDC Network.");
-      return;
+    if (chainId !== expectedChainId) {
+      setStatus(
+        "Requesting a switch to " +
+          (expectedChainId === 51 ? "XDC Apothem" : "XDC Network") +
+          "…",
+      );
+      try {
+        await switchChainAsync({ chainId: expectedChainId });
+      } catch (error) {
+        setStatus(walletActionErrorMessage(error, "Network switch cancelled."));
+        return;
+      }
     }
     setBusy(true);
     setStatus("Requesting a renewal quote…");
@@ -72,7 +93,7 @@ export function SignedRenewalControls({ name }: { name: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
+          name: props.name,
           product: "renewal",
           termYears,
           paymentCurrency: currency,
@@ -85,8 +106,8 @@ export function SignedRenewalControls({ name }: { name: string }) {
         throw new Error(body.error?.message || "Unable to create renewal quote");
       }
       if (
-        body.data.chainId !== 50 ||
-        getAddress(body.data.registrar) !== getAddress(addresses.registrar)
+        body.data.chainId !== expectedChainId ||
+        getAddress(body.data.registrar) !== getAddress(registrarAddress)
       ) {
         throw new Error("The quote does not match the active XDCID registrar");
       }
@@ -111,14 +132,14 @@ export function SignedRenewalControls({ name }: { name: string }) {
         setStatus("Approve exactly " + formatUnits(quote.paymentAmount, 6) + " USDC…");
         const approvalGas = await xdcWriteOverrides(
           client,
-          50,
+          expectedChainId,
           XDC_WRITE_GAS_LIMITS.erc20Approval,
         );
         const approval = await writeContractAsync({
           address: quote.paymentToken,
           abi: erc20ApprovalAbi,
           functionName: "approve",
-          args: [addresses.registrar, quote.paymentAmount],
+          args: [registrarAddress, quote.paymentAmount],
           ...approvalGas,
         });
         const approvalReceipt = await client.waitForTransactionReceipt({ hash: approval });
@@ -127,27 +148,28 @@ export function SignedRenewalControls({ name }: { name: string }) {
 
       setStatus(
         currency === "XDC"
-          ? "Confirm payment of " + formatEther(quote.paymentAmount) + " XDC…"
+          ? "Confirm payment of " + formatEther(quote.paymentAmount) + " " + nativeCurrencyLabel + "…"
           : "Confirm the renewal payment…",
       );
       const renewalGas = await xdcWriteOverrides(
         client,
-        50,
+        expectedChainId,
         XDC_WRITE_GAS_LIMITS.renewal,
       );
       const hash = await writeContractAsync({
-        address: addresses.registrar,
+        address: registrarAddress,
         abi: signedRegistrarAbi,
         functionName: "renewWithQuote",
-        args: [name, quote, body.data.signature],
+        args: [props.name, quote, body.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
         ...renewalGas,
       });
       const receipt = await client.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("Renewal transaction failed");
       setStatus("Renewal confirmed: " + hash);
+      await props.onRenewed?.();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Renewal failed");
+      setStatus(walletActionErrorMessage(error, "Renewal failed"));
     } finally {
       setBusy(false);
     }
@@ -156,6 +178,7 @@ export function SignedRenewalControls({ name }: { name: string }) {
   return (
     <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
       <select
+        aria-label="Renewal term"
         className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm"
         value={termYears}
         onChange={(event) => setTermYears(Number(event.target.value) as Term)}
@@ -166,11 +189,12 @@ export function SignedRenewalControls({ name }: { name: string }) {
         <option value={10}>10 years — 20% off</option>
       </select>
       <select
+        aria-label="Renewal payment currency"
         className="rounded-md border border-black/10 bg-white px-3 py-2 text-sm"
         value={currency}
         onChange={(event) => setCurrency(event.target.value as Currency)}
       >
-        <option value="XDC">XDC</option>
+        <option value="XDC">{nativeCurrencyLabel}</option>
         <option value="USDC">USDC</option>
       </select>
       <button
