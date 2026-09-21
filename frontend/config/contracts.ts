@@ -2,6 +2,7 @@ import { xnsAddresses } from "./addresses";
 import {
   MULTICHAIN_RESOLVER_ADDRESS,
   SUPPORTED_MULTICHAIN_NETWORKS,
+  XDC_MAINNET_DEPLOYMENT,
   multichainResolverAbi
 } from "../../sdk/src/index";
 
@@ -45,7 +46,7 @@ const configuredMultichainResolver =
 // the correct tuple ABI immediately after the policy address is switched, while
 // the explicit public generation setting remains available for future policies.
 export const mainnetPricingPolicyV2 =
-  "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94" as `0x${string}`;
+  XDC_MAINNET_DEPLOYMENT.active.pricingPolicy;
 
 export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
@@ -104,7 +105,7 @@ export const legacyRegistrarAddress = (
   process.env.NEXT_PUBLIC_XNS_LEGACY_REGISTRAR ||
   (isTestnetEnvironment
     ? "0x0000000000000000000000000000000000000000"
-    : xnsAddresses.registrar)
+    : xnsAddresses.legacyRegistrar)
 ) as `0x${string}`;
 
 // Resolver capabilities are enabled independently. This prevents a testnet

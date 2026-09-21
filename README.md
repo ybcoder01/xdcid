@@ -41,6 +41,11 @@ The frontend displays the suffix as `.XDC`, but canonicalizes registrations to l
 
 The Registry and active Registrar protocol owner is `0xe82a4267CC310FC6Db334601671A043DFc8Ce06A`.
 
+The typed [mainnet deployment manifest](docs/mainnet-deployment-manifest.md) is
+the source of truth for application, SDK, release-preflight, and operator-tool
+defaults. Production candidate addresses stay unset until independently
+verified and approved.
+
 - The [Registry ownership transfer](https://xdcscan.com/tx/0x90049270910803f91186caf7ea04d6e7b261f92a1aaa56f37329c73de2657ef1) moved Registry control to this owner.
 - The active Registrar v2 was deployed with this address as its initial owner, so it did not require a separate ownership-transfer transaction.
 

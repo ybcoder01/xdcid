@@ -1,77 +1,147 @@
 import { ethers } from "hardhat";
-import { xnsAddresses } from "../frontend/config/addresses";
+import { XDC_MAINNET_DEPLOYMENT } from "../sdk/src/deployment/deployments";
 
 const LEGACY_GAS_LIMIT = 100_000n;
+const CONFIRMATION = "TRANSFER_XDC_MAINNET_OWNERSHIP";
+const ownableAbi = [
+  "function owner() view returns (address)",
+  "function transferOwnership(address newOwner)",
+] as const;
+
+const governedContracts = [
+  ["Registry", XDC_MAINNET_DEPLOYMENT.active.registry],
+  ["Registrar V2", XDC_MAINNET_DEPLOYMENT.active.registrar],
+  ["Pricing Policy V2", XDC_MAINNET_DEPLOYMENT.active.pricingPolicy],
+  [
+    "Discount Authorization",
+    XDC_MAINNET_DEPLOYMENT.active.discountAuthorization,
+  ],
+  ["Subdomain Registrar", XDC_MAINNET_DEPLOYMENT.active.subdomainRegistrar],
+] as const;
 
 async function main() {
+  const network = await ethers.provider.getNetwork();
+  if (network.chainId !== BigInt(XDC_MAINNET_DEPLOYMENT.chainId)) {
+    throw new Error("Refusing to inspect or transfer ownership outside XDC mainnet");
+  }
+
   const newOwner = process.env.NEW_OWNER;
-  if (!newOwner || !ethers.isAddress(newOwner)) {
-    throw new Error("Set NEW_OWNER to the wallet or multisig address that should own XDCID.");
+  if (
+    !newOwner ||
+    !ethers.isAddress(newOwner) ||
+    newOwner === ethers.ZeroAddress
+  ) {
+    throw new Error(
+      "Set NEW_OWNER to the non-zero wallet or multisig address that should own XDCID.",
+    );
   }
 
   const targetOwner = ethers.getAddress(newOwner);
   const [signer] = await ethers.getSigners();
-  const signerAddress = ethers.getAddress(await signer.getAddress());
-  const feeData = await ethers.provider.getFeeData();
+  const signerAddress = signer
+    ? ethers.getAddress(await signer.getAddress())
+    : null;
 
+  const contracts = await Promise.all(
+    governedContracts.map(async ([label, address]) => {
+      if ((await ethers.provider.getCode(address)) === "0x") {
+        throw new Error(`${label} has no deployed code at ${address}.`);
+      }
+      const contract = new ethers.Contract(
+        address,
+        ownableAbi,
+        signer ?? ethers.provider,
+      );
+      const currentOwner = ethers.getAddress(await contract.owner());
+      return {
+        label,
+        address,
+        contract,
+        currentOwner,
+        requiresTransfer: currentOwner !== targetOwner,
+      };
+    }),
+  );
+
+  console.log(
+    JSON.stringify(
+      {
+        action: "XDCID mainnet ownership migration",
+        chainId: Number(network.chainId),
+        signer: signerAddress,
+        targetOwner,
+        confirmationRequired: CONFIRMATION,
+        contracts: contracts.map(
+          ({ label, address, currentOwner, requiresTransfer }) => ({
+            label,
+            address,
+            currentOwner,
+            targetOwner,
+            requiresTransfer,
+          }),
+        ),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const pending = contracts.filter((entry) => entry.requiresTransfer);
+  if (pending.length === 0) {
+    console.log("Every governed contract already belongs to the target owner.");
+    return;
+  }
+
+  if (process.env.CONFIRM_OWNERSHIP_TRANSFER !== CONFIRMATION) {
+    console.log(
+      `Preflight only. Set CONFIRM_OWNERSHIP_TRANSFER=${CONFIRMATION} to send ${pending.length} ownership transfer(s).`,
+    );
+    return;
+  }
+
+  if (!signerAddress) throw new Error("No ownership-transfer signer is configured.");
+  const unauthorized = pending.filter(
+    ({ currentOwner }) => currentOwner !== signerAddress,
+  );
+  if (unauthorized.length > 0) {
+    throw new Error(
+      `Configured signer ${signerAddress} does not own: ${unauthorized
+        .map(({ label }) => label)
+        .join(", ")}.`,
+    );
+  }
+
+  const feeData = await ethers.provider.getFeeData();
   if (feeData.gasPrice === null) {
     throw new Error("The XDC RPC did not return a legacy gas price.");
   }
 
-  const registry = await ethers.getContractAt("XNSRegistry", xnsAddresses.registry);
-  const registrar = await ethers.getContractAt("XNSRegistrar", xnsAddresses.registrar);
-  const contracts = [
-    ["registry", registry],
-    ["registrar", registrar]
-  ] as const;
-
-  for (const [label, contract] of contracts) {
-    const currentOwner = ethers.getAddress(await contract.owner());
-
-    if (currentOwner === targetOwner) {
-      console.log(`${label} already belongs to ${targetOwner}; skipping.`);
-      continue;
-    }
-
-    if (currentOwner !== signerAddress) {
-      throw new Error(
-        `${label} owner is ${currentOwner}, but the configured signer is ${signerAddress}.`
-      );
-    }
-
-    const transaction = await contract.transferOwnership(targetOwner, {
+  for (const entry of pending) {
+    const transaction = await entry.contract.transferOwnership(targetOwner, {
       type: 0,
       gasPrice: feeData.gasPrice,
-      gasLimit: LEGACY_GAS_LIMIT
+      gasLimit: LEGACY_GAS_LIMIT,
     });
-
-    console.log(`${label} ownership transfer submitted: ${transaction.hash}`);
+    console.log(`${entry.label} ownership transfer submitted: ${transaction.hash}`);
 
     const receipt = await transaction.wait();
     if (!receipt || receipt.status !== 1) {
-      throw new Error(`${label} ownership transfer reverted: ${transaction.hash}`);
-    }
-
-    const confirmedOwner = ethers.getAddress(await contract.owner());
-    if (confirmedOwner !== targetOwner) {
       throw new Error(
-        `${label} ownership verification failed: expected ${targetOwner}, received ${confirmedOwner}.`
+        `${entry.label} ownership transfer reverted: ${transaction.hash}`,
       );
     }
 
-    console.log(
-      `${label} ownership confirmed: ${confirmedOwner} (gas used: ${receipt.gasUsed})`
-    );
+    const confirmedOwner = ethers.getAddress(await entry.contract.owner());
+    if (confirmedOwner !== targetOwner) {
+      throw new Error(
+        `${entry.label} ownership verification failed: expected ${targetOwner}, received ${confirmedOwner}.`,
+      );
+    }
+    console.log(`${entry.label} ownership confirmed: ${confirmedOwner}`);
   }
-
-  console.log({
-    registry: xnsAddresses.registry,
-    registrar: xnsAddresses.registrar,
-    newOwner: targetOwner
-  });
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

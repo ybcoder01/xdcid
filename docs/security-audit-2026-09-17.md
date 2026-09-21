@@ -78,6 +78,15 @@ The reviewed owner address is an externally owned account rather than a contract
 
 **Recommendation:** Introduce a single typed mainnet deployment manifest as the source of truth. Validate at build/deploy time that the configured registrar equals `registry.registrar()`, has code, and references the expected dependencies. Replace the transfer script with a complete, resumable ownership-migration script that enumerates every governed V2 contract and verifies final ownership before reporting success.
 
+**Remediation implemented:** `sdk/src/deployment/deployments.ts` now provides one typed
+public manifest for SDK, frontend, release-preflight, and operator defaults. The
+read-only mainnet preflight verifies active bytecode, Registry authorization,
+immutable dependencies, ownership, signer/token/treasury configuration, pause
+state, and candidate dependencies. Ownership migration now enumerates all five
+governed V2 contracts, defaults to a dry run, skips completed transfers, and
+verifies every resulting owner. Mainnet candidate resolver deployment and the
+move from a single EOA to a multisig remain release blockers.
+
 ### L-01 — Reverse names remain stale after transfer or expiry
 
 **Impact:** Direct consumers of `primaryNames(address)` can display a name that the wallet no longer owns.

@@ -12,6 +12,7 @@ import {
   type Address,
   type Hex
 } from "viem";
+import { XDC_MAINNET_DEPLOYMENT } from "../../sdk/src/deployment/deployments";
 import {
   addresses,
   apothemRegistration,
@@ -29,12 +30,8 @@ import { xdcClient } from "./xdcClient";
 // inspect every registrar that has ever been allowed to create names. Keep
 // these addresses even after changing the active registrar; removing one
 // makes names registered through it disappear from the dashboard catalog.
-const MAINNET_REGISTRAR_HISTORY = [
-  "0x31c41237A551FCadf22F8B231D8accA2c16f669b",
-  "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
-  "0xa1584cb17523CEb991155328EdFAD2293b66bd94",
-  "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36"
-] as const;
+const MAINNET_REGISTRAR_HISTORY =
+  XDC_MAINNET_DEPLOYMENT.active.historicalRegistrars;
 const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
 const APOTHEM_REGISTRAR_HISTORY = [
   "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
