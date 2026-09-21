@@ -13,6 +13,8 @@ import {
 } from "wagmi";
 import {
   addresses,
+  activeRegistrarAddress,
+  activeXnsChainId,
   registrarAbi,
   reverseResolverAbi,
   signedRegistrarEnabled,
@@ -43,14 +45,20 @@ type OwnedNamesResponse = {
   };
 };
 
-function NameRow({ record }: { record: OwnedName }) {
+function NameRow({
+  record,
+  onRenewed,
+}: {
+  record: OwnedName;
+  onRenewed: () => void | Promise<void>;
+}) {
   const { writeContract, isPending } = useWriteContract();
   const price = useReadContract({
     address: addresses.registrar,
     abi: registrarAbi,
     functionName: "price",
     args: [record.name],
-    query: { enabled: !signedRegistrarEnabled }
+    query: { enabled: !(isTestnetDashboard || signedRegistrarEnabled) }
   });
 
   return (
@@ -71,7 +79,7 @@ function NameRow({ record }: { record: OwnedName }) {
         </div>
         <p className="text-sm text-neutral-600">
           Expires: {new Date(record.expiry.iso).toLocaleDateString()}
-          {!signedRegistrarEnabled && price.data
+          {!(isTestnetDashboard || signedRegistrarEnabled) && price.data
             ? " - renew " + formatEther(price.data) + " XDC/year"
             : ""}
         </p>
@@ -83,8 +91,14 @@ function NameRow({ record }: { record: OwnedName }) {
         >
           Manage records
         </Link>
-        {signedRegistrarEnabled ? (
-          <SignedRenewalControls name={record.name} />
+        {isTestnetDashboard || signedRegistrarEnabled ? (
+          <SignedRenewalControls
+            expectedChainId={activeXnsChainId}
+            name={record.name}
+            nativeCurrencyLabel={isTestnetDashboard ? "TXDC" : "XDC"}
+            onRenewed={onRenewed}
+            registrarAddress={activeRegistrarAddress}
+          />
         ) : (
           <button
             className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
@@ -328,7 +342,11 @@ export default function Dashboard() {
           </p>
         )}
         {names.map((record) => (
-          <NameRow key={record.node} record={record} />
+          <NameRow
+            key={record.node}
+            onRenewed={loadOwnedNames}
+            record={record}
+          />
         ))}
       </div>
     </main>

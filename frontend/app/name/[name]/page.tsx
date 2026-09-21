@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { isAddress, keccak256, stringToHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
-import { activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
+import { SignedRenewalControls } from "../../../components/SignedRenewalControls";
+import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
 import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
@@ -30,6 +31,15 @@ export default function NamePage() {
     address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "ownerOf",
+    args: node ? [node] : undefined,
+    query: { enabled: isValid && !!node }
+  });
+
+  const expiry = useReadContract({
+    chainId: activeXnsChainId,
+    address: activeRegistryAddress,
+    abi: registryAbi,
+    functionName: "expiryOf",
     args: node ? [node] : undefined,
     query: { enabled: isValid && !!node }
   });
@@ -129,7 +139,30 @@ export default function NamePage() {
           Owner: {owner.data && owner.data !== zeroAddress ? owner.data : "Unregistered or expired"}
         </p>
         <p className="mt-1 break-all text-sm text-slate-300">Address: {resolvedAddress.data || owner.data || "Not set"}</p>
+        {typeof expiry.data === "bigint" && expiry.data > 0n ? (
+          <p className="mt-1 text-sm text-slate-300">
+            Expires: {new Date(Number(expiry.data) * 1000).toLocaleDateString()}
+          </p>
+        ) : null}
       </div>
+
+      {isOwner && (isTestnetEnvironment || signedRegistrarEnabled) ? (
+        <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-950">Renew this XDCID</h2>
+          <p className="mt-1 text-sm text-neutral-600">
+            Extend the current expiration date by 1, 3, 5, or 10 years.
+          </p>
+          <SignedRenewalControls
+            expectedChainId={activeXnsChainId}
+            name={name}
+            nativeCurrencyLabel={isTestnetEnvironment ? "TXDC" : "XDC"}
+            onRenewed={async () => {
+              await expiry.refetch();
+            }}
+            registrarAddress={activeRegistrarAddress}
+          />
+        </section>
+      ) : null}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         {textKeys.map((key, index) => (

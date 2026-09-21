@@ -34,6 +34,7 @@ import {
 } from "../lib/domainDiscounts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 import { trackRegistration } from "../lib/productAnalytics";
+import { walletActionErrorMessage } from "../lib/walletErrors";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -289,7 +290,7 @@ export function SignedRegistrationControls(props: {
       setStatus("Registration confirmed: " + transactionHash);
       trackRegistration("confirmed", currency, termYears);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Registration failed");
+      setStatus(walletActionErrorMessage(error, "Registration failed"));
       trackRegistration("failed", currency, termYears);
     } finally {
       setBusy(false);
