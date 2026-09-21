@@ -35,11 +35,18 @@ Before merging `dev` into `main`:
 
 - CI passes.
 - The affected flows have been tested on `dev.xdcid.xyz`.
+- Create an immutable release-evidence record that links the exact Git commit,
+  Vercel deployment ID, staging alias, contract addresses, test network, manual
+  results, unresolved production gates, and rollback target. Do not treat a
+  passing staging record as mainnet approval.
 - Contract addresses and chain IDs match the intended environment.
 - No secret, private key, API key, or database URL appears in the diff.
 - Database migrations are reviewed for backward compatibility and rollback.
 - Any contract deployment or activation is explicitly approved.
 - Production environment variables are unchanged unless the release requires and documents the change.
+
+The current staging evidence is recorded in
+[`apothem-release-candidate-2026-09-21.md`](./apothem-release-candidate-2026-09-21.md).
 
 ## Documentation and integration checklist
 
