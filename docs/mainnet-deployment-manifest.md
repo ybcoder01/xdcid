@@ -69,6 +69,21 @@ Do not edit generated frontend configuration after deployment. The legacy
 `scripts/deploy.ts` command now prints addresses and requires a reviewed manifest
 change instead of rewriting application defaults.
 
+## Wallet-signed candidate deployment
+
+The Preview-only `/deployment/mainnet-primary-resolution` page deploys the four
+candidate contracts through the deterministic deployment proxy. It is available
+only when `ENABLE_MAINNET_PRIMARY_RESOLUTION_DEPLOYMENT=true` is set for a
+Vercel Preview deployment. The page requires the current Registry owner on XDC
+mainnet and validates the active Registry, Registrar, Pricing Policy, Discount
+Authorization, legacy Registry, and deployment proxy before enabling deployment.
+
+The page deploys only inactive contracts and validates their immutable bindings.
+It cannot change the active Registrar, modify the discount consumer, edit Vercel
+Production variables, or transfer ownership. After deployment, independently
+verify all four contracts and add their addresses to `candidate` through a
+reviewed pull request before starting any activation procedure.
+
 ## Ownership migration
 
 `pnpm transfer-ownership:xdc` is read-only unless both conditions are supplied:
