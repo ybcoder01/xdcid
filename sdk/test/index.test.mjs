@@ -68,6 +68,18 @@ test("exposes the verified resolver and initial multichain network metadata", ()
     XDCID_CONTRACTS.subdomainRegistrar,
     getAddress("0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7")
   );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.proposalTransaction,
+    "0x86131e67efb37588894aa122ad004593f7643ba153121ac9ae8c0e26c8674e6e"
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.earliestActivation,
+    1790255368
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.previousRegistrar,
+    XDC_MAINNET_DEPLOYMENT.active.registrar
+  );
 });
 
 test("resolves an active name through the owner-bound multichain resolver", async () => {
