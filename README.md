@@ -4,7 +4,7 @@
 
 # XDCID
 
-Wallet-native `.xdc` identities, five-network destination resolution, signed registration, and Pay Links on XDC mainnet. Subdomains and the public npm SDK are upcoming products.
+Wallet-native `.xdc` identities, five-network destination resolution, signed registration, organization subdomains, and Pay Links on XDC mainnet. The public npm SDK is an upcoming product.
 
 User-facing copy uses **XDCID name** and **XDCID owner**. Legacy `XNS` identifiers remain in contract names and environment variables for backwards compatibility; see [`docs/terminology.md`](docs/terminology.md).
 
@@ -152,7 +152,7 @@ The first API version exposes public XDC mainnet reads and short-lived payment a
 - `GET /api/v1/addresses/{address}/names` returns the verified primary ID and active owned-name inventory.
 - `GET /api/v1/pricing/quote` returns informational USD policy pricing and a buffered XDC estimate.
 - `POST /api/v1/registrar/quote` returns a signed registration or renewal quote.
-- `POST /api/v1/subdomain/quote` is a pre-release endpoint for the upcoming subdomain product and is not part of the public launch contract.
+- `POST /api/v1/subdomain/quote` returns a short-lived signed registration or renewal quote for a subdomain beneath an active parent XDCID.
 - `POST /api/pay-links` stores an already signed payment request and returns a short path plus private revocation token.
 - `GET /api/pay-links/cancellations/{requestId}` reports whether a payment request is active, cancelled, or paid.
 
