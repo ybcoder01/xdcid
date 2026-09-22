@@ -44,7 +44,8 @@
     "preflight:primary-resolution:apothem": "hardhat run scripts/preflight-apothem-primary-resolution.ts --network apothem",
     "preflight:deployment:xdc": "hardhat run scripts/preflight-mainnet-deployment.ts --network xdc",
     "verify:primary-resolution:apothem": "hardhat run scripts/verify-apothem-primary-resolution.ts --network apothem",
-    "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem"
+    "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem",
+    "verify:primary-resolution:xdc": "hardhat run scripts/verify-mainnet-primary-resolution.ts --network xdc"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",
