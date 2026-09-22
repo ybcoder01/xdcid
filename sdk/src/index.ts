@@ -68,8 +68,8 @@ export type XdcidContracts = {
 export const XDCID_CONTRACTS: XdcidContracts = {
   registry: XDC_MAINNET_DEPLOYMENT.active.registry,
   registrar: XDC_MAINNET_DEPLOYMENT.active.registrar,
-  resolver: XDC_MAINNET_DEPLOYMENT.candidate.ownerBoundForwardResolver,
-  reverseResolver: XDC_MAINNET_DEPLOYMENT.candidate.ownerVerifiedReverseResolver,
+  resolver: XDC_MAINNET_DEPLOYMENT.active.ownerBoundForwardResolver,
+  reverseResolver: XDC_MAINNET_DEPLOYMENT.active.ownerVerifiedReverseResolver,
   multichainResolver: MULTICHAIN_RESOLVER_ADDRESS,
   pricingPolicy: XDC_MAINNET_DEPLOYMENT.active.pricingPolicy,
   discountAuthorization: XDC_MAINNET_DEPLOYMENT.active.discountAuthorization,
