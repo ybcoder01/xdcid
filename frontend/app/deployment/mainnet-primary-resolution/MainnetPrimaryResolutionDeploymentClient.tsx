@@ -47,10 +47,10 @@ const authorizationAbi = [
   { type: "function", name: "consumer", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
 ] as const;
 
-type MetaMaskProvider = EIP1193Provider & {
+type InjectedProvider = EIP1193Provider & {
   isMetaMask?: boolean;
   isRabby?: boolean;
-  providers?: MetaMaskProvider[];
+  providers?: InjectedProvider[];
 };
 type StepState = "pending" | "wallet" | "confirming" | "complete" | "failed";
 type Step = { label: string; state: StepState; hash?: Hex; address?: Address; error?: string };
@@ -412,15 +412,21 @@ async function requireCode(client: PublicClient, address: Address, label: string
 }
 
 function injectedProvider(): EIP1193Provider {
-  const injected = (window as Window & { ethereum?: MetaMaskProvider }).ethereum;
-  if (!injected) throw new Error("MetaMask was not detected");
+  const injected = (window as Window & { ethereum?: InjectedProvider }).ethereum;
+  if (!injected) throw new Error("Rabby or MetaMask was not detected");
   const providers = injected.providers ?? [injected];
+  const rabby = providers.find(
+    (provider: InjectedProvider) => provider.isRabby === true,
+  );
   const metamask = providers.find(
-    (provider: MetaMaskProvider) =>
+    (provider: InjectedProvider) =>
       provider.isMetaMask === true && provider.isRabby !== true,
   );
-  if (!metamask) throw new Error("Enable the MetaMask extension to continue on XDC mainnet");
-  return metamask;
+  const provider = rabby ?? metamask;
+  if (!provider) {
+    throw new Error("Enable Rabby or MetaMask to continue on XDC mainnet");
+  }
+  return provider;
 }
 
 async function ensureXdc(provider: EIP1193Provider) {
