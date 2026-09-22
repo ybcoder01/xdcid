@@ -45,7 +45,8 @@ The command never connects a signer or sends a transaction. It checks:
 - candidate contract bytecode and immutable relationships after candidate
   addresses are recorded;
 - release blockers for a single-EOA protocol owner, missing candidate
-  deployments, and an unpaused upcoming Subdomain product.
+  deployments, and a Subdomain product whose on-chain state conflicts with its
+  declared launch status.
 
 The output is JSON and includes the block number, block timestamp, every check,
 and every release blocker. The command exits non-zero when an invariant fails or
