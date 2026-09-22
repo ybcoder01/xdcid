@@ -49,7 +49,7 @@ export const XDC_MAINNET_DEPLOYMENT = {
     discountAuthorizationSigner: "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A",
     treasury: "0xa654124E8f9fFafA45FBA864B8Fd36f3FC56F624",
   },
-  products: { subdomains: "upcoming" },
+  products: { subdomains: "active" },
   active: {
     registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
     registrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
