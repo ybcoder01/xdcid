@@ -68,9 +68,9 @@ export const XDC_MAINNET_DEPLOYMENT = {
     ],
   },
   candidate: {
-    primaryRegistrar: null,
-    ownerBoundForwardResolver: null,
-    ownerVerifiedReverseResolver: null,
-    primaryAwareMultichainResolver: null,
+    primaryRegistrar: "0x3D87B064a06f62cc4a24EAff13A591C9Ba791135",
+    ownerBoundForwardResolver: "0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661",
+    ownerVerifiedReverseResolver: "0x2E17282219BB55359f5D07fAFfc406eE4EC97440",
+    primaryAwareMultichainResolver: "0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232",
   },
 } as const satisfies XdcidMainnetDeployment;
