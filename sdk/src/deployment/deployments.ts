@@ -20,6 +20,8 @@ export type XdcidMainnetDeployment = {
     subdomainRegistrar: Address;
     legacyForwardResolver: Address;
     legacyReverseResolver: Address;
+    ownerBoundForwardResolver: Address | null;
+    ownerVerifiedReverseResolver: Address | null;
     multichainResolver: Address;
     historicalRegistrars: readonly Address[];
   };
@@ -59,6 +61,8 @@ export const XDC_MAINNET_DEPLOYMENT = {
     subdomainRegistrar: "0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7",
     legacyForwardResolver: "0x52bfa70B30190050F77033Fe427De8B3d4A8F453",
     legacyReverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f",
+    ownerBoundForwardResolver: null,
+    ownerVerifiedReverseResolver: null,
     multichainResolver: "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240",
     historicalRegistrars: [
       "0x31c41237A551FCadf22F8B231D8accA2c16f669b",
