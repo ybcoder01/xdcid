@@ -31,6 +31,14 @@ export type XdcidMainnetDeployment = {
     ownerVerifiedReverseResolver: Address | null;
     primaryAwareMultichainResolver: Address | null;
   };
+  rollout: {
+    primaryResolution: {
+      proposalTransaction: `0x${string}`;
+      earliestActivation: number;
+      previousRegistrar: Address;
+      temporarySingleOwnerAccepted: boolean;
+    };
+  };
 };
 
 /**
@@ -76,5 +84,13 @@ export const XDC_MAINNET_DEPLOYMENT = {
     ownerBoundForwardResolver: "0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661",
     ownerVerifiedReverseResolver: "0x2E17282219BB55359f5D07fAFfc406eE4EC97440",
     primaryAwareMultichainResolver: "0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232",
+  },
+  rollout: {
+    primaryResolution: {
+      proposalTransaction: "0x86131e67efb37588894aa122ad004593f7643ba153121ac9ae8c0e26c8674e6e",
+      earliestActivation: 1790255368,
+      previousRegistrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
+      temporarySingleOwnerAccepted: true,
+    },
   },
 } as const satisfies XdcidMainnetDeployment;
