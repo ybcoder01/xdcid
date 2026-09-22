@@ -70,7 +70,7 @@ export const addresses = {
   ) as `0x${string}`,
   subdomainRegistrar: (
     process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
-    "0x0000000000000000000000000000000000000000"
+    XDC_MAINNET_DEPLOYMENT.active.subdomainRegistrar
   ) as `0x${string}`
 };
 
@@ -134,7 +134,8 @@ export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
 
 export const subdomainRegistrationEnabled =
-  process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED === "true" &&
+  XDC_MAINNET_DEPLOYMENT.products.subdomains === "active" &&
+  process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED !== "false" &&
   activeSubdomainRegistrarAddress !==
     "0x0000000000000000000000000000000000000000";
 

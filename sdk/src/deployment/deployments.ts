@@ -20,6 +20,8 @@ export type XdcidMainnetDeployment = {
     subdomainRegistrar: Address;
     legacyForwardResolver: Address;
     legacyReverseResolver: Address;
+    ownerBoundForwardResolver: Address | null;
+    ownerVerifiedReverseResolver: Address | null;
     multichainResolver: Address;
     historicalRegistrars: readonly Address[];
   };
@@ -49,7 +51,7 @@ export const XDC_MAINNET_DEPLOYMENT = {
     discountAuthorizationSigner: "0xe82a4267CC310FC6Db334601671A043DFc8Ce06A",
     treasury: "0xa654124E8f9fFafA45FBA864B8Fd36f3FC56F624",
   },
-  products: { subdomains: "upcoming" },
+  products: { subdomains: "active" },
   active: {
     registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
     registrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
@@ -59,6 +61,8 @@ export const XDC_MAINNET_DEPLOYMENT = {
     subdomainRegistrar: "0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7",
     legacyForwardResolver: "0x52bfa70B30190050F77033Fe427De8B3d4A8F453",
     legacyReverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f",
+    ownerBoundForwardResolver: null,
+    ownerVerifiedReverseResolver: null,
     multichainResolver: "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240",
     historicalRegistrars: [
       "0x31c41237A551FCadf22F8B231D8accA2c16f669b",

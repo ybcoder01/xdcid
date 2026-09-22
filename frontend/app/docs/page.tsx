@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Documentation",
-  description: "Integrate production XDCID APIs and contracts, and review upcoming SDK and subdomain capabilities."
+  description: "Integrate production XDCID APIs, contracts, and organization subdomains."
 };
 
 const publicEndpoints = [
@@ -71,8 +71,8 @@ const integrationGuides = [
   },
   {
     eyebrow: "Organizations",
-    title: "Preview subdomain integration (upcoming)",
-    description: "Subdomain contracts and integration helpers are under development and are not part of the public product launch.",
+    title: "Create organization subdomains",
+    description: "Parent-name owners and approved operators can create wallet-owned subdomains using short-lived signed quotes.",
     code: 'const quote = await api.createSubdomainQuote({\n  parentName: "company.xdc", label: "alice",\n  action: "registration", termYears: 1,\n  paymentCurrency: "XDC", payer: account,\n  subdomainOwner: account\n});'
   },
   {

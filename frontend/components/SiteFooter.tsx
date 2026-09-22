@@ -7,7 +7,7 @@ const productLinks = [
   ["Register", "/#register"],
   ["Send", "/send"],
   ["Pay Links", "/pay"],
-  ["Subdomains · Upcoming", "/subdomains"],
+  ["Subdomains", "/subdomains"],
 ];
 
 const projectLinks = [

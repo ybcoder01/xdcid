@@ -44,7 +44,12 @@ test("exposes the verified resolver and initial multichain network metadata", ()
     XDC_MAINNET_DEPLOYMENT.active.registrar,
     XDCID_CONTRACTS.registrar
   );
-  assert.equal(XDC_MAINNET_DEPLOYMENT.candidate.primaryRegistrar, null);
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.candidate.primaryRegistrar,
+    getAddress("0x3D87B064a06f62cc4a24EAff13A591C9Ba791135")
+  );
+  assert.equal(XDC_MAINNET_DEPLOYMENT.active.ownerBoundForwardResolver, null);
+  assert.equal(XDC_MAINNET_DEPLOYMENT.active.ownerVerifiedReverseResolver, null);
   assert.equal(XDCID_CONTRACTS.resolver, null);
   assert.equal(XDCID_CONTRACTS.reverseResolver, null);
   assert.equal(
