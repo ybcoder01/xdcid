@@ -55,4 +55,41 @@ describe("XNSRegistry hardening", function () {
     expect(await registry.ownerOf(node)).to.equal(ethers.ZeroAddress);
     expect(await registry.resolverOf(node)).to.equal(ethers.ZeroAddress);
   });
+
+  it("clears the previous owner's resolver on transfer", async function () {
+    const { owner, alice, bob, resolver, registry, node } = await fixture();
+    await registry.setRegistrar(owner.address);
+    await registry.register(node, alice.address, await time.latest() + 60);
+    await registry.connect(alice).setResolver(node, resolver.address);
+
+    await expect(registry.connect(alice).transferName(node, bob.address))
+      .to.emit(registry, "ResolverChanged")
+      .withArgs(node, alice.address, ethers.ZeroAddress);
+
+    expect(await registry.ownerOf(node)).to.equal(bob.address);
+    expect(await registry.resolverOf(node)).to.equal(ethers.ZeroAddress);
+    expect((await registry.records(node)).resolver).to.equal(
+      ethers.ZeroAddress,
+    );
+  });
+
+  it("clears an expired resolver on re-registration but preserves it on renewal", async function () {
+    const { owner, alice, bob, resolver, registry, node } = await fixture();
+    const firstExpiry = await time.latest() + 60;
+    await registry.setRegistrar(owner.address);
+    await registry.register(node, alice.address, firstExpiry);
+    await registry.connect(alice).setResolver(node, resolver.address);
+
+    await registry.register(node, alice.address, firstExpiry + 60);
+    expect(await registry.resolverOf(node)).to.equal(resolver.address);
+
+    await time.increaseTo(firstExpiry + 61);
+    const nextExpiry = await time.latest() + 60;
+    await expect(registry.register(node, bob.address, nextExpiry))
+      .to.emit(registry, "ResolverChanged")
+      .withArgs(node, alice.address, ethers.ZeroAddress);
+
+    expect(await registry.ownerOf(node)).to.equal(bob.address);
+    expect(await registry.resolverOf(node)).to.equal(ethers.ZeroAddress);
+  });
 });

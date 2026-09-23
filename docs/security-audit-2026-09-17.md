@@ -108,11 +108,13 @@ The Registry does not reject zero addresses in `setRegistrar`, `register`, or `t
 **Remediation implemented:** Registry source now rejects a zero registrar, zero
 registration owner, and zero transfer recipient. Registrar changes,
 registrations/renewals, ownership transfers, and resolver changes emit indexed
-events, and `resolverOf` returns the zero address for inactive names. Resolver
-clearing remains explicit through `setResolver(node, address(0))`; transferring
-to the zero address is not treated as an implicit release. This hardening
-requires a future Registry deployment and migration; currently deployed
-bytecode is unchanged.
+events, and `resolverOf` returns the zero address for inactive names. The
+Registry also clears its stored resolver pointer when ownership changes and
+when an expired name is re-registered, preventing the former resolver from
+becoming active for the new lifecycle. An active same-owner renewal preserves
+the resolver. Transferring to the zero address is not treated as an implicit
+release. This hardening requires a future Registry deployment and migration;
+currently deployed bytecode is unchanged.
 
 ### L-03 — Previous-version quote grace is ineffective when prices change
 
