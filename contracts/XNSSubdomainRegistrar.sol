@@ -503,10 +503,11 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         ) revert QuoteLifetimeTooLong();
         if (quote.nonce != nonces[msg.sender]) revert InvalidNonce();
 
-        uint256 expectedUsdMicros = pricingPolicy.priceUsdMicros(
+        uint256 expectedUsdMicros = pricingPolicy.priceUsdMicrosForVersion(
             XNSPricingPolicyV2.Product.Subdomain,
             1,
-            quote.termYears
+            quote.termYears,
+            quote.policyVersion
         );
         if (quote.usdMicros != expectedUsdMicros) revert InvalidQuote();
         if (!_isValidQuoteSignature(quote, signature)) revert InvalidSigner();
