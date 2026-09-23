@@ -15,8 +15,6 @@ const reviewedHighOrMedium = new Set([
   "arbitrary-send-eth|XNSSignedQuoteRegistrar._collectPayment",
   "arbitrary-send-eth|XNSRegistrarV2._collectPayment",
   "arbitrary-send-eth|XNSSubdomainRegistrar._collectPayment",
-  "reentrancy-eth|Reentrancy in XNSSubdomainRegistrar.registerWithQuote",
-  "reentrancy-eth|Reentrancy in XNSSubdomainRegistrar.renewWithQuote",
   "unused-return|XNSPrimaryRegistrar._initializePrimary",
 ]);
 

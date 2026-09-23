@@ -155,12 +155,16 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         pricingPolicy = pricingPolicy_;
     }
 
-    function setRegistrationsPaused(bool paused) external onlyOwner {
+    function setRegistrationsPaused(
+        bool paused
+    ) external onlyOwner nonReentrant {
         registrationsPaused = paused;
         emit RegistrationPauseChanged(paused);
     }
 
-    function setRenewalsPaused(bool paused) external onlyOwner {
+    function setRenewalsPaused(
+        bool paused
+    ) external onlyOwner nonReentrant {
         renewalsPaused = paused;
         emit RenewalPauseChanged(paused);
     }
@@ -169,7 +173,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         string calldata parentName,
         address operator,
         bool approved
-    ) external {
+    ) external nonReentrant {
         bytes32 parentNode = parentNodeFor(parentName);
         address parentOwner = registry.ownerOf(parentNode);
         if (parentOwner == address(0)) revert ParentUnavailable();
@@ -203,10 +207,15 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
             revert TermExceedsParentExpiry();
         }
 
-        _consumeQuote(quote, quoteSignature, node, parentNode, quote.subdomainOwner);
-        _collectPayment(quote);
-
+        _consumeQuote(
+            quote,
+            quoteSignature,
+            node,
+            parentNode,
+            quote.subdomainOwner
+        );
         _recordRegistration(node, parentNode, expiry, quote);
+        _collectPayment(quote);
     }
 
     function renewWithQuote(
@@ -236,13 +245,15 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         }
 
         _consumeQuote(quote, quoteSignature, node, parentNode, currentOwner);
-        _collectPayment(quote);
-
         record.expiry = expiry;
+        _collectPayment(quote);
         _emitRenewal(node, currentOwner, expiry, quote);
     }
 
-    function transferSubdomain(bytes32 node, address newOwner) external {
+    function transferSubdomain(
+        bytes32 node,
+        address newOwner
+    ) external nonReentrant {
         address currentOwner = ownerOf(node);
         if (currentOwner == address(0) || msg.sender != currentOwner) {
             revert NotSubdomainOwner();
@@ -260,7 +271,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         string calldata parentName,
         string calldata label,
         address newOwner
-    ) external {
+    ) external nonReentrant {
         if (newOwner == address(0)) revert InvalidOwner();
         (bytes32 parentNode, bytes32 node) = _nodes(parentName, label);
         _requireParentController(parentNode);
@@ -286,7 +297,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
     function reclaimSubdomain(
         string calldata parentName,
         string calldata label
-    ) external {
+    ) external nonReentrant {
         (bytes32 parentNode, bytes32 node) = _nodes(parentName, label);
         address parentOwner = _requireParentController(parentNode);
         SubdomainRecord storage record = records[node];
@@ -311,7 +322,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
     function releaseSubdomain(
         string calldata parentName,
         string calldata label
-    ) external {
+    ) external nonReentrant {
         (bytes32 parentNode, bytes32 node) = _nodes(parentName, label);
         address parentOwner = registry.ownerOf(parentNode);
         if (parentOwner == address(0)) revert ParentUnavailable();
@@ -332,7 +343,7 @@ contract XNSSubdomainRegistrar is Ownable, EIP712, ReentrancyGuard {
         bytes32 node,
         uint256 chainId,
         address destination
-    ) external {
+    ) external nonReentrant {
         SubdomainRecord memory record = records[node];
         address currentOwner = ownerOf(node);
         if (

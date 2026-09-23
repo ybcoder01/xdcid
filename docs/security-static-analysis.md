@@ -17,14 +17,16 @@ globally suppressed.
 - `unused-return` for primary-name initialization: initialization intentionally
   returns `false` when an account already has a primary name. Registration must
   remain successful without replacing that primary.
-- `reentrancy-eth` for Subdomain Registrar registration and renewal: the public
-  payment entry points are protected by `nonReentrant`, and the currently
-  configured treasury is an EOA. Slither correctly identifies that state is
-  finalized after payment and that other state-changing entry points do not use
-  the guard. Treat this as a tracked design issue: do not move the treasury to
-  a contract capable of callbacks until a separately deployed Subdomain
-  Registrar version uses checks-effects-interactions or a shared guard on every
-  mutating entry point.
+
+The former `reentrancy-eth` findings for Subdomain Registrar registration and
+renewal are no longer allowlisted. The registrar now commits registration or
+renewal state before collecting payment and applies one reentrancy guard across
+every mutating entry point. An adversarial treasury test attempts authorized
+address and ownership changes during native-token payment and verifies that
+both callbacks fail without interrupting the intended registration or renewal.
+
+This source hardening affects only future Subdomain Registrar deployments. It
+does not upgrade or alter an already deployed instance.
 
 The baseline is not an assertion that these patterns are universally safe. A
 change to treasury type, payment flow, call order, or reachable state-mutating
