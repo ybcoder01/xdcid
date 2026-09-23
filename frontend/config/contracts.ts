@@ -25,7 +25,10 @@ export const xdcMainnet = {
 
 export const apothemRegistration = {
   chainId: 51,
-  registry: "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1" as `0x${string}`,
+  registry: (
+    process.env.NEXT_PUBLIC_XNS_REGISTRY ||
+    "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1"
+  ) as `0x${string}`,
   registrar: (
     process.env.NEXT_PUBLIC_XNS_REGISTRAR ||
     "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
@@ -34,7 +37,8 @@ export const apothemRegistration = {
 } as const;
 
 export const apothemSubdomainRegistrar =
-  "0xa2135729ce122ef93158FCc4C69683155e6707d3" as `0x${string}`;
+  (process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
+    "0xa2135729ce122ef93158FCc4C69683155e6707d3") as `0x${string}`;
 
 const configuredVerifiedResolver = process.env.NEXT_PUBLIC_XNS_RESOLVER_V2;
 const configuredVerifiedReverseResolver =

@@ -86,6 +86,43 @@ The already deployed primary-resolution candidate suite is bound to the current
 Registry and must not be treated as the Registry V2 suite. Its pending
 activation should remain untouched while Registry V2 is tested.
 
+## Apothem deployment console
+
+The protected Vercel Preview route
+`/deployment/apothem-registry-v2` is available only when
+`ENABLE_APOTHEM_REGISTRY_V2_DEPLOYMENT=true`. Never enable this flag in the
+Production environment.
+
+The console calculates all six CREATE2 addresses before enabling deployment,
+checks the current Registry, pricing, discount, registrar, owner, and deployer,
+and then deploys the Registry, forward resolver, reverse resolver, registrar,
+multichain resolver, and subdomain registrar. The sequence is resumable: a
+contract already present at its deterministic address is reused and the full
+immutable binding set is checked before initialization.
+
+The final two writes initialize the new Registry's first registrar and propose
+that registrar as the existing Discount Authorization consumer. Neither action
+switches the app away from the current Registry. The Discount Authorization
+proposal remains subject to its existing 48-hour delay.
+
+After deployment, verify all six contracts from the command line:
+
+```bash
+REGISTRY_V2_ADDRESS=0x... \
+FORWARD_RESOLVER_V2_ADDRESS=0x... \
+REVERSE_RESOLVER_V3_ADDRESS=0x... \
+PRIMARY_REGISTRAR_ADDRESS=0x... \
+MULTICHAIN_RESOLVER_V2_ADDRESS=0x... \
+SUBDOMAIN_REGISTRAR_V2_ADDRESS=0x... \
+pnpm verify:registry-v2:apothem
+```
+
+Only after verification and delayed consumer activation may the dev deployment
+be switched with the six public environment variables printed by the console.
+The testnet Registry and Subdomain Registrar now respect
+`NEXT_PUBLIC_XNS_REGISTRY` and `NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR`; Production
+configuration remains independent.
+
 ## Subdomains
 
 The existing subdomain contract can continue serving subdomains created under
