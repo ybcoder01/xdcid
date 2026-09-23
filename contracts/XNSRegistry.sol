@@ -59,8 +59,16 @@ contract XNSRegistry is Ownable {
 
     function register(bytes32 node, address nameOwner, uint256 expiry) external onlyRegistrar {
         if (nameOwner == address(0)) revert InvalidNameOwner();
-        records[node].owner = nameOwner;
-        records[node].expiry = expiry;
+        Record storage record = records[node];
+        address previousOwner = record.owner;
+        if (
+            previousOwner != nameOwner ||
+            record.expiry < block.timestamp
+        ) {
+            _clearResolver(node, previousOwner);
+        }
+        record.owner = nameOwner;
+        record.expiry = expiry;
         emit NameRegistered(node, nameOwner, expiry);
     }
 
@@ -68,6 +76,9 @@ contract XNSRegistry is Ownable {
         if (newOwner == address(0)) revert InvalidNameOwner();
         address previousOwner = records[node].owner;
         records[node].owner = newOwner;
+        if (previousOwner != newOwner) {
+            _clearResolver(node, previousOwner);
+        }
         emit NameTransferred(node, previousOwner, newOwner);
     }
 
@@ -88,5 +99,11 @@ contract XNSRegistry is Ownable {
 
     function expiryOf(bytes32 node) external view returns (uint256) {
         return records[node].expiry;
+    }
+
+    function _clearResolver(bytes32 node, address previousOwner) internal {
+        if (records[node].resolver == address(0)) return;
+        records[node].resolver = address(0);
+        emit ResolverChanged(node, previousOwner, address(0));
     }
 }
