@@ -15,6 +15,7 @@ import {
   registrarAbi,
   zeroAddress,
 } from "../config/contracts";
+import { isNonZeroAddress } from "../lib/addressValidation";
 
 export function AdminLegacyRegistrarRecovery() {
   const { address: account } = useAccount();
@@ -45,7 +46,7 @@ export function AdminLegacyRegistrarRecovery() {
     owner.data.toLowerCase() === account.toLowerCase();
   const canWithdraw =
     isLegacyOwner &&
-    isAddress(recipient) &&
+    isNonZeroAddress(recipient) &&
     !!contractBalance &&
     contractBalance > 0n &&
     !withdrawal.isPending &&

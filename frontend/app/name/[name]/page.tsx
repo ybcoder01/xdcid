@@ -7,6 +7,7 @@ import { useAccount, useReadContract, useReadContracts, useWriteContract } from 
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
 import { SignedRenewalControls } from "../../../components/SignedRenewalControls";
 import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
+import { isNonZeroAddress } from "../../../lib/addressValidation";
 import { parseXnsName } from "../../../lib/names";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
@@ -108,7 +109,7 @@ export default function NamePage() {
   }
 
   function transferName() {
-    if (!node || !isAddress(newOwner)) return;
+    if (!node || !isNonZeroAddress(newOwner)) return;
     writeContract({
       chainId: activeXnsChainId,
       address: activeRegistryAddress,
@@ -220,7 +221,7 @@ export default function NamePage() {
               />
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-                disabled={isPending || !isAddress(newOwner)}
+                disabled={isPending || !isNonZeroAddress(newOwner)}
                 onClick={transferName}
               >
                 Transfer
