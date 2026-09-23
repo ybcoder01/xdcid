@@ -50,8 +50,10 @@ contract XNSMultichainResolverV2 {
             address(reverseResolver_) == address(0) ||
             address(reverseResolver_).code.length == 0
         ) revert InvalidDependency();
-        try registry_.ownershipGenerations(bytes32(0)) returns (uint256) {
-            // The resolver requires a generation-aware Registry.
+        try registry_.ownershipGenerations(bytes32(0)) returns (
+            uint256 zeroNodeGeneration
+        ) {
+            if (zeroNodeGeneration != 0) revert InvalidDependency();
         } catch {
             revert InvalidDependency();
         }

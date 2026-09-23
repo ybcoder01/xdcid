@@ -40,8 +40,10 @@ contract XNSReverseResolverV3 {
             address(registry_) == address(0) ||
             address(registry_).code.length == 0
         ) revert InvalidRegistry();
-        try registry_.ownershipGenerations(bytes32(0)) returns (uint256) {
-            // The resolver requires a generation-aware Registry.
+        try registry_.ownershipGenerations(bytes32(0)) returns (
+            uint256 zeroNodeGeneration
+        ) {
+            if (zeroNodeGeneration != 0) revert InvalidRegistry();
         } catch {
             revert InvalidRegistry();
         }

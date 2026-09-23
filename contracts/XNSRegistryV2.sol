@@ -186,9 +186,17 @@ contract XNSRegistryV2 is Ownable2Step {
             revert InvalidExpiry();
         }
         if (!migrated[node]) {
-            (address legacyOwner, , uint256 legacyExpiry) =
+            (
+                address legacyOwner,
+                address legacyResolver,
+                uint256 legacyExpiry
+            ) =
                 legacyRegistry.records(node);
-            if (legacyOwner != address(0) || legacyExpiry != 0) {
+            if (
+                legacyOwner != address(0) ||
+                legacyResolver != address(0) ||
+                legacyExpiry != 0
+            ) {
                 _materializeLegacy(
                     node,
                     previousOwner != address(0) &&
