@@ -191,6 +191,45 @@ describe("XNSPrimaryRegistrar", function () {
     );
   });
 
+  it("accepts an old-price quote during the previous-version grace period", async function () {
+    const { owner, alice, policy, registry, registrar, makeQuote } =
+      await fixture();
+    const current = await policy.config();
+    await policy.connect(owner).proposeConfig({
+      twoCharacterAnnualUsdMicros: current.twoCharacterAnnualUsdMicros,
+      threeCharacterAnnualUsdMicros: current.threeCharacterAnnualUsdMicros,
+      fourCharacterAnnualUsdMicros: current.fourCharacterAnnualUsdMicros,
+      standardAnnualUsdMicros: 7_000_000,
+      subdomainAnnualUsdMicros: current.subdomainAnnualUsdMicros,
+      premiumSubdomainAnnualUsdMicros:
+        current.premiumSubdomainAnnualUsdMicros,
+      migrationUsdMicros: current.migrationUsdMicros,
+      threeYearDiscountBps: current.threeYearDiscountBps,
+      fiveYearDiscountBps: current.fiveYearDiscountBps,
+      tenYearDiscountBps: current.tenYearDiscountBps,
+      xdcQuoteBufferBps: current.xdcQuoteBufferBps,
+      quoteSigner: current.quoteSigner,
+      usdcToken: current.usdcToken,
+      treasury: current.treasury,
+      xdcPaymentsEnabled: current.xdcPaymentsEnabled,
+      usdcPaymentsEnabled: current.usdcPaymentsEnabled,
+    });
+    await time.increase(48 * 60 * 60 - 60);
+    const made = await makeQuote({ name: "grace.xdc" });
+    expect(made.quote.usdMicros).to.equal(5_000_000n);
+    await time.increase(60);
+    await policy.activatePendingConfig();
+
+    await registrar.connect(alice).registerWithQuote(
+      made.name,
+      made.quote,
+      made.signature,
+      { value: made.quote.paymentAmount },
+    );
+
+    expect(await registry.ownerOf(made.quote.node)).to.equal(alice.address);
+  });
+
   it("keeps the first primary until its owner selects another name", async function () {
     const { alice, registrar, reverseResolver, makeQuote } = await fixture();
     const first = await makeQuote({ name: "first.xdc" });

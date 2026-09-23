@@ -101,14 +101,22 @@ describe("XNSPricingPolicyV2", function () {
     await policy.cancelPendingConfig();
     expect(await policy.hasPendingConfig()).to.equal(false);
 
-    await policy.proposeConfig({ ...config, quoteSigner: nextSigner.address });
+    await policy.proposeConfig({
+      ...config,
+      standardAnnualUsdMicros: 7_000_000,
+      quoteSigner: nextSigner.address,
+    });
     await time.increase(48 * 60 * 60);
     await policy.activatePendingConfig();
 
     expect(await policy.isQuoteAuthorizationValid(nextSigner.address, 2)).to.equal(true);
     expect(await policy.isQuoteAuthorizationValid(signer.address, 1)).to.equal(true);
+    expect(await policy.priceUsdMicrosForVersion(0, 5, 1, 1)).to.equal(5_000_000);
+    expect(await policy.priceUsdMicrosForVersion(0, 5, 1, 2)).to.equal(7_000_000);
     await time.increase(5 * 60 + 1);
     expect(await policy.isQuoteAuthorizationValid(signer.address, 1)).to.equal(false);
+    await expect(policy.priceUsdMicrosForVersion(0, 5, 1, 1))
+      .to.be.revertedWithCustomError(policy, "InvalidQuoteVersion");
   });
 
   it("rejects unsupported terms and label lengths", async function () {

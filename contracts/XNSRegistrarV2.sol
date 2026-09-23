@@ -384,10 +384,11 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
         ) revert QuoteLifetimeTooLong();
         if (quote.nonce != nonces[msg.sender]) revert InvalidNonce();
 
-        grossUsdMicros = pricingPolicy.priceUsdMicros(
+        grossUsdMicros = pricingPolicy.priceUsdMicrosForVersion(
             XNSPricingPolicyV2.Product(quote.product),
             labelLength,
-            quote.termYears
+            quote.termYears,
+            quote.policyVersion
         );
         uint256 expectedNetUsdMicros = discountAuthorization.applyDiscount(
             grossUsdMicros,

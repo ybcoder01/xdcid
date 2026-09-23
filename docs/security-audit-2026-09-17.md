@@ -113,6 +113,15 @@ Registrar V2 accepts a previous signer/version during the grace period but recal
 
 **Recommendation:** Either remove the advertised grace behavior and let clients request a new quote, or retain the previous pricing configuration for the grace interval and validate previous-version quotes against that configuration.
 
+**Remediation implemented:** Both pricing-policy variants retain the immediately
+previous configuration and expose version-aware pricing for the five-minute
+authorization window. Registrar V2, the signed-quote registrar, and the
+Subdomain Registrar now validate `usdMicros` against the quote's policy version.
+Tests change the active price after a quote is signed and confirm the original
+price remains valid during grace and becomes invalid when grace expires. This
+is source-level hardening for future deployments; existing deployed bytecode is
+unchanged.
+
 ### I-01 — The deployed subdomain contract is usable independently of its UI flag
 
 The Subdomain Registrar is deployed and unpaused even though the product is labelled upcoming in the UI. The signed-quote and parent-controller requirements limit abuse, but a UI feature flag is not an on-chain launch control.
