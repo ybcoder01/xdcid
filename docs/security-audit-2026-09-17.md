@@ -125,6 +125,14 @@ The repository's contract and SDK test suites pass, including 243 contract/appli
 
 **Recommendation:** Add Slither to CI, add property/invariant tests for ownership transitions and resolver freshness, and commission an independent external audit before materially increasing protocol value or dependence.
 
+**Remediation implemented:** Slither `0.11.6` now runs in a dedicated CI job on
+every pull request and on pushes to `dev` and `main`. CI fails for any new High
+or Medium detector result outside an explicit function-level reviewed baseline.
+The baseline and its operational assumptions are documented in
+`docs/security-static-analysis.md`. Existing resolver ownership-lifecycle tests
+remain part of the blocking contract suite; broader stateful fuzzing and an
+independent external audit are still pending.
+
 ## Positive security properties
 
 - Registrar V2 binds signed quotes to the node, payer, name owner, product, term, token, amount, policy version, nonce, issuance time, and deadline using EIP-712.

@@ -16,6 +16,7 @@ import {
   type EIP1193Provider,
   type Hex,
 } from "viem";
+import { isNonZeroAddress } from "../../../lib/addressValidation";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../../../lib/xdcWriteGas";
 
 const TEST_WALLET = getAddress("0x9c67d6cfE6A73497e7348b6b852495CA6236C29a");
@@ -322,12 +323,12 @@ export default function ApothemSubdomainTestingClient() {
   }
 
   async function transfer() {
-    if (!isAddress(newOwner)) throw new Error("Enter a valid new owner address");
+    if (!isNonZeroAddress(newOwner)) throw new Error("Enter a valid non-zero new owner address");
     await write("transferSubdomain", [requiredNode(), getAddress(newOwner)]);
   }
 
   async function assign() {
-    if (!isAddress(newOwner)) throw new Error("Enter a valid assignee address");
+    if (!isNonZeroAddress(newOwner)) throw new Error("Enter a valid non-zero assignee address");
     await write("assignSubdomain", [
       canonicalParent(),
       canonicalLabel(),
