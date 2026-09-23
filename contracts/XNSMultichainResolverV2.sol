@@ -14,6 +14,7 @@ contract XNSMultichainResolverV2 {
     struct AddressRecord {
         address target;
         address recordOwner;
+        uint256 ownershipGeneration;
     }
 
     XNSRegistry public immutable registry;
@@ -67,7 +68,8 @@ contract XNSMultichainResolverV2 {
 
         _addresses[node][chainId] = AddressRecord({
             target: target,
-            recordOwner: msg.sender
+            recordOwner: msg.sender,
+            ownershipGeneration: registry.ownershipGenerations(node)
         });
         emit ChainAddressSet(node, chainId, target, msg.sender);
     }
@@ -92,7 +94,10 @@ contract XNSMultichainResolverV2 {
         if (currentOwner == address(0)) return address(0);
 
         AddressRecord memory record = _addresses[node][chainId];
-        if (record.recordOwner == currentOwner) return record.target;
+        if (
+            record.recordOwner == currentOwner &&
+            record.ownershipGeneration == registry.ownershipGenerations(node)
+        ) return record.target;
 
         string memory primaryName = reverseResolver.primaryNames(currentOwner);
         return keccak256(bytes(primaryName)) == node
@@ -114,7 +119,8 @@ contract XNSMultichainResolverV2 {
         address currentOwner = registry.ownerOf(node);
         active =
             currentOwner != address(0) &&
-            record.recordOwner == currentOwner;
+            record.recordOwner == currentOwner &&
+            record.ownershipGeneration == registry.ownershipGenerations(node);
         return (record.target, record.recordOwner, active);
     }
 }

@@ -35,12 +35,14 @@ describe("XNSRegistry hardening", function () {
     await expect(registry.register(node, alice.address, expiry))
       .to.emit(registry, "NameRegistered")
       .withArgs(node, alice.address, expiry);
+    expect(await registry.ownershipGenerations(node)).to.equal(1n);
     await expect(registry.connect(alice).setResolver(node, resolver.address))
       .to.emit(registry, "ResolverChanged")
       .withArgs(node, alice.address, resolver.address);
     await expect(registry.connect(alice).transferName(node, bob.address))
       .to.emit(registry, "NameTransferred")
       .withArgs(node, alice.address, bob.address);
+    expect(await registry.ownershipGenerations(node)).to.equal(2n);
   });
 
   it("does not expose resolver metadata for an expired name", async function () {
@@ -82,6 +84,7 @@ describe("XNSRegistry hardening", function () {
 
     await registry.register(node, alice.address, firstExpiry + 60);
     expect(await registry.resolverOf(node)).to.equal(resolver.address);
+    expect(await registry.ownershipGenerations(node)).to.equal(1n);
 
     await time.increaseTo(firstExpiry + 61);
     const nextExpiry = await time.latest() + 60;
@@ -91,5 +94,6 @@ describe("XNSRegistry hardening", function () {
 
     expect(await registry.ownerOf(node)).to.equal(bob.address);
     expect(await registry.resolverOf(node)).to.equal(ethers.ZeroAddress);
+    expect(await registry.ownershipGenerations(node)).to.equal(2n);
   });
 });

@@ -10,6 +10,7 @@ contract XNSReverseResolverV3 {
     struct ReverseRecord {
         string name;
         bytes32 node;
+        uint256 ownershipGeneration;
     }
 
     XNSRegistry public immutable registry;
@@ -43,7 +44,11 @@ contract XNSReverseResolverV3 {
 
     function setPrimaryName(string calldata name, bytes32 node) external {
         _validateOwnedName(msg.sender, name, node);
-        _records[msg.sender] = ReverseRecord({name: name, node: node});
+        _records[msg.sender] = ReverseRecord({
+            name: name,
+            node: node,
+            ownershipGeneration: registry.ownershipGenerations(node)
+        });
         emit PrimaryNameSet(msg.sender, node, name);
     }
 
@@ -59,7 +64,11 @@ contract XNSReverseResolverV3 {
         ReverseRecord storage current = _records[account];
         if (_isActive(account, current)) return false;
 
-        _records[account] = ReverseRecord({name: name, node: node});
+        _records[account] = ReverseRecord({
+            name: name,
+            node: node,
+            ownershipGeneration: registry.ownershipGenerations(node)
+        });
         emit PrimaryNameInitialized(account, node, name);
         return true;
     }
@@ -97,6 +106,7 @@ contract XNSReverseResolverV3 {
         return
             record.node != bytes32(0) &&
             registry.ownerOf(record.node) == account &&
+            record.ownershipGeneration == registry.ownershipGenerations(record.node) &&
             keccak256(bytes(record.name)) == record.node;
     }
 }

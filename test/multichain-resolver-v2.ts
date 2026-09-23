@@ -152,6 +152,31 @@ describe("XNSMultichainResolverV2", function () {
     expect(await resolver.addressFor(node, 137n)).to.equal(recipient.address);
   });
 
+  it("does not reactivate a chain override or primary after ownership cycles", async function () {
+    const {
+      nameOwner,
+      recipient,
+      customTarget,
+      registry,
+      reverseResolver,
+      resolver,
+      node,
+    } = await deployFixture();
+    await reverseResolver
+      .connect(nameOwner)
+      .setPrimaryName("alice.xdc", node);
+    await resolver
+      .connect(nameOwner)
+      .setAddress(node, 1n, customTarget.address);
+
+    await registry.connect(nameOwner).transferName(node, recipient.address);
+    await registry.connect(recipient).transferName(node, nameOwner.address);
+
+    expect(await reverseResolver.primaryNames(nameOwner.address)).to.equal("");
+    expect(await resolver.addressFor(node, 1n)).to.equal(ethers.ZeroAddress);
+    expect((await resolver.addressRecord(node, 1n)).active).to.equal(false);
+  });
+
   it("stops resolving the fallback after expiry", async function () {
     const { nameOwner, reverseResolver, resolver, node } =
       await deployFixture();

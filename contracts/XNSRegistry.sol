@@ -11,6 +11,7 @@ contract XNSRegistry is Ownable {
     }
 
     mapping(bytes32 => Record) public records;
+    mapping(bytes32 => uint256) public ownershipGenerations;
     address public registrar;
 
     error NotRegistrar();
@@ -36,6 +37,11 @@ contract XNSRegistry is Ownable {
         bytes32 indexed node,
         address indexed nameOwner,
         address indexed resolver
+    );
+    event OwnershipGenerationAdvanced(
+        bytes32 indexed node,
+        uint256 previousGeneration,
+        uint256 newGeneration
     );
 
     constructor(address initialOwner) Ownable(initialOwner) {}
@@ -66,6 +72,7 @@ contract XNSRegistry is Ownable {
             record.expiry < block.timestamp
         ) {
             _clearResolver(node, previousOwner);
+            _advanceOwnershipGeneration(node);
         }
         record.owner = nameOwner;
         record.expiry = expiry;
@@ -78,6 +85,7 @@ contract XNSRegistry is Ownable {
         records[node].owner = newOwner;
         if (previousOwner != newOwner) {
             _clearResolver(node, previousOwner);
+            _advanceOwnershipGeneration(node);
         }
         emit NameTransferred(node, previousOwner, newOwner);
     }
@@ -105,5 +113,16 @@ contract XNSRegistry is Ownable {
         if (records[node].resolver == address(0)) return;
         records[node].resolver = address(0);
         emit ResolverChanged(node, previousOwner, address(0));
+    }
+
+    function _advanceOwnershipGeneration(bytes32 node) internal {
+        uint256 previousGeneration = ownershipGenerations[node];
+        uint256 newGeneration = previousGeneration + 1;
+        ownershipGenerations[node] = newGeneration;
+        emit OwnershipGenerationAdvanced(
+            node,
+            previousGeneration,
+            newGeneration
+        );
     }
 }
