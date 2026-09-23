@@ -82,10 +82,11 @@ The reviewed owner address is an externally owned account rather than a contract
 public manifest for SDK, frontend, release-preflight, and operator defaults. The
 read-only mainnet preflight verifies active bytecode, Registry authorization,
 immutable dependencies, ownership, signer/token/treasury configuration, pause
-state, and candidate dependencies. Ownership migration now enumerates all five
-governed V2 contracts, defaults to a dry run, skips completed transfers, and
-verifies every resulting owner. Mainnet candidate resolver deployment and the
-move from a single EOA to a multisig remain release blockers.
+state, and candidate dependencies. Ownership migration now enumerates every
+active governed V2 contract plus any configured candidate Primary Registrar,
+deduplicates promoted candidates, defaults to a dry run, skips completed
+transfers, and verifies every resulting owner. Mainnet candidate resolver
+deployment and the move from a single EOA to a multisig remain release blockers.
 
 ### L-01 — Reverse names remain stale after transfer or expiry
 

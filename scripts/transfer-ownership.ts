@@ -1,5 +1,6 @@
 import { ethers } from "hardhat";
 import { XDC_MAINNET_DEPLOYMENT } from "../sdk/src/deployment/deployments";
+import { ownershipTargets } from "./lib/ownership-targets";
 
 const LEGACY_GAS_LIMIT = 100_000n;
 const CONFIRMATION = "TRANSFER_XDC_MAINNET_OWNERSHIP";
@@ -8,16 +9,7 @@ const ownableAbi = [
   "function transferOwnership(address newOwner)",
 ] as const;
 
-const governedContracts = [
-  ["Registry", XDC_MAINNET_DEPLOYMENT.active.registry],
-  ["Registrar V2", XDC_MAINNET_DEPLOYMENT.active.registrar],
-  ["Pricing Policy V2", XDC_MAINNET_DEPLOYMENT.active.pricingPolicy],
-  [
-    "Discount Authorization",
-    XDC_MAINNET_DEPLOYMENT.active.discountAuthorization,
-  ],
-  ["Subdomain Registrar", XDC_MAINNET_DEPLOYMENT.active.subdomainRegistrar],
-] as const;
+const governedContracts = ownershipTargets(XDC_MAINNET_DEPLOYMENT);
 
 async function main() {
   const network = await ethers.provider.getNetwork();
@@ -43,7 +35,7 @@ async function main() {
     : null;
 
   const contracts = await Promise.all(
-    governedContracts.map(async ([label, address]) => {
+    governedContracts.map(async ({ label, address }) => {
       if ((await ethers.provider.getCode(address)) === "0x") {
         throw new Error(`${label} has no deployed code at ${address}.`);
       }
