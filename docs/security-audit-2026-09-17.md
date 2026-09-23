@@ -133,6 +133,15 @@ The baseline and its operational assumptions are documented in
 remain part of the blocking contract suite; broader stateful fuzzing and an
 independent external audit are still pending.
 
+**Follow-up remediation implemented:** The Subdomain Registrar now follows
+checks-effects-interactions for paid registration and renewal and uses the same
+reentrancy lock on every state-mutating entry point. Adversarial tests use a
+callback-capable treasury that owns the new subdomain and verify that it cannot
+change an address record or transfer ownership during payment. The two former
+Slither `reentrancy-eth` findings have been removed from the reviewed baseline.
+This is source-level hardening for the next deployment and does not mutate the
+currently deployed contract.
+
 ## Positive security properties
 
 - Registrar V2 binds signed quotes to the node, payer, name owner, product, term, token, amount, policy version, nonce, issuance time, and deadline using EIP-712.
