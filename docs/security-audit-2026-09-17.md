@@ -105,6 +105,15 @@ The Registry does not reject zero addresses in `setRegistrar`, `register`, or `t
 
 **Recommendation:** Reject zero addresses unless an explicit burn/release operation is intended. Make release a distinct operation. Return no resolver for inactive names, and emit events for every registry mutation.
 
+**Remediation implemented:** Registry source now rejects a zero registrar, zero
+registration owner, and zero transfer recipient. Registrar changes,
+registrations/renewals, ownership transfers, and resolver changes emit indexed
+events, and `resolverOf` returns the zero address for inactive names. Resolver
+clearing remains explicit through `setResolver(node, address(0))`; transferring
+to the zero address is not treated as an implicit release. This hardening
+requires a future Registry deployment and migration; currently deployed
+bytecode is unchanged.
+
 ### L-03 — Previous-version quote grace is ineffective when prices change
 
 **Impact:** Quotes signed under the prior policy version can fail immediately after configuration activation even though the policy advertises a five-minute previous-signer grace period.
