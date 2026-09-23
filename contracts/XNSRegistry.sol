@@ -10,7 +10,8 @@ contract XNSRegistry is Ownable {
         uint256 expiry;
     }
 
-    mapping(bytes32 => Record) public records;
+    mapping(bytes32 => Record) internal _records;
+    mapping(bytes32 => uint256) internal _ownershipGenerations;
     address public registrar;
 
     error NotRegistrar();
@@ -37,6 +38,11 @@ contract XNSRegistry is Ownable {
         address indexed nameOwner,
         address indexed resolver
     );
+    event OwnershipGenerationAdvanced(
+        bytes32 indexed node,
+        uint256 previousGeneration,
+        uint256 newGeneration
+    );
 
     constructor(address initialOwner) Ownable(initialOwner) {}
 
@@ -50,60 +56,86 @@ contract XNSRegistry is Ownable {
         _;
     }
 
-    function setRegistrar(address newRegistrar) external onlyOwner {
+    function setRegistrar(address newRegistrar) external virtual onlyOwner {
         if (newRegistrar == address(0)) revert InvalidRegistrar();
         address previousRegistrar = registrar;
         registrar = newRegistrar;
         emit RegistrarChanged(previousRegistrar, newRegistrar);
     }
 
-    function register(bytes32 node, address nameOwner, uint256 expiry) external onlyRegistrar {
+    function register(bytes32 node, address nameOwner, uint256 expiry) external virtual onlyRegistrar {
         if (nameOwner == address(0)) revert InvalidNameOwner();
-        Record storage record = records[node];
+        Record storage record = _records[node];
         address previousOwner = record.owner;
         if (
             previousOwner != nameOwner ||
             record.expiry < block.timestamp
         ) {
             _clearResolver(node, previousOwner);
+            _advanceOwnershipGeneration(node);
         }
         record.owner = nameOwner;
         record.expiry = expiry;
         emit NameRegistered(node, nameOwner, expiry);
     }
 
-    function transferName(bytes32 node, address newOwner) external onlyNameOwner(node) {
+    function transferName(bytes32 node, address newOwner) external virtual onlyNameOwner(node) {
         if (newOwner == address(0)) revert InvalidNameOwner();
-        address previousOwner = records[node].owner;
-        records[node].owner = newOwner;
+        address previousOwner = _records[node].owner;
+        _records[node].owner = newOwner;
         if (previousOwner != newOwner) {
             _clearResolver(node, previousOwner);
+            _advanceOwnershipGeneration(node);
         }
         emit NameTransferred(node, previousOwner, newOwner);
     }
 
-    function setResolver(bytes32 node, address resolver) external onlyNameOwner(node) {
-        records[node].resolver = resolver;
+    function setResolver(bytes32 node, address resolver) external virtual onlyNameOwner(node) {
+        _records[node].resolver = resolver;
         emit ResolverChanged(node, msg.sender, resolver);
     }
 
-    function ownerOf(bytes32 node) public view returns (address) {
-        if (records[node].expiry < block.timestamp) return address(0);
-        return records[node].owner;
+    function records(
+        bytes32 node
+    ) public view virtual returns (address owner, address resolver, uint256 expiry) {
+        Record storage record = _records[node];
+        return (record.owner, record.resolver, record.expiry);
     }
 
-    function resolverOf(bytes32 node) external view returns (address) {
+    function ownershipGenerations(
+        bytes32 node
+    ) public view virtual returns (uint256) {
+        return _ownershipGenerations[node];
+    }
+
+    function ownerOf(bytes32 node) public view virtual returns (address) {
+        if (_records[node].expiry < block.timestamp) return address(0);
+        return _records[node].owner;
+    }
+
+    function resolverOf(bytes32 node) external view virtual returns (address) {
         if (ownerOf(node) == address(0)) return address(0);
-        return records[node].resolver;
+        return _records[node].resolver;
     }
 
-    function expiryOf(bytes32 node) external view returns (uint256) {
-        return records[node].expiry;
+    function expiryOf(bytes32 node) external view virtual returns (uint256) {
+        return _records[node].expiry;
     }
 
     function _clearResolver(bytes32 node, address previousOwner) internal {
-        if (records[node].resolver == address(0)) return;
-        records[node].resolver = address(0);
+        if (_records[node].resolver == address(0)) return;
+        _records[node].resolver = address(0);
         emit ResolverChanged(node, previousOwner, address(0));
+    }
+
+    function _advanceOwnershipGeneration(bytes32 node) internal {
+        uint256 previousGeneration = _ownershipGenerations[node];
+        uint256 newGeneration = previousGeneration + 1;
+        _ownershipGenerations[node] = newGeneration;
+        emit OwnershipGenerationAdvanced(
+            node,
+            previousGeneration,
+            newGeneration
+        );
     }
 }

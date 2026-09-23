@@ -10,6 +10,7 @@ contract XNSReverseResolverV3 {
     struct ReverseRecord {
         string name;
         bytes32 node;
+        uint256 ownershipGeneration;
     }
 
     XNSRegistry public immutable registry;
@@ -18,6 +19,7 @@ contract XNSReverseResolverV3 {
     error InvalidRegistry();
     error InvalidAccount();
     error InvalidName();
+    error NameNotAnchored();
     error NotNameOwner();
     error NotRegistrar();
 
@@ -38,12 +40,23 @@ contract XNSReverseResolverV3 {
             address(registry_) == address(0) ||
             address(registry_).code.length == 0
         ) revert InvalidRegistry();
+        try registry_.ownershipGenerations(bytes32(0)) returns (
+            uint256 zeroNodeGeneration
+        ) {
+            if (zeroNodeGeneration != 0) revert InvalidRegistry();
+        } catch {
+            revert InvalidRegistry();
+        }
         registry = registry_;
     }
 
     function setPrimaryName(string calldata name, bytes32 node) external {
         _validateOwnedName(msg.sender, name, node);
-        _records[msg.sender] = ReverseRecord({name: name, node: node});
+        _records[msg.sender] = ReverseRecord({
+            name: name,
+            node: node,
+            ownershipGeneration: registry.ownershipGenerations(node)
+        });
         emit PrimaryNameSet(msg.sender, node, name);
     }
 
@@ -59,7 +72,11 @@ contract XNSReverseResolverV3 {
         ReverseRecord storage current = _records[account];
         if (_isActive(account, current)) return false;
 
-        _records[account] = ReverseRecord({name: name, node: node});
+        _records[account] = ReverseRecord({
+            name: name,
+            node: node,
+            ownershipGeneration: registry.ownershipGenerations(node)
+        });
         emit PrimaryNameInitialized(account, node, name);
         return true;
     }
@@ -88,6 +105,7 @@ contract XNSReverseResolverV3 {
     ) private view {
         if (keccak256(bytes(name)) != node) revert InvalidName();
         if (registry.ownerOf(node) != account) revert NotNameOwner();
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
     }
 
     function _isActive(
@@ -97,6 +115,7 @@ contract XNSReverseResolverV3 {
         return
             record.node != bytes32(0) &&
             registry.ownerOf(record.node) == account &&
+            record.ownershipGeneration == registry.ownershipGenerations(record.node) &&
             keccak256(bytes(record.name)) == record.node;
     }
 }

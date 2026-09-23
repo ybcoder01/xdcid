@@ -152,6 +152,31 @@ describe("XNSMultichainResolverV2", function () {
     expect(await resolver.addressFor(node, 137n)).to.equal(recipient.address);
   });
 
+  it("does not reactivate a chain override or primary after ownership cycles", async function () {
+    const {
+      nameOwner,
+      recipient,
+      customTarget,
+      registry,
+      reverseResolver,
+      resolver,
+      node,
+    } = await deployFixture();
+    await reverseResolver
+      .connect(nameOwner)
+      .setPrimaryName("alice.xdc", node);
+    await resolver
+      .connect(nameOwner)
+      .setAddress(node, 1n, customTarget.address);
+
+    await registry.connect(nameOwner).transferName(node, recipient.address);
+    await registry.connect(recipient).transferName(node, nameOwner.address);
+
+    expect(await reverseResolver.primaryNames(nameOwner.address)).to.equal("");
+    expect(await resolver.addressFor(node, 1n)).to.equal(ethers.ZeroAddress);
+    expect((await resolver.addressRecord(node, 1n)).active).to.equal(false);
+  });
+
   it("stops resolving the fallback after expiry", async function () {
     const { nameOwner, reverseResolver, resolver, node } =
       await deployFixture();
@@ -178,5 +203,25 @@ describe("XNSMultichainResolverV2", function () {
     await expect(
       Resolver.deploy(await registry.getAddress(), ethers.ZeroAddress),
     ).to.be.revertedWithCustomError(Resolver, "InvalidDependency");
+  });
+
+  it("rejects resolver deployments against a pre-generation Registry", async function () {
+    const Legacy = await ethers.getContractFactory("MockLegacyRegistry");
+    const legacy = await Legacy.deploy();
+    const { reverseResolver } = await deployFixture();
+    const Reverse = await ethers.getContractFactory("XNSReverseResolverV3");
+    const Multichain = await ethers.getContractFactory(
+      "XNSMultichainResolverV2",
+    );
+
+    await expect(
+      Reverse.deploy(await legacy.getAddress()),
+    ).to.be.revertedWithCustomError(Reverse, "InvalidRegistry");
+    await expect(
+      Multichain.deploy(
+        await legacy.getAddress(),
+        await reverseResolver.getAddress(),
+      ),
+    ).to.be.revertedWithCustomError(Multichain, "InvalidDependency");
   });
 });

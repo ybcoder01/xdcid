@@ -9,11 +9,13 @@ contract XNSResolverV2 {
     struct AddressRecord {
         address target;
         address recordOwner;
+        uint256 ownershipGeneration;
     }
 
     struct TextRecord {
         string value;
         address recordOwner;
+        uint256 ownershipGeneration;
     }
 
     XNSRegistry public immutable registry;
@@ -22,6 +24,7 @@ contract XNSResolverV2 {
     mapping(bytes32 => mapping(string => TextRecord)) private _texts;
 
     error InvalidRegistry();
+    error NameNotAnchored();
     error NotNameOwner();
     error UnsupportedKey();
 
@@ -42,6 +45,13 @@ contract XNSResolverV2 {
         if (address(registry_) == address(0) || address(registry_).code.length == 0) {
             revert InvalidRegistry();
         }
+        try registry_.ownershipGenerations(bytes32(0)) returns (
+            uint256 zeroNodeGeneration
+        ) {
+            if (zeroNodeGeneration != 0) revert InvalidRegistry();
+        } catch {
+            revert InvalidRegistry();
+        }
         registry = registry_;
     }
 
@@ -54,6 +64,7 @@ contract XNSResolverV2 {
         bytes32 node,
         address target
     ) external onlyNameOwner(node) {
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
         if (target == address(0)) {
             delete _addresses[node];
             emit AddressCleared(node, msg.sender);
@@ -62,7 +73,8 @@ contract XNSResolverV2 {
 
         _addresses[node] = AddressRecord({
             target: target,
-            recordOwner: msg.sender
+            recordOwner: msg.sender,
+            ownershipGeneration: registry.ownershipGenerations(node)
         });
         emit AddressSet(node, target, msg.sender);
     }
@@ -72,6 +84,7 @@ contract XNSResolverV2 {
         string calldata key,
         string calldata value
     ) external onlyNameOwner(node) {
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
         if (!_supportedKey(key)) revert UnsupportedKey();
 
         if (bytes(value).length == 0) {
@@ -79,7 +92,8 @@ contract XNSResolverV2 {
         } else {
             _texts[node][key] = TextRecord({
                 value: value,
-                recordOwner: msg.sender
+                recordOwner: msg.sender,
+                ownershipGeneration: registry.ownershipGenerations(node)
             });
         }
         emit TextSet(node, key, value, msg.sender);
@@ -90,7 +104,11 @@ contract XNSResolverV2 {
         if (currentOwner == address(0)) return address(0);
 
         AddressRecord memory record = _addresses[node];
-        if (record.recordOwner != currentOwner || record.target == address(0)) {
+        if (
+            record.recordOwner != currentOwner ||
+            record.ownershipGeneration != registry.ownershipGenerations(node) ||
+            record.target == address(0)
+        ) {
             return currentOwner;
         }
         return record.target;
@@ -101,7 +119,10 @@ contract XNSResolverV2 {
     ) external view returns (address target, address recordOwner, bool active) {
         AddressRecord memory record = _addresses[node];
         address currentOwner = registry.ownerOf(node);
-        active = currentOwner != address(0) && record.recordOwner == currentOwner;
+        active =
+            currentOwner != address(0) &&
+            record.recordOwner == currentOwner &&
+            record.ownershipGeneration == registry.ownershipGenerations(node);
         return (record.target, record.recordOwner, active);
     }
 
@@ -111,7 +132,11 @@ contract XNSResolverV2 {
     ) external view returns (string memory) {
         TextRecord storage record = _texts[node][key];
         address currentOwner = registry.ownerOf(node);
-        if (currentOwner == address(0) || record.recordOwner != currentOwner) {
+        if (
+            currentOwner == address(0) ||
+            record.recordOwner != currentOwner ||
+            record.ownershipGeneration != registry.ownershipGenerations(node)
+        ) {
             return "";
         }
         return record.value;
@@ -123,7 +148,10 @@ contract XNSResolverV2 {
     ) external view returns (string memory value, address recordOwner, bool active) {
         TextRecord storage record = _texts[node][key];
         address currentOwner = registry.ownerOf(node);
-        active = currentOwner != address(0) && record.recordOwner == currentOwner;
+        active =
+            currentOwner != address(0) &&
+            record.recordOwner == currentOwner &&
+            record.ownershipGeneration == registry.ownershipGenerations(node);
         return (record.value, record.recordOwner, active);
     }
 
