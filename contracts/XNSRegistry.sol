@@ -15,6 +15,28 @@ contract XNSRegistry is Ownable {
 
     error NotRegistrar();
     error NotNameOwner();
+    error InvalidRegistrar();
+    error InvalidNameOwner();
+
+    event RegistrarChanged(
+        address indexed previousRegistrar,
+        address indexed newRegistrar
+    );
+    event NameRegistered(
+        bytes32 indexed node,
+        address indexed nameOwner,
+        uint256 expiry
+    );
+    event NameTransferred(
+        bytes32 indexed node,
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+    event ResolverChanged(
+        bytes32 indexed node,
+        address indexed nameOwner,
+        address indexed resolver
+    );
 
     constructor(address initialOwner) Ownable(initialOwner) {}
 
@@ -29,20 +51,29 @@ contract XNSRegistry is Ownable {
     }
 
     function setRegistrar(address newRegistrar) external onlyOwner {
+        if (newRegistrar == address(0)) revert InvalidRegistrar();
+        address previousRegistrar = registrar;
         registrar = newRegistrar;
+        emit RegistrarChanged(previousRegistrar, newRegistrar);
     }
 
     function register(bytes32 node, address nameOwner, uint256 expiry) external onlyRegistrar {
+        if (nameOwner == address(0)) revert InvalidNameOwner();
         records[node].owner = nameOwner;
         records[node].expiry = expiry;
+        emit NameRegistered(node, nameOwner, expiry);
     }
 
     function transferName(bytes32 node, address newOwner) external onlyNameOwner(node) {
+        if (newOwner == address(0)) revert InvalidNameOwner();
+        address previousOwner = records[node].owner;
         records[node].owner = newOwner;
+        emit NameTransferred(node, previousOwner, newOwner);
     }
 
     function setResolver(bytes32 node, address resolver) external onlyNameOwner(node) {
         records[node].resolver = resolver;
+        emit ResolverChanged(node, msg.sender, resolver);
     }
 
     function ownerOf(bytes32 node) public view returns (address) {
@@ -51,6 +82,7 @@ contract XNSRegistry is Ownable {
     }
 
     function resolverOf(bytes32 node) external view returns (address) {
+        if (ownerOf(node) == address(0)) return address(0);
         return records[node].resolver;
     }
 
