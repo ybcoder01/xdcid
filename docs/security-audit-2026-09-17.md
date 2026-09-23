@@ -70,6 +70,14 @@ The reviewed owner address is an externally owned account rather than a contract
 
 **Recommendation:** Move ownership to a hardware-backed multisig with separated signers. Prefer `Ownable2Step` for future deployments. Add a timelock or delayed two-step registrar change to the Registry, monitoring for every proposed/activated policy change, and an incident runbook for pausing the registrar. Keep the quote signer and treasury operationally separate from protocol administration.
 
+**Interim mitigation implemented:** A scheduled read-only mainnet invariant
+monitor now checks the reviewed deployment through a two-of-three RPC quorum
+every six hours and fails on unexpected authority, ownership, configuration,
+bytecode, or dependency changes. `docs/security-incident-response.md` defines
+containment and recovery procedures for owner, registrar, signer, pricing, and
+treasury incidents. These controls improve detection and response but do not
+remove the single-owner risk; multisig migration remains required.
+
 ### M-02 — Checked-in deployment and ownership tooling targets the legacy registrar
 
 **Impact:** A production build missing the expected environment override can target the obsolete registrar. An administrator following the ownership-transfer script can transfer the Registry and legacy registrar while leaving Registrar V2, Pricing Policy V2, Discount Authorization, and Subdomain Registrar controlled by the former owner.

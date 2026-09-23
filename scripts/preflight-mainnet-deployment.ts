@@ -1,5 +1,9 @@
 import { ethers } from "hardhat";
 import { XDC_MAINNET_DEPLOYMENT } from "../sdk/src/deployment/deployments";
+import {
+  derivePrimaryResolutionActivationStage,
+  type PrimaryResolutionActivationState,
+} from "../frontend/lib/mainnetPrimaryActivation";
 
 type Check = {
   name: string;
@@ -138,6 +142,9 @@ async function main() {
     discountOwner,
     discountSigner,
     discountConsumer,
+    discountPendingSigner,
+    discountPendingConsumer,
+    discountPendingActivationTime,
     discountPending,
     subdomainOwner,
     subdomainRegistry,
@@ -164,6 +171,9 @@ async function main() {
     discount.owner(),
     discount.authorizationSigner(),
     discount.consumer(),
+    discount.pendingAuthorizationSigner(),
+    discount.pendingConsumer(),
+    discount.pendingActivationTime(),
     discount.hasPendingConfiguration(),
     subdomain.owner(),
     subdomain.registry(),
@@ -235,12 +245,6 @@ async function main() {
       discountSigner,
       manifest.operations.discountAuthorizationSigner,
     ),
-    addressCheck(
-      "Discount Authorization consumer",
-      discountConsumer,
-      manifest.active.registrar,
-    ),
-    valueCheck("Discount configuration pending", discountPending, false),
     addressCheck("Subdomain owner", subdomainOwner, manifest.protocolOwner),
     addressCheck(
       "Subdomain Registry",
@@ -269,6 +273,47 @@ async function main() {
     ),
     valueCheck("USDC decimals", Number(usdcDecimals), 6),
   );
+
+  const candidateRegistrar = manifest.candidate.primaryRegistrar;
+  if (candidateRegistrar) {
+    const activationState: PrimaryResolutionActivationState = {
+      activeRegistrar: ethers.getAddress(activeRegistrar),
+      discountConsumer: ethers.getAddress(discountConsumer),
+      authorizationSigner: ethers.getAddress(discountSigner),
+      pendingConsumer: ethers.getAddress(discountPendingConsumer),
+      pendingSigner: ethers.getAddress(discountPendingSigner),
+      pendingActivationTime: BigInt(discountPendingActivationTime),
+      hasPendingConfiguration: Boolean(discountPending),
+      blockTimestamp: BigInt(block.timestamp),
+    };
+    const activationStage = derivePrimaryResolutionActivationStage(
+      activationState,
+      {
+        currentRegistrar: manifest.rollout.primaryResolution.previousRegistrar,
+        candidateRegistrar,
+        authorizationSigner:
+          manifest.operations.discountAuthorizationSigner,
+        earliestActivation: BigInt(
+          manifest.rollout.primaryResolution.earliestActivation,
+        ),
+      },
+    );
+    checks.push({
+      name: "Primary-resolution rollout state",
+      expected: "waiting, discount-ready, registry-ready, or active",
+      actual: activationStage,
+      passed: activationStage !== "invalid",
+    });
+  } else {
+    checks.push(
+      addressCheck(
+        "Discount Authorization consumer",
+        discountConsumer,
+        manifest.active.registrar,
+      ),
+      valueCheck("Discount configuration pending", discountPending, false),
+    );
+  }
 
   const candidateEntries = Object.entries(manifest.candidate);
   const releaseBlockers: string[] = candidateEntries

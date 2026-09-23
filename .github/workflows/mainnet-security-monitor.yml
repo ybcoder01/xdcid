@@ -1,0 +1,58 @@
+name: XDC mainnet invariant monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xdc-mainnet-invariant-monitor
+  cancel-in-progress: false
+
+jobs:
+  verify-mainnet-state:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.7.0
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify mainnet invariants across RPC quorum
+        shell: bash
+        run: |
+          set +e
+          passes=0
+          for rpc in \
+            https://rpc.xdcrpc.com \
+            https://earpc.xinfin.network \
+            https://rpc.xinfin.network
+          do
+            echo "::group::Checking $rpc"
+            REPORT_ONLY=true XDC_MAINNET_RPC_URL="$rpc" \
+              pnpm preflight:deployment:xdc
+            result=$?
+            echo "::endgroup::"
+            if [ "$result" -eq 0 ]; then
+              passes=$((passes + 1))
+            fi
+          done
+          set -e
+
+          if [ "$passes" -lt 2 ]; then
+            echo "Mainnet invariants did not pass on an RPC quorum ($passes/3)." >&2
+            exit 1
+          fi
+          echo "Mainnet invariants passed on an RPC quorum ($passes/3)."
