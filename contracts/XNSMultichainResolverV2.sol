@@ -25,6 +25,7 @@ contract XNSMultichainResolverV2 {
     error InvalidChainId();
     error InvalidDependency();
     error InvalidTarget();
+    error NameNotAnchored();
     error NotNameOwner();
 
     event ChainAddressSet(
@@ -49,6 +50,11 @@ contract XNSMultichainResolverV2 {
             address(reverseResolver_) == address(0) ||
             address(reverseResolver_).code.length == 0
         ) revert InvalidDependency();
+        try registry_.ownershipGenerations(bytes32(0)) returns (uint256) {
+            // The resolver requires a generation-aware Registry.
+        } catch {
+            revert InvalidDependency();
+        }
         registry = registry_;
         reverseResolver = reverseResolver_;
     }
@@ -63,6 +69,7 @@ contract XNSMultichainResolverV2 {
         uint256 chainId,
         address target
     ) external onlyNameOwner(node) {
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
         if (chainId == 0) revert InvalidChainId();
         if (target == address(0)) revert InvalidTarget();
 
@@ -78,6 +85,7 @@ contract XNSMultichainResolverV2 {
         bytes32 node,
         uint256 chainId
     ) external onlyNameOwner(node) {
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
         if (chainId == 0) revert InvalidChainId();
 
         delete _addresses[node][chainId];

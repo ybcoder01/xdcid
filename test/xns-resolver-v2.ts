@@ -144,4 +144,14 @@ describe("XNSResolverV2", function () {
     await resolver.connect(formerOwner).setAddress(node, ethers.ZeroAddress);
     expect(await resolver.addresses(node)).to.equal(formerOwner.address);
   });
+
+  it("rejects a Registry that cannot expose ownership generations", async function () {
+    const Legacy = await ethers.getContractFactory("MockLegacyRegistry");
+    const legacy = await Legacy.deploy();
+    const Resolver = await ethers.getContractFactory("XNSResolverV2");
+
+    await expect(
+      Resolver.deploy(await legacy.getAddress()),
+    ).to.be.revertedWithCustomError(Resolver, "InvalidRegistry");
+  });
 });

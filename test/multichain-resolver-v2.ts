@@ -204,4 +204,24 @@ describe("XNSMultichainResolverV2", function () {
       Resolver.deploy(await registry.getAddress(), ethers.ZeroAddress),
     ).to.be.revertedWithCustomError(Resolver, "InvalidDependency");
   });
+
+  it("rejects resolver deployments against a pre-generation Registry", async function () {
+    const Legacy = await ethers.getContractFactory("MockLegacyRegistry");
+    const legacy = await Legacy.deploy();
+    const { reverseResolver } = await deployFixture();
+    const Reverse = await ethers.getContractFactory("XNSReverseResolverV3");
+    const Multichain = await ethers.getContractFactory(
+      "XNSMultichainResolverV2",
+    );
+
+    await expect(
+      Reverse.deploy(await legacy.getAddress()),
+    ).to.be.revertedWithCustomError(Reverse, "InvalidRegistry");
+    await expect(
+      Multichain.deploy(
+        await legacy.getAddress(),
+        await reverseResolver.getAddress(),
+      ),
+    ).to.be.revertedWithCustomError(Multichain, "InvalidDependency");
+  });
 });

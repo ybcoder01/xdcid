@@ -24,6 +24,7 @@ contract XNSResolverV2 {
     mapping(bytes32 => mapping(string => TextRecord)) private _texts;
 
     error InvalidRegistry();
+    error NameNotAnchored();
     error NotNameOwner();
     error UnsupportedKey();
 
@@ -44,6 +45,11 @@ contract XNSResolverV2 {
         if (address(registry_) == address(0) || address(registry_).code.length == 0) {
             revert InvalidRegistry();
         }
+        try registry_.ownershipGenerations(bytes32(0)) returns (uint256) {
+            // The resolver requires a generation-aware Registry.
+        } catch {
+            revert InvalidRegistry();
+        }
         registry = registry_;
     }
 
@@ -56,6 +62,7 @@ contract XNSResolverV2 {
         bytes32 node,
         address target
     ) external onlyNameOwner(node) {
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
         if (target == address(0)) {
             delete _addresses[node];
             emit AddressCleared(node, msg.sender);
@@ -75,6 +82,7 @@ contract XNSResolverV2 {
         string calldata key,
         string calldata value
     ) external onlyNameOwner(node) {
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
         if (!_supportedKey(key)) revert UnsupportedKey();
 
         if (bytes(value).length == 0) {

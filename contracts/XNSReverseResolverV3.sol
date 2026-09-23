@@ -19,6 +19,7 @@ contract XNSReverseResolverV3 {
     error InvalidRegistry();
     error InvalidAccount();
     error InvalidName();
+    error NameNotAnchored();
     error NotNameOwner();
     error NotRegistrar();
 
@@ -39,6 +40,11 @@ contract XNSReverseResolverV3 {
             address(registry_) == address(0) ||
             address(registry_).code.length == 0
         ) revert InvalidRegistry();
+        try registry_.ownershipGenerations(bytes32(0)) returns (uint256) {
+            // The resolver requires a generation-aware Registry.
+        } catch {
+            revert InvalidRegistry();
+        }
         registry = registry_;
     }
 
@@ -97,6 +103,7 @@ contract XNSReverseResolverV3 {
     ) private view {
         if (keccak256(bytes(name)) != node) revert InvalidName();
         if (registry.ownerOf(node) != account) revert NotNameOwner();
+        if (registry.ownershipGenerations(node) == 0) revert NameNotAnchored();
     }
 
     function _isActive(
