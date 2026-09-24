@@ -24,6 +24,12 @@ multichain destination. Renewal, transfer, or setting the Registry resolver also
 anchors the name automatically. Once anchored, Registry V2 is authoritative and
 later mutations in the legacy Registry cannot alter the V2 owner.
 
+The Dashboard and name-management page detect generation `0` and show an
+**Activate on Registry V2** action. After its receipt is confirmed, owner-only
+primary, profile, and multichain controls become available without requiring a
+paid renewal. Wallet rejection leaves the name unmigrated and returns the UI to
+an actionable state.
+
 New registrations start directly in Registry V2 and require no migration step.
 
 ## Stale-record invariant

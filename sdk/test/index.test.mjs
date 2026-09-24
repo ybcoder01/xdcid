@@ -246,6 +246,17 @@ test("returns on-chain availability and delegates current pricing to the quote A
   assert.equal(result.totalPrice, null);
 });
 
+test("reads ownership generation for Registry V2 migration checks", async () => {
+  const sdk = new XdcidClient(
+    mockClient(({ functionName }) => {
+      if (functionName === "ownershipGenerations") return 4n;
+      throw new Error("Unexpected read");
+    })
+  );
+
+  assert.equal(await sdk.getOwnershipGeneration("Alice"), 4n);
+});
+
 test("prepares identity management calls without submitting them", () => {
   const target = getAddress("0x9999999999999999999999999999999999999999");
   const sdk = new XdcidClient(mockClient(() => zeroAddress), {
@@ -255,6 +266,8 @@ test("prepares identity management calls without submitting them", () => {
   });
 
   assert.deepEqual(sdk.prepareTransferName("ai", target).args, [nodeForName("ai"), target]);
+  assert.deepEqual(sdk.prepareMigrateName("AI").args, [nodeForName("ai")]);
+  assert.equal(sdk.prepareMigrateName("ai").functionName, "migrateName");
   assert.equal(sdk.prepareSetResolver("ai").functionName, "setResolver");
   assert.equal(sdk.prepareSetAddress("ai", target).functionName, "setAddress");
   assert.deepEqual(sdk.prepareSetText("ai", "website", "https://example.com").args, [

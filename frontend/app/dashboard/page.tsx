@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
+import { RegistryV2MigrationAction } from "../../components/RegistryV2MigrationAction";
 import { loadNames, saveName } from "../../config/localNames";
 import {
   useAccount,
@@ -26,6 +27,8 @@ type OwnedName = {
   name: string;
   node: Hex;
   primary: boolean;
+  ownershipGeneration: string | null;
+  migrationRequired: boolean;
   expiry: {
     timestamp: string;
     iso: string;
@@ -47,9 +50,11 @@ type OwnedNamesResponse = {
 
 function NameRow({
   record,
+  onMigrated,
   onRenewed,
 }: {
   record: OwnedName;
+  onMigrated: () => void;
   onRenewed: () => void | Promise<void>;
 }) {
   const { writeContract, isPending } = useWriteContract();
@@ -118,6 +123,12 @@ function NameRow({
           </button>
         )}
       </div>
+      <RegistryV2MigrationAction
+        migrationRequired={record.migrationRequired}
+        name={record.name}
+        node={record.node}
+        onMigrated={onMigrated}
+      />
     </div>
   );
 }
@@ -293,6 +304,7 @@ export default function Dashboard() {
               className="rounded-md bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
               disabled={
                 !selectedRecord ||
+                selectedRecord.migrationRequired ||
                 !verifiedReverseResolverAvailable ||
                 selectedPrimary === primaryName ||
                 isPrimaryPending ||
@@ -307,6 +319,12 @@ export default function Dashboard() {
                   : "Set primary ID"}
             </button>
           </div>
+          {selectedRecord?.migrationRequired ? (
+            <p className="mt-3 text-sm text-amber-800">
+              Activate this existing ID on Registry V2 below before setting it
+              as primary.
+            </p>
+          ) : null}
           {primaryReceipt.isSuccess && (
             <p className="mt-3 text-sm text-teal-700">
               Primary ID updated on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
@@ -344,6 +362,19 @@ export default function Dashboard() {
         {names.map((record) => (
           <NameRow
             key={record.node}
+            onMigrated={() => {
+              setNames((current) =>
+                current.map((entry) =>
+                  entry.node === record.node
+                    ? {
+                        ...entry,
+                        migrationRequired: false,
+                        ownershipGeneration: "1"
+                      }
+                    : entry
+                )
+              );
+            }}
             onRenewed={loadOwnedNames}
             record={record}
           />

@@ -140,6 +140,7 @@ const fallbackClient = createXdcidClient({
 
 The SDK prepares, but never signs or submits, calls for:
 
+- `prepareMigrateName(name)`
 - `prepareTransferName(name, newOwner)`
 - `prepareSetResolver(name, resolver?)`
 - `prepareSetAddress(name, address)`
@@ -154,6 +155,11 @@ Submit a prepared call with the current owner's wallet on XDC mainnet:
 const request = xdcid.prepareSetPrimaryName("alice.xdc");
 await walletClient.writeContract({ account, ...request });
 ```
+
+For a name inherited by Registry V2, call
+`getOwnershipGeneration(name)`. Generation `0` is read-only until the current
+owner submits the one-time `prepareMigrateName(name)` transaction. Migration
+does not change the owner or expiration date.
 
 ## Multichain records
 
