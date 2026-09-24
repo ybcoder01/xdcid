@@ -52,3 +52,26 @@ test("retired Apothem deployment consoles lead to the guarded activation page", 
     );
   }
 });
+
+test("the activation handoff includes public and server-side quote targets", async () => {
+  const contents = await source(
+    "frontend/app/deployment/apothem-registry-v2-activation/ApothemRegistryV2ActivationClient.tsx",
+  );
+
+  assert.match(contents, /XNS_SIGNED_QUOTE_REGISTRAR=\$\{REGISTRAR\}/);
+  assert.match(contents, /XNS_SUBDOMAIN_REGISTRAR=\$\{SUBDOMAIN_REGISTRAR\}/);
+  assert.match(contents, /XNS_SIGNED_QUOTE_REGISTRAR=\$\{PREVIOUS_CONSUMER\}/);
+  assert.match(
+    contents,
+    /XNS_SUBDOMAIN_REGISTRAR=\$\{PREVIOUS_SUBDOMAIN_REGISTRAR\}/,
+  );
+});
+
+test("the post-activation smoke test exercises both signed quote APIs", async () => {
+  const contents = await source("scripts/smoke-apothem-registry-v2.mjs");
+
+  assert.match(contents, /postData\("\/api\/v1\/registrar\/quote"/);
+  assert.match(contents, /postData\("\/api\/v1\/subdomain\/quote"/);
+  assert.match(contents, /registration quote registrar/);
+  assert.match(contents, /subdomain quote registrar/);
+});
