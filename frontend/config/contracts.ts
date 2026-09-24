@@ -433,6 +433,20 @@ export const registryAbi = [
   },
   {
     type: "function",
+    name: "ownershipGenerations",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "migrateName",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: []
+  },
+  {
+    type: "function",
     name: "setResolver",
     stateMutability: "nonpayable",
     inputs: [

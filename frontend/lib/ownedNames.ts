@@ -179,6 +179,8 @@ export type OwnedName = {
   name: string;
   node: Hex;
   primary: boolean;
+  ownershipGeneration: string | null;
+  migrationRequired: boolean;
   expiry: {
     timestamp: string;
     iso: string;
@@ -519,7 +521,7 @@ export async function getOwnedNamesData(
         const records = await Promise.all(
           batch.map(async (name) => {
             const node = keccak256(stringToHex(name));
-            const [owner, expiry] = await Promise.all([
+            const [owner, expiry, ownershipGeneration] = await Promise.all([
               activeClient.readContract({
                 address: registryAddress,
                 abi: registryAbi,
@@ -531,17 +533,25 @@ export async function getOwnedNamesData(
                 abi: registryAbi,
                 functionName: "expiryOf",
                 args: [node]
-              })
+              }),
+              activeClient.readContract({
+                address: registryAddress,
+                abi: registryAbi,
+                functionName: "ownershipGenerations",
+                args: [node]
+              }).catch(() => null)
             ]);
-            return { name, node, owner, expiry };
+            return { name, node, owner, expiry, ownershipGeneration };
           })
         );
 
-        records.forEach(({ name, node, owner, expiry }) => {
+        records.forEach(({ name, node, owner, expiry, ownershipGeneration }) => {
           if (owner.toLowerCase() === address.toLowerCase() && expiry > now) {
             owned.push({
               name,
               node,
+              ownershipGeneration: ownershipGeneration?.toString() ?? null,
+              migrationRequired: ownershipGeneration === 0n,
               expiry: {
                 timestamp: expiry.toString(),
                 iso: new Date(Number(expiry) * 1000).toISOString()

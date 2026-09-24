@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { isAddress, keccak256, stringToHex, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
+import { RegistryV2MigrationAction } from "../../../components/RegistryV2MigrationAction";
 import { SignedRenewalControls } from "../../../components/SignedRenewalControls";
 import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
 import { isNonZeroAddress } from "../../../lib/addressValidation";
@@ -45,6 +46,15 @@ export default function NamePage() {
     query: { enabled: isValid && !!node }
   });
 
+  const ownershipGeneration = useReadContract({
+    chainId: activeXnsChainId,
+    address: activeRegistryAddress,
+    abi: registryAbi,
+    functionName: "ownershipGenerations",
+    args: node ? [node] : undefined,
+    query: { enabled: isValid && !!node }
+  });
+
   const resolvedAddress = useReadContract({
     address: addresses.verifiedResolver,
     abi: resolverAbi,
@@ -77,6 +87,9 @@ export default function NamePage() {
     () => !!address && !!owner.data && owner.data.toLowerCase() === address.toLowerCase(),
     [address, owner.data]
   );
+  const migrationRequired = isOwner && ownershipGeneration.data === 0n;
+  const ownerRecordsEnabled =
+    isOwner && !migrationRequired && !ownershipGeneration.isLoading;
 
   function saveAddress() {
     if (!node || !isAddress(addr)) return;
@@ -165,6 +178,24 @@ export default function NamePage() {
         </section>
       ) : null}
 
+      {isOwner && node && (migrationRequired || ownershipGeneration.isLoading) ? (
+        <section className="mt-6">
+          <RegistryV2MigrationAction
+            migrationRequired={migrationRequired}
+            name={name}
+            node={node}
+            onMigrated={async () => {
+              await ownershipGeneration.refetch();
+            }}
+          />
+          {ownershipGeneration.isLoading ? (
+            <p className="rounded-md border border-black/10 bg-white p-4 text-sm text-neutral-600 shadow-sm">
+              Checking Registry V2 activation status…
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <div className="mt-6 grid gap-3 sm:grid-cols-2">
         {textKeys.map((key, index) => (
           <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm" key={key}>
@@ -174,11 +205,11 @@ export default function NamePage() {
         ))}
       </div>
 
-      {isOwner && node && multichainResolverAvailable && (
+      {ownerRecordsEnabled && node && multichainResolverAvailable && (
         <MultichainAddressManager name={name} node={node} />
       )}
 
-      {isOwner && node && !multichainResolverAvailable && (
+      {ownerRecordsEnabled && node && !multichainResolverAvailable && (
         <section className="mt-8 rounded-md border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">
             Five-network records
@@ -194,7 +225,7 @@ export default function NamePage() {
         </section>
       )}
 
-      {isOwner && activeResolverSuiteAvailable && (
+      {ownerRecordsEnabled && activeResolverSuiteAvailable && (
         <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Edit records</h2>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-neutral-50 p-3">

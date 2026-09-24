@@ -5,7 +5,7 @@
   "scripts": {
     "test": "hardhat test && pnpm test:sdk && pnpm test:runtime-config",
     "test:sdk": "pnpm build:sdk && node --test sdk/test/*.test.mjs",
-    "test:runtime-config": "node --test scripts/test/apothem-runtime-config.test.mjs",
+    "test:runtime-config": "node --test scripts/test/*.test.mjs",
     "compile": "hardhat compile",
     "index:legacy-domains": "hardhat run --no-compile scripts/index-legacy-domains.ts",
     "build:sdk": "tsc -p sdk/tsconfig.json",

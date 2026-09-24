@@ -196,6 +196,20 @@ const registryAbi = [
   },
   {
     type: "function",
+    name: "ownershipGenerations",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "migrateName",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: []
+  },
+  {
+    type: "function",
     name: "transferName",
     stateMutability: "nonpayable",
     inputs: [
@@ -667,6 +681,25 @@ export class XdcidClient {
       target: target === zeroAddress ? null : getAddress(target),
       recordOwner: recordOwner === zeroAddress ? null : getAddress(recordOwner),
       active
+    };
+  }
+
+  async getOwnershipGeneration(value: string): Promise<bigint> {
+    return this.read<bigint>({
+      address: this.contracts.registry,
+      abi: registryAbi,
+      functionName: "ownershipGenerations",
+      args: [nodeForName(value)]
+    });
+  }
+
+  prepareMigrateName(value: string) {
+    return {
+      chainId: XDC_CHAIN_ID,
+      address: this.contracts.registry,
+      abi: registryAbi,
+      functionName: "migrateName" as const,
+      args: [nodeForName(value)] as const
     };
   }
 
