@@ -3,8 +3,9 @@
   "private": true,
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "test": "hardhat test && pnpm test:sdk",
+    "test": "hardhat test && pnpm test:sdk && pnpm test:runtime-config",
     "test:sdk": "pnpm build:sdk && node --test sdk/test/*.test.mjs",
+    "test:runtime-config": "node --test scripts/test/apothem-runtime-config.test.mjs",
     "compile": "hardhat compile",
     "index:legacy-domains": "hardhat run --no-compile scripts/index-legacy-domains.ts",
     "build:sdk": "tsc -p sdk/tsconfig.json",
@@ -47,6 +48,7 @@
     "verify:primary-resolution:apothem": "hardhat run scripts/verify-apothem-primary-resolution.ts --network apothem",
     "verify:registry-v2:apothem": "hardhat run scripts/verify-apothem-registry-v2-stack.ts --network apothem",
     "preflight:registry-v2:apothem": "hardhat run scripts/preflight-apothem-registry-v2-activation.ts --network apothem",
+    "smoke:registry-v2:apothem": "node scripts/smoke-apothem-registry-v2.mjs",
     "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem",
     "verify:primary-resolution:xdc": "hardhat run scripts/verify-mainnet-primary-resolution.ts --network xdc"
   },

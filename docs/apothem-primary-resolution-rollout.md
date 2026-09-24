@@ -1,5 +1,10 @@
 # Apothem primary owner resolution rollout
 
+> **Superseded:** This is a historical record of the September 2026
+> primary-resolution rollout. Do not use its addresses or activation steps for
+> the Registry V2 migration. Use
+> [`registry-v2-migration.md`](./registry-v2-migration.md) instead.
+
 This rollout replaces only the active Apothem registration stack. It does not
 change XDC mainnet or move user funds.
 

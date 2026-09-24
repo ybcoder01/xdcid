@@ -1,15 +1,5 @@
-import { notFound } from "next/navigation";
-import ApothemPrimaryResolutionDeploymentClient from "./ApothemPrimaryResolutionDeploymentClient";
-
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
 export default function ApothemPrimaryResolutionDeploymentPage() {
-  if (
-    process.env.VERCEL_ENV !== "preview" ||
-    process.env.ENABLE_APOTHEM_PRIMARY_RESOLUTION_DEPLOYMENT !== "true"
-  ) {
-    notFound();
-  }
-
-  return <ApothemPrimaryResolutionDeploymentClient />;
+  redirect("/deployment/apothem-registry-v2-activation");
 }
