@@ -123,6 +123,86 @@ The testnet Registry and Subdomain Registrar now respect
 `NEXT_PUBLIC_XNS_REGISTRY` and `NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR`; Production
 configuration remains independent.
 
+## Apothem activation runbook
+
+The six-contract stack was verified on XDCScan Testnet at these addresses:
+
+- Registry V2: `0xA601b5e9114c0DfeCea4E0ef99D6Fc020B330512`
+- Primary Registrar: `0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b`
+- Forward Resolver V2: `0x5F20A2eb2E3c81b4ecc5d5bA3177225d7E3E1a94`
+- Reverse Resolver V3: `0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD`
+- Multichain Resolver V2: `0x05Efa9641b03eEe2a4624F2974e1E1192019d363`
+- Subdomain Registrar: `0x826b8599d38fcE73b246143b61955Dde0E9AfF68`
+
+The Discount Authorization proposal was submitted in transaction
+`0x22f3f3aeae4b9425870ab7c154f37a4cf2b8bdc84cae0af8ddecc2af16c27c8f`.
+Its exact earliest activation is Unix time `1790346749` (25 September 2026,
+18:32:29 GST). Do not replace or resubmit this proposal.
+
+Use the protected Preview route `/deployment/apothem-registry-v2-activation`.
+It shares the existing `ENABLE_APOTHEM_REGISTRY_V2_DEPLOYMENT=true` Preview-only
+gate, validates deployed bytecode, ownership, immutable dependencies, the exact
+pending consumer and exact activation timestamp, and enables only
+`activatePendingConfiguration()`. Registry V2 was already initialized with the
+new registrar, so a second Registry activation transaction is neither required
+nor possible. The legacy `/deployment/apothem-registrar-v2-activation` route now
+redirects to the Registry V2 activation console.
+
+Before and immediately after activation, run:
+
+```bash
+pnpm preflight:registry-v2:apothem
+```
+
+The command is read-only. It must report `READY` before the transaction and
+`ACTIVE` after it. Only after the `ACTIVE` result should the following six
+variables be applied to the Preview environment:
+
+```dotenv
+NEXT_PUBLIC_XNS_REGISTRY=0xA601b5e9114c0DfeCea4E0ef99D6Fc020B330512
+NEXT_PUBLIC_XNS_REGISTRAR=0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b
+NEXT_PUBLIC_XNS_RESOLVER_V2=0x5F20A2eb2E3c81b4ecc5d5bA3177225d7E3E1a94
+NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD
+NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x05Efa9641b03eEe2a4624F2974e1E1192019d363
+NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=0x826b8599d38fcE73b246143b61955Dde0E9AfF68
+```
+
+The `dev` branch Preview snapshot taken before activation is:
+
+```dotenv
+NEXT_PUBLIC_XNS_REGISTRY=<unset; effective 0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1>
+NEXT_PUBLIC_XNS_REGISTRAR=0xE35722cB7d04Ba36ed284910528A64B1dE855a20
+NEXT_PUBLIC_XNS_RESOLVER_V2=0xc5897D100e811A91E398567a593BD671DE42e5d2
+NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0x1ff9B9c9463a2d85029bdD3AFC99a8cf51260Ee2
+NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x2212Fc40Feda6e8DD7030E9B70B38c7EB79f6989
+NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=<unset; effective 0xa2135729ce122ef93158FCc4C69683155e6707d3>
+```
+
+An app rollback restores that exact branch-scoped state and redeploys. It does
+not revert the Discount Authorization consumer; changing that consumer again
+requires a new 48-hour on-chain proposal.
+
+### Required lifecycle test after the Preview switch
+
+1. Confirm wallet restore and Dashboard/Send navigation with Wallet A.
+2. Migrate one active legacy name and verify owner, expiry and resolver state.
+3. Register a new name; confirm it appears on the Dashboard and becomes primary
+   only when the wallet has no valid primary.
+4. Resolve the primary name on XDC, Ethereum, Base, Arbitrum and Polygon before
+   overrides; every network should return the owner wallet.
+5. Save five distinct destinations, verify network-specific resolution, then
+   clear one destination and confirm only that network falls back to the owner.
+6. Renew both a migrated legacy name and a Registry V2 name; confirm expiry
+   increases without erasing records.
+7. Transfer A to B, verify old records are inactive, configure fresh B records,
+   then transfer B back to A and confirm stale A records do not reactivate.
+8. Confirm a second registration does not replace a valid existing primary and
+   that manual primary selection works.
+9. Test subdomain registration, resolution, renewal and transfer beneath a
+   Registry V2 parent.
+10. Reject one registration or record-update transaction and confirm the UI
+    returns to a usable state without showing an unsaved change.
+
 ## Subdomains
 
 The existing subdomain contract can continue serving subdomains created under
