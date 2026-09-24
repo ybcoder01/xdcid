@@ -1,7 +1,4 @@
-import { notFound } from "next/navigation";
-import ApothemPrimaryResolutionActivationClient from "./ApothemPrimaryResolutionActivationClient";
-
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Activate primary resolution | XDCID",
@@ -9,12 +6,5 @@ export const metadata = {
 };
 
 export default function ApothemPrimaryResolutionActivationPage() {
-  if (
-    process.env.VERCEL_ENV !== "preview" ||
-    process.env.ENABLE_APOTHEM_PRIMARY_RESOLUTION_ACTIVATION !== "true"
-  ) {
-    notFound();
-  }
-
-  return <ApothemPrimaryResolutionActivationClient />;
+  redirect("/deployment/apothem-registry-v2-activation");
 }

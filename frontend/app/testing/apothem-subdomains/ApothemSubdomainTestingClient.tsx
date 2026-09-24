@@ -18,9 +18,10 @@ import {
 } from "viem";
 import { isNonZeroAddress } from "../../../lib/addressValidation";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../../../lib/xdcWriteGas";
+import { activeSubdomainRegistrarAddress } from "../../../config/contracts";
 
 const TEST_WALLET = getAddress("0x9c67d6cfE6A73497e7348b6b852495CA6236C29a");
-const REGISTRAR = getAddress("0xa2135729ce122ef93158FCc4C69683155e6707d3");
+const REGISTRAR = getAddress(activeSubdomainRegistrarAddress);
 const CHAIN_ID = 51;
 
 const apothem = {

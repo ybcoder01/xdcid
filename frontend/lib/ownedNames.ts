@@ -14,6 +14,7 @@ import {
 } from "viem";
 import { XDC_MAINNET_DEPLOYMENT } from "../../sdk/src/deployment/deployments";
 import {
+  activeRegistryAddress,
   addresses,
   apothemRegistration,
   registryAbi,
@@ -32,9 +33,9 @@ import { xdcClient } from "./xdcClient";
 // makes names registered through it disappear from the dashboard catalog.
 const MAINNET_REGISTRAR_HISTORY =
   XDC_MAINNET_DEPLOYMENT.active.historicalRegistrars;
-const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
 const APOTHEM_REGISTRAR_HISTORY = [
-  "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
+  "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d",
+  "0xE35722cB7d04Ba36ed284910528A64B1dE855a20"
 ] as const;
 // XNSRegistrarV2 was activated shortly before its first registration at block
 // 86,906,032. Starting just before that deployment keeps Apothem discovery
@@ -488,7 +489,7 @@ export async function getOwnedNamesData(
   const isApothem = useApothemIndex();
   const activeClient = isApothem ? apothemClient : xdcClient;
   const registryAddress = getAddress(
-    isApothem ? APOTHEM_REGISTRY : addresses.registry
+    isApothem ? activeRegistryAddress : addresses.registry
   );
   const known = validKnownNames(knownNames);
   const cacheSuffix = known.slice().sort().join(",");

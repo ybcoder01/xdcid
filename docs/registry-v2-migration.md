@@ -86,12 +86,13 @@ The already deployed primary-resolution candidate suite is bound to the current
 Registry and must not be treated as the Registry V2 suite. Its pending
 activation should remain untouched while Registry V2 is tested.
 
-## Apothem deployment console
+## Apothem deployment console (retired)
 
-The protected Vercel Preview route
-`/deployment/apothem-registry-v2` is available only when
-`ENABLE_APOTHEM_REGISTRY_V2_DEPLOYMENT=true`. Never enable this flag in the
-Production environment.
+The six-contract deployment is complete. The former protected Vercel Preview
+route `/deployment/apothem-registry-v2`, along with the older Apothem module
+deployment routes, now redirects to the guarded Registry V2 activation page.
+This prevents an operator from accidentally starting another deployment.
+Never enable `ENABLE_APOTHEM_REGISTRY_V2_DEPLOYMENT` in Production.
 
 The console calculates all six CREATE2 addresses before enabling deployment,
 checks the current Registry, pricing, discount, registrar, owner, and deployer,
@@ -166,6 +167,19 @@ NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD
 NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x05Efa9641b03eEe2a4624F2974e1E1192019d363
 NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=0x826b8599d38fcE73b246143b61955Dde0E9AfF68
 ```
+
+After the Preview redeployment, run the API and resolver smoke test with a
+disposable active primary ID:
+
+```bash
+XDCID_SMOKE_NAME=example.xdc \
+XDCID_SMOKE_OWNER=0x... \
+pnpm smoke:registry-v2:apothem
+```
+
+The smoke test verifies the active registrar, Registry V2 ownership and
+expiry, reverse resolution, all five multichain destinations, the public name
+and reverse APIs, and Dashboard-owned-name discovery. It performs no writes.
 
 The `dev` branch Preview snapshot taken before activation is:
 

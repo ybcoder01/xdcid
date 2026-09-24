@@ -1,5 +1,10 @@
 # Apothem release candidate evidence — 21 September 2026
 
+> **Historical evidence:** This snapshot predates the Registry V2 migration.
+> Its addresses must not be treated as the current Apothem configuration. See
+> [`registry-v2-migration.md`](./registry-v2-migration.md) for the
+> reviewed replacement stack and activation procedure.
+
 This document records the tested state of the XDCID Apothem release candidate.
 It is evidence for a future production decision, not approval to deploy contracts,
 change Production environment variables, or merge `dev` into `main`.
