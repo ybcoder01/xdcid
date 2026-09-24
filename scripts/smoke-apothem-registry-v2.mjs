@@ -23,6 +23,9 @@ const name = process.env.XDCID_SMOKE_NAME?.trim().toLowerCase();
 const expectedOwner = process.env.XDCID_SMOKE_OWNER
   ? getAddress(process.env.XDCID_SMOKE_OWNER)
   : undefined;
+const subdomainParent = (
+  process.env.XDCID_SMOKE_SUBDOMAIN_PARENT || name || ""
+).trim().toLowerCase();
 
 if (!name || !name.endsWith(".xdc")) {
   throw new Error("Set XDCID_SMOKE_NAME to an active disposable Apothem .xdc name");
@@ -94,11 +97,52 @@ if (!ownedData.names?.some((entry) => entry.name === name)) {
   throw new Error("owned-name API did not include the smoke-test name");
 }
 
+const uniqueLabel = `smoke-${Date.now().toString(36)}`;
+const [registrarQuote, subdomainQuote] = await Promise.all([
+  postData("/api/v1/registrar/quote", {
+    name: `${uniqueLabel}.xdc`,
+    product: "registration",
+    termYears: 1,
+    paymentCurrency: "USDC",
+    payer: owner,
+    nameOwner: owner,
+  }),
+  postData("/api/v1/subdomain/quote", {
+    parentName: subdomainParent,
+    label: uniqueLabel,
+    action: "registration",
+    termYears: 1,
+    paymentCurrency: "USDC",
+    payer: owner,
+    subdomainOwner: owner,
+  }),
+]);
+assertAddress("registration quote registrar", registrarQuote.registrar, STACK.registrar);
+assertAddress(
+  "subdomain quote registrar",
+  subdomainQuote.registrar,
+  STACK.subdomainRegistrar,
+);
+
 console.log(`Registry V2 smoke test passed for ${name} (${owner}) at ${baseUrl}`);
 
 async function getData(path) {
   const response = await fetch(baseUrl + path, {
     headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.version !== "v1" || !("data" in payload)) {
+    throw new Error(`${path} failed: ${JSON.stringify(payload)}`);
+  }
+  return payload.data;
+}
+
+async function postData(path, body) {
+  const response = await fetch(baseUrl + path, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(15_000),
   });
   const payload = await response.json();

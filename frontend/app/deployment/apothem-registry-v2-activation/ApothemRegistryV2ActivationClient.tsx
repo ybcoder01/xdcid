@@ -31,6 +31,7 @@ const COLLISION_REGISTRY = getAddress("0xe7CfeC8729686CcB2FB25B8275D6bd6Bc68A4bf
 const PRICING_POLICY = getAddress("0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81");
 const DISCOUNT_AUTHORIZATION = getAddress("0x37A013d55393f0824eFD40C648111f39D18C5F46");
 const PREVIOUS_CONSUMER = getAddress("0xE35722cB7d04Ba36ed284910528A64B1dE855a20");
+const PREVIOUS_SUBDOMAIN_REGISTRAR = getAddress("0xa2135729ce122ef93158FCc4C69683155e6707d3");
 const EARLIEST_ACTIVATION = 1790346749n;
 const PROPOSAL_TRANSACTION = "0x22f3f3aeae4b9425870ab7c154f37a4cf2b8bdc84cae0af8ddecc2af16c27c8f";
 
@@ -255,7 +256,7 @@ export default function ApothemRegistryV2ActivationClient() {
             <section className="rounded-[2rem] border border-amber-300 bg-amber-50 p-7">
               <p className="text-sm font-bold uppercase tracking-[0.2em] text-amber-800">Release gate</p>
               <h2 className="mt-3 text-xl font-semibold">Do not switch Preview variables early</h2>
-              <p className="mt-3 text-sm leading-6 text-amber-950">First confirm the page reaches “active”, then run the CLI preflight. Only then switch the six Preview variables and execute the complete lifecycle checklist.</p>
+              <p className="mt-3 text-sm leading-6 text-amber-950">First confirm the page reaches “active”, then run the CLI preflight. Only then switch all eight Preview variables together and execute the complete lifecycle checklist.</p>
             </section>
           </aside>
         </section>
@@ -371,11 +372,11 @@ function Transaction({ hash }: { hash: Hex }) {
 }
 
 function previewVariables() {
-  return `NEXT_PUBLIC_XNS_REGISTRY=${REGISTRY}\nNEXT_PUBLIC_XNS_REGISTRAR=${REGISTRAR}\nNEXT_PUBLIC_XNS_RESOLVER_V2=${FORWARD_RESOLVER}\nNEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=${REVERSE_RESOLVER}\nNEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=${MULTICHAIN_RESOLVER}\nNEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=${SUBDOMAIN_REGISTRAR}`;
+  return `NEXT_PUBLIC_XNS_REGISTRY=${REGISTRY}\nNEXT_PUBLIC_XNS_REGISTRAR=${REGISTRAR}\nNEXT_PUBLIC_XNS_RESOLVER_V2=${FORWARD_RESOLVER}\nNEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=${REVERSE_RESOLVER}\nNEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=${MULTICHAIN_RESOLVER}\nNEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=${SUBDOMAIN_REGISTRAR}\nXNS_SIGNED_QUOTE_REGISTRAR=${REGISTRAR}\nXNS_SUBDOMAIN_REGISTRAR=${SUBDOMAIN_REGISTRAR}`;
 }
 
 function rollbackVariables() {
-  return `NEXT_PUBLIC_XNS_REGISTRY=<unset; effective ${PREVIOUS_REGISTRY}>\nNEXT_PUBLIC_XNS_REGISTRAR=${PREVIOUS_CONSUMER}\nNEXT_PUBLIC_XNS_RESOLVER_V2=0xc5897D100e811A91E398567a593BD671DE42e5d2\nNEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0x1ff9B9c9463a2d85029bdD3AFC99a8cf51260Ee2\nNEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x2212Fc40Feda6e8DD7030E9B70B38c7EB79f6989\nNEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=<unset; effective 0xa2135729ce122ef93158FCc4C69683155e6707d3>`;
+  return `NEXT_PUBLIC_XNS_REGISTRY=<unset; effective ${PREVIOUS_REGISTRY}>\nNEXT_PUBLIC_XNS_REGISTRAR=${PREVIOUS_CONSUMER}\nNEXT_PUBLIC_XNS_RESOLVER_V2=0xc5897D100e811A91E398567a593BD671DE42e5d2\nNEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0x1ff9B9c9463a2d85029bdD3AFC99a8cf51260Ee2\nNEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x2212Fc40Feda6e8DD7030E9B70B38c7EB79f6989\nNEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=<unset; effective ${PREVIOUS_SUBDOMAIN_REGISTRAR}>\nXNS_SIGNED_QUOTE_REGISTRAR=${PREVIOUS_CONSUMER}\nXNS_SUBDOMAIN_REGISTRAR=${PREVIOUS_SUBDOMAIN_REGISTRAR}`;
 }
 
 function stageLabel(stage: ApothemRegistryV2ActivationStage | undefined, countdown: string) {

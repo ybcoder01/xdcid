@@ -156,8 +156,10 @@ pnpm preflight:registry-v2:apothem
 ```
 
 The command is read-only. It must report `READY` before the transaction and
-`ACTIVE` after it. Only after the `ACTIVE` result should the following six
-variables be applied to the Preview environment:
+`ACTIVE` after it. Only after the `ACTIVE` result should the following eight
+variables be applied together to the Preview environment. The two server-side
+variables are required by the signed registration and subdomain quote APIs;
+switching only the public variables leaves those APIs on the retired stack.
 
 ```dotenv
 NEXT_PUBLIC_XNS_REGISTRY=0xA601b5e9114c0DfeCea4E0ef99D6Fc020B330512
@@ -166,6 +168,8 @@ NEXT_PUBLIC_XNS_RESOLVER_V2=0x5F20A2eb2E3c81b4ecc5d5bA3177225d7E3E1a94
 NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD
 NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x05Efa9641b03eEe2a4624F2974e1E1192019d363
 NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=0x826b8599d38fcE73b246143b61955Dde0E9AfF68
+XNS_SIGNED_QUOTE_REGISTRAR=0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b
+XNS_SUBDOMAIN_REGISTRAR=0x826b8599d38fcE73b246143b61955Dde0E9AfF68
 ```
 
 After the Preview redeployment, run the API and resolver smoke test with a
@@ -174,12 +178,16 @@ disposable active primary ID:
 ```bash
 XDCID_SMOKE_NAME=example.xdc \
 XDCID_SMOKE_OWNER=0x... \
+XDCID_SMOKE_SUBDOMAIN_PARENT=parent-with-over-one-year-left.xdc \
 pnpm smoke:registry-v2:apothem
 ```
 
 The smoke test verifies the active registrar, Registry V2 ownership and
 expiry, reverse resolution, all five multichain destinations, the public name
-and reverse APIs, and Dashboard-owned-name discovery. It performs no writes.
+and reverse APIs, Dashboard-owned-name discovery, and signed registration and
+subdomain quote generation. The subdomain parent must be controlled by the
+smoke-test owner and retain more than one year of registration. It performs no
+on-chain writes.
 
 The `dev` branch Preview snapshot taken before activation is:
 
@@ -190,6 +198,8 @@ NEXT_PUBLIC_XNS_RESOLVER_V2=0xc5897D100e811A91E398567a593BD671DE42e5d2
 NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0x1ff9B9c9463a2d85029bdD3AFC99a8cf51260Ee2
 NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x2212Fc40Feda6e8DD7030E9B70B38c7EB79f6989
 NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=<unset; effective 0xa2135729ce122ef93158FCc4C69683155e6707d3>
+XNS_SIGNED_QUOTE_REGISTRAR=0xE35722cB7d04Ba36ed284910528A64B1dE855a20
+XNS_SUBDOMAIN_REGISTRAR=0xa2135729ce122ef93158FCc4C69683155e6707d3
 ```
 
 An app rollback restores that exact branch-scoped state and redeploys. It does
