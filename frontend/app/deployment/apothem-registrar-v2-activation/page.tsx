@@ -1,4 +1,4 @@
-import ApothemRegistrarV2ActivationClient from "./ApothemRegistrarV2ActivationClient";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Activate Registrar V2 | XDCID",
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function Page() {
-  return <ApothemRegistrarV2ActivationClient />;
+  redirect("/deployment/apothem-registry-v2-activation");
 }
