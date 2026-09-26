@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "./XNSRegistry.sol";
 import "./XNSPricingPolicyV2.sol";
+import "./XNSPricingPolicyCompatibility.sol";
 import "./XNSDiscountAuthorization.sol";
 
 interface IXNSPrimaryNameInitializer {
@@ -384,7 +385,8 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
         ) revert QuoteLifetimeTooLong();
         if (quote.nonce != nonces[msg.sender]) revert InvalidNonce();
 
-        grossUsdMicros = pricingPolicy.priceUsdMicrosForVersion(
+        grossUsdMicros = XNSPricingPolicyCompatibility.priceUsdMicrosForVersion(
+            pricingPolicy,
             XNSPricingPolicyV2.Product(quote.product),
             labelLength,
             quote.termYears,
