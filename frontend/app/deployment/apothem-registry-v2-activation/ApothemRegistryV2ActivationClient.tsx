@@ -3,15 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createPublicClient,
-  createWalletClient,
-  custom,
   getAddress,
   http,
   parseAbi,
   type Address,
-  type EIP1193Provider,
   type Hex,
 } from "viem";
+import { useAccount, useSwitchChain, useWriteContract } from "wagmi";
+import { useRecoverableWalletConnection } from "../../../lib/useRecoverableWalletConnection";
 import {
   deriveApothemRegistryV2ActivationStage,
   type ApothemRegistryV2ActivationStage,
@@ -111,11 +110,16 @@ const stageCopy: Record<ApothemRegistryV2ActivationStage, { label: string; detai
 
 export default function ApothemRegistryV2ActivationClient() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
-  const [account, setAccount] = useState<Address>();
   const [message, setMessage] = useState("Reading the reviewed Apothem rollout state…");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [hash, setHash] = useState<Hex>();
+  const { address: connectedAddress, chainId, status: accountStatus } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const { writeContractAsync } = useWriteContract();
+  const { canRequestConnection, requestConnection } = useRecoverableWalletConnection();
+  const account = connectedAddress ? getAddress(connectedAddress) : undefined;
+  const ownerConnected = account === OWNER;
 
   const refresh = useCallback(async () => {
     try {
@@ -157,32 +161,28 @@ export default function ApothemRegistryV2ActivationClient() {
   }
 
   async function connectOwner() {
-    await run(async () => {
-      const provider = injectedProvider();
-      const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
-      if (!accounts[0]) throw new Error("The wallet returned no account.");
-      const selected = getAddress(accounts[0]);
-      if (selected !== OWNER) throw new Error(`Select the protocol-owner wallet ${OWNER}.`);
-      await ensureApothem(provider);
-      const checked = await refresh();
-      if (checked.stage === "invalid") throw new Error("The live state does not match the reviewed rollout.");
-      setAccount(selected);
-      setMessage(`Owner wallet connected. ${stageCopy[checked.stage].detail}`);
-    });
+    if (!account) {
+      await requestConnection();
+      return;
+    }
+    if (!ownerConnected) {
+      setMessage(`The connected account is not the protocol owner. Select ${OWNER} in your wallet.`);
+      return;
+    }
+    if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
+    setMessage(`Owner wallet connected. ${stageCopy[snapshot?.stage ?? "invalid"].detail}`);
   }
 
   async function activate() {
-    if (!account || snapshot?.stage !== "ready") return;
+    if (!account || !ownerConnected || snapshot?.stage !== "ready") return;
     await run(async () => {
-      const provider = injectedProvider();
-      await validateSelectedOwner(provider, account);
+      if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
       const checked = await readSnapshot();
       if (checked.stage !== "ready") throw new Error("The reviewed activation is not currently eligible.");
 
-      const wallet = createWalletClient({ chain, transport: custom(provider) });
-      const transactionHash = await wallet.writeContract({
+      const transactionHash = await writeContractAsync({
         account,
-        chain,
+        chainId: chain.id,
         address: DISCOUNT_AUTHORIZATION,
         abi: discountAbi,
         functionName: "activatePendingConfiguration",
@@ -237,8 +237,12 @@ export default function ApothemRegistryV2ActivationClient() {
             </div>
             <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-700">{message}</div>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Action label={account ? `Owner ${shortAddress(account)}` : "Connect owner wallet"} onClick={connectOwner} disabled={busy} />
-              <Action label="Activate reviewed configuration" onClick={activate} disabled={busy || !account || stage !== "ready"} warning />
+              <Action
+                label={ownerConnected ? `Owner ${shortAddress(account)}` : account ? "Select owner wallet" : accountStatus === "connecting" || accountStatus === "reconnecting" ? "Connecting owner wallet…" : "Connect owner wallet"}
+                onClick={connectOwner}
+                disabled={busy || ownerConnected || (!account && !canRequestConnection)}
+              />
+              <Action label="Activate reviewed configuration" onClick={activate} disabled={busy || !ownerConnected || stage !== "ready"} warning />
             </div>
           </div>
 
@@ -397,28 +401,4 @@ function formatCountdown(totalSeconds: number) {
 
 function shortAddress(address: Address) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
-
-function injectedProvider(): EIP1193Provider {
-  const provider = (window as Window & { ethereum?: EIP1193Provider }).ethereum;
-  if (!provider) throw new Error("No injected wallet was detected. Open this Preview in a browser with MetaMask.");
-  return provider;
-}
-
-async function validateSelectedOwner(provider: EIP1193Provider, expectedOwner: Address) {
-  await ensureApothem(provider);
-  const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
-  if (!accounts[0] || getAddress(accounts[0]) !== expectedOwner || expectedOwner !== OWNER) {
-    throw new Error("The selected wallet is no longer the reviewed protocol owner.");
-  }
-}
-
-async function ensureApothem(provider: EIP1193Provider) {
-  const current = await provider.request({ method: "eth_chainId" }) as string;
-  if (Number.parseInt(current, 16) === chain.id) return;
-  try {
-    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x33" }] });
-  } catch {
-    await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: "0x33", chainName: chain.name, nativeCurrency: chain.nativeCurrency, rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: [chain.blockExplorers.default.url] }] });
-  }
 }
