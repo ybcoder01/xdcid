@@ -178,6 +178,11 @@ export default function ApothemRegistryV2ActivationClient() {
     await run(async () => {
       if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
       const checked = await readSnapshot();
+      setSnapshot(checked);
+      if (checked.stage === "active") {
+        setMessage(stageCopy.active.detail);
+        return;
+      }
       if (checked.stage !== "ready") throw new Error("The reviewed activation is not currently eligible.");
 
       const transactionHash = await writeContractAsync({
