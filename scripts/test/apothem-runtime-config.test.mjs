@@ -53,6 +53,25 @@ test("retired Apothem deployment consoles lead to the guarded activation page", 
   }
 });
 
+test("the pricing compatibility recovery is preview-only and proposes both delays", async () => {
+  const page = await source(
+    "frontend/app/deployment/apothem-pricing-compatibility/page.tsx",
+  );
+  const client = await source(
+    "frontend/app/deployment/apothem-registry-v2/ApothemRegistryV2DeploymentClient.tsx",
+  );
+
+  assert.match(page, /VERCEL_ENV !== "preview"/);
+  assert.match(page, /ENABLE_APOTHEM_REGISTRY_V2_DEPLOYMENT/);
+  assert.match(page, /notFound\(\)/);
+  assert.match(client, /functionName: "proposeRegistrar"/);
+  assert.match(client, /functionName: "proposeConfiguration"/);
+  assert.match(client, /functionName: "activateRegistrar"/);
+  assert.match(client, /functionName: "activatePendingConfiguration"/);
+  assert.match(client, /pricing-compatible Registrar/);
+  assert.match(client, /pricing-compatible Subdomain Registrar/);
+});
+
 test("the activation handoff includes public and server-side quote targets", async () => {
   const contents = await source(
     "frontend/app/deployment/apothem-registry-v2-activation/ApothemRegistryV2ActivationClient.tsx",
