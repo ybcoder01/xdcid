@@ -872,10 +872,12 @@ function environmentValues(deployment?: Deployment) {
   return {
     NEXT_PUBLIC_XNS_REGISTRY: deployment?.registry,
     NEXT_PUBLIC_XNS_REGISTRAR: deployment?.registrar,
+    XNS_SIGNED_QUOTE_REGISTRAR: deployment?.registrar,
     NEXT_PUBLIC_XNS_RESOLVER_V2: deployment?.forwardResolver,
     NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2: deployment?.reverseResolver,
     NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER: deployment?.multichainResolver,
     NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR: deployment?.subdomainRegistrar,
+    XNS_SUBDOMAIN_REGISTRAR: deployment?.subdomainRegistrar,
   };
 }
 
