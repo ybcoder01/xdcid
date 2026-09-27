@@ -132,28 +132,42 @@ configuration remains independent.
 
 ## Apothem activation runbook
 
-The six-contract stack was verified on XDCScan Testnet at these addresses:
+The stable Registry and resolver stack was verified on XDCScan Testnet at these
+addresses:
 
 - Registry V2: `0xA601b5e9114c0DfeCea4E0ef99D6Fc020B330512`
-- Primary Registrar: `0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b`
+- Superseded Primary Registrar: `0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b`
 - Forward Resolver V2: `0x5F20A2eb2E3c81b4ecc5d5bA3177225d7E3E1a94`
 - Reverse Resolver V3: `0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD`
 - Multichain Resolver V2: `0x05Efa9641b03eEe2a4624F2974e1E1192019d363`
-- Subdomain Registrar: `0x826b8599d38fcE73b246143b61955Dde0E9AfF68`
+- Superseded Subdomain Registrar: `0x826b8599d38fcE73b246143b61955Dde0E9AfF68`
 
-The Discount Authorization proposal was submitted in transaction
-`0x22f3f3aeae4b9425870ab7c154f37a4cf2b8bdc84cae0af8ddecc2af16c27c8f`.
-Its exact earliest activation is Unix time `1790346749` (25 September 2026,
-18:32:29 GST). Do not replace or resubmit this proposal.
+The first registrar and subdomain registrar did not expose the deployed Pricing
+Policy V2 compatibility ABI. They were replaced with two verified modules while
+the Registry, resolvers, Pricing Policy and Discount Authorization remain
+unchanged:
 
-Use the protected Preview route `/deployment/apothem-registry-v2-activation`.
+- Pricing-compatible Primary Registrar:
+  `0x28fbEfF349909A99232b771aaE40541500cC7050`
+- Pricing-compatible Subdomain Registrar:
+  `0xCc3395928DFD31a27c764fc97356800eeD4C936a`
+
+The exact Registry registrar proposal was submitted in transaction
+`0xbbb5a6343165605111104edd545c0d2a36d68b303a154bd38a9299e83e5d4bf6`.
+It becomes eligible at Unix time `1790591244` (28 September 2026, 14:27:24
+GST). The exact Discount Authorization proposal was submitted in transaction
+`0x938113f46c2bbff0a85ffc74ccacb27de15ae6481edfa8753a9d7691cb2b8bfb`
+and becomes eligible at Unix time `1790591254` (28 September 2026, 14:27:34
+GST). Do not replace or resubmit either proposal.
+
+Use the protected Preview route `/deployment/apothem-pricing-compatibility`.
 It shares the existing `ENABLE_APOTHEM_REGISTRY_V2_DEPLOYMENT=true` Preview-only
 gate, validates deployed bytecode, ownership, immutable dependencies, the exact
-pending consumer and exact activation timestamp, and enables only
-`activatePendingConfiguration()`. Registry V2 was already initialized with the
-new registrar, so a second Registry activation transaction is neither required
-nor possible. The legacy `/deployment/apothem-registrar-v2-activation` route now
-redirects to the Registry V2 activation console.
+pending registrar, pending consumer and both exact activation timestamps. On a
+fresh page load it restores the reviewed state without redeploying or
+reproposing. After both deadlines it enables only `activateRegistrar()` and
+`activatePendingConfiguration()`. The former Registry V2 activation route and
+older deployment routes redirect to this guarded console.
 
 Before and immediately after activation, run:
 
@@ -169,13 +183,13 @@ switching only the public variables leaves those APIs on the retired stack.
 
 ```dotenv
 NEXT_PUBLIC_XNS_REGISTRY=0xA601b5e9114c0DfeCea4E0ef99D6Fc020B330512
-NEXT_PUBLIC_XNS_REGISTRAR=0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b
+NEXT_PUBLIC_XNS_REGISTRAR=0x28fbEfF349909A99232b771aaE40541500cC7050
 NEXT_PUBLIC_XNS_RESOLVER_V2=0x5F20A2eb2E3c81b4ecc5d5bA3177225d7E3E1a94
 NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2=0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD
 NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0x05Efa9641b03eEe2a4624F2974e1E1192019d363
-NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=0x826b8599d38fcE73b246143b61955Dde0E9AfF68
-XNS_SIGNED_QUOTE_REGISTRAR=0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b
-XNS_SUBDOMAIN_REGISTRAR=0x826b8599d38fcE73b246143b61955Dde0E9AfF68
+NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR=0xCc3395928DFD31a27c764fc97356800eeD4C936a
+XNS_SIGNED_QUOTE_REGISTRAR=0x28fbEfF349909A99232b771aaE40541500cC7050
+XNS_SUBDOMAIN_REGISTRAR=0xCc3395928DFD31a27c764fc97356800eeD4C936a
 ```
 
 After the Preview redeployment, run the API and resolver smoke test with a

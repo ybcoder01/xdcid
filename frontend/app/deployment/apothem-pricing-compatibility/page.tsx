@@ -4,7 +4,7 @@ import ApothemRegistryV2DeploymentClient from "../apothem-registry-v2/ApothemReg
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Deploy Apothem Pricing Compatibility Fix | XDCID",
+  title: "Activate Apothem Pricing Compatibility Fix | XDCID",
   robots: { index: false, follow: false },
 };
 

@@ -51,6 +51,14 @@ test("retired Apothem deployment consoles lead to the guarded activation page", 
       `${route} must not expose a repeat deployment action`,
     );
   }
+
+  const previousActivation = await source(
+    "frontend/app/deployment/apothem-registry-v2-activation/page.tsx",
+  );
+  assert.match(
+    previousActivation,
+    /redirect\("\/deployment\/apothem-pricing-compatibility"\)/,
+  );
 });
 
 test("the pricing compatibility recovery is preview-only and proposes both delays", async () => {
@@ -70,6 +78,12 @@ test("the pricing compatibility recovery is preview-only and proposes both delay
   assert.match(client, /functionName: "activatePendingConfiguration"/);
   assert.match(client, /pricing-compatible Registrar/);
   assert.match(client, /pricing-compatible Subdomain Registrar/);
+  assert.match(client, /REGISTRY_ACTIVATION_TIME = 1790591244n/);
+  assert.match(client, /DISCOUNT_ACTIVATION_TIME = 1790591254n/);
+  assert.match(client, /REGISTRAR_PROPOSAL_TRANSACTION/);
+  assert.match(client, /DISCOUNT_PROPOSAL_TRANSACTION/);
+  assert.match(client, /setActivationStage\(activation\.stage\)/);
+  assert.match(client, /activationStage !== "ready"/);
 });
 
 test("the pricing compatibility recovery hands off public and server quote targets", async () => {
@@ -103,16 +117,25 @@ test("Apothem verification prefers the dedicated XDCScan key and pins the recove
 
 test("the activation handoff includes public and server-side quote targets", async () => {
   const contents = await source(
-    "frontend/app/deployment/apothem-registry-v2-activation/ApothemRegistryV2ActivationClient.tsx",
+    "frontend/app/deployment/apothem-registry-v2/ApothemRegistryV2DeploymentClient.tsx",
   );
 
-  assert.match(contents, /XNS_SIGNED_QUOTE_REGISTRAR=\$\{REGISTRAR\}/);
-  assert.match(contents, /XNS_SUBDOMAIN_REGISTRAR=\$\{SUBDOMAIN_REGISTRAR\}/);
-  assert.match(contents, /XNS_SIGNED_QUOTE_REGISTRAR=\$\{PREVIOUS_CONSUMER\}/);
-  assert.match(
-    contents,
-    /XNS_SUBDOMAIN_REGISTRAR=\$\{PREVIOUS_SUBDOMAIN_REGISTRAR\}/,
-  );
+  assert.match(contents, /XNS_SIGNED_QUOTE_REGISTRAR: deployment\?\.registrar/);
+  assert.match(contents, /XNS_SUBDOMAIN_REGISTRAR: deployment\?\.subdomainRegistrar/);
+  assert.match(contents, /functionName: "activateRegistrar"/);
+  assert.match(contents, /functionName: "activatePendingConfiguration"/);
+});
+
+test("the compatibility preflight and smoke test pin the final reviewed modules", async () => {
+  const preflight = await source("scripts/preflight-apothem-registry-v2-activation.ts");
+  const smoke = await source("scripts/smoke-apothem-registry-v2.mjs");
+
+  for (const contents of [preflight, smoke]) {
+    assert.match(contents, /0x28fbEfF349909A99232b771aaE40541500cC7050/);
+    assert.match(contents, /0xCc3395928DFD31a27c764fc97356800eeD4C936a/);
+  }
+  assert.match(preflight, /registryActivation: 1790591244n/);
+  assert.match(preflight, /discountActivation: 1790591254n/);
 });
 
 test("the post-activation smoke test exercises both signed quote APIs", async () => {
