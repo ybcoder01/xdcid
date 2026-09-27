@@ -47,6 +47,7 @@
     "preflight:deployment:xdc": "hardhat run scripts/preflight-mainnet-deployment.ts --network xdc",
     "verify:primary-resolution:apothem": "hardhat run scripts/verify-apothem-primary-resolution.ts --network apothem",
     "verify:registry-v2:apothem": "hardhat run scripts/verify-apothem-registry-v2-stack.ts --network apothem",
+    "verify:pricing-compatibility:apothem": "hardhat run scripts/verify-apothem-pricing-compatibility.ts --network apothem",
     "preflight:registry-v2:apothem": "hardhat run scripts/preflight-apothem-registry-v2-activation.ts --network apothem",
     "smoke:registry-v2:apothem": "node scripts/smoke-apothem-registry-v2.mjs",
     "verify:subdomain:apothem": "hardhat run scripts/verify-apothem-subdomain.ts --network apothem",

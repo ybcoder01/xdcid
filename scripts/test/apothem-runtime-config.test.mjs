@@ -72,6 +72,35 @@ test("the pricing compatibility recovery is preview-only and proposes both delay
   assert.match(client, /pricing-compatible Subdomain Registrar/);
 });
 
+test("the pricing compatibility recovery hands off public and server quote targets", async () => {
+  const client = await source(
+    "frontend/app/deployment/apothem-registry-v2/ApothemRegistryV2DeploymentClient.tsx",
+  );
+
+  assert.match(client, /NEXT_PUBLIC_XNS_REGISTRAR: deployment\?\.registrar/);
+  assert.match(client, /XNS_SIGNED_QUOTE_REGISTRAR: deployment\?\.registrar/);
+  assert.match(
+    client,
+    /NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR: deployment\?\.subdomainRegistrar/,
+  );
+  assert.match(client, /XNS_SUBDOMAIN_REGISTRAR: deployment\?\.subdomainRegistrar/);
+});
+
+test("Apothem verification prefers the dedicated XDCScan key and pins the recovery modules", async () => {
+  const config = await source("hardhat.config.ts");
+  const verifier = await source(
+    "scripts/verify-apothem-pricing-compatibility.ts",
+  );
+
+  assert.match(
+    config,
+    /process\.env\.XDCSCAN_API_KEY \|\| process\.env\.ETHERSCAN_API_KEY/,
+  );
+  assert.match(verifier, /0x28fbEfF349909A99232b771aaE40541500cC7050/);
+  assert.match(verifier, /0xCc3395928DFD31a27c764fc97356800eeD4C936a/);
+  assert.match(verifier, /network\.chainId !== 51n/);
+});
+
 test("the activation handoff includes public and server-side quote targets", async () => {
   const contents = await source(
     "frontend/app/deployment/apothem-registry-v2-activation/ApothemRegistryV2ActivationClient.tsx",
