@@ -10,11 +10,11 @@ import {
 
 const STACK = {
   registry: getAddress("0xA601b5e9114c0DfeCea4E0ef99D6Fc020B330512"),
-  registrar: getAddress("0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b"),
+  registrar: getAddress("0x28fbEfF349909A99232b771aaE40541500cC7050"),
   forwardResolver: getAddress("0x5F20A2eb2E3c81b4ecc5d5bA3177225d7E3E1a94"),
   reverseResolver: getAddress("0xD3909DC7461D06D0Eb57A3b23685cB6f11D474aD"),
   multichainResolver: getAddress("0x05Efa9641b03eEe2a4624F2974e1E1192019d363"),
-  subdomainRegistrar: getAddress("0x826b8599d38fcE73b246143b61955Dde0E9AfF68"),
+  subdomainRegistrar: getAddress("0xCc3395928DFD31a27c764fc97356800eeD4C936a"),
 };
 
 const NETWORKS = [50n, 1n, 8453n, 42161n, 137n];

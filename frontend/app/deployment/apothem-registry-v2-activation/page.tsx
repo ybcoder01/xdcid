@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import ApothemRegistryV2ActivationClient from "./ApothemRegistryV2ActivationClient";
+import { notFound, redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -16,5 +15,5 @@ export default function ApothemRegistryV2ActivationPage() {
     notFound();
   }
 
-  return <ApothemRegistryV2ActivationClient />;
+  redirect("/deployment/apothem-pricing-compatibility");
 }

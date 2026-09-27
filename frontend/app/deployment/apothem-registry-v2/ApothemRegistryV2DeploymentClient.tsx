@@ -23,6 +23,12 @@ const ORIGINAL_LEGACY_REGISTRY = getAddress("0xe7CfeC8729686CcB2FB25B8275D6bd6Bc
 const PRICING_POLICY = getAddress("0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81");
 const DISCOUNT_AUTHORIZATION = getAddress("0x37A013d55393f0824eFD40C648111f39D18C5F46");
 const CURRENT_REGISTRAR = getAddress("0xd51EdbE27BffA0993D9CFf672613a2d6eC0a5D7b");
+const COMPATIBLE_REGISTRAR = getAddress("0x28fbEfF349909A99232b771aaE40541500cC7050");
+const COMPATIBLE_SUBDOMAIN_REGISTRAR = getAddress("0xCc3395928DFD31a27c764fc97356800eeD4C936a");
+const REGISTRY_ACTIVATION_TIME = 1790591244n;
+const DISCOUNT_ACTIVATION_TIME = 1790591254n;
+const REGISTRAR_PROPOSAL_TRANSACTION = "0xbbb5a6343165605111104edd545c0d2a36d68b303a154bd38a9299e83e5d4bf6" as Hex;
+const DISCOUNT_PROPOSAL_TRANSACTION = "0x938113f46c2bbff0a85ffc74ccacb27de15ae6481edfa8753a9d7691cb2b8bfb" as Hex;
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920ca78fbf26c0b4956c");
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 const CHAIN_ID = 51;
@@ -59,18 +65,19 @@ type Deployment = {
   multichainResolver: Address;
   subdomainRegistrar: Address;
 };
+type ActivationStage = "unknown" | "waiting" | "ready" | "active";
 
 const initialSteps: Step[] = [
   { label: "Validate the active Registry V2 stack", state: "pending" },
   { label: "Confirm existing Registry V2", state: "pending" },
   { label: "Confirm existing Forward Resolver V2", state: "pending" },
   { label: "Confirm existing Reverse Resolver V3", state: "pending" },
-  { label: "Deploy pricing-compatible Registrar", state: "pending" },
+  { label: "Verify pricing-compatible Registrar", state: "pending" },
   { label: "Confirm existing Multichain Resolver V2", state: "pending" },
-  { label: "Deploy pricing-compatible Subdomain Registrar", state: "pending" },
+  { label: "Verify pricing-compatible Subdomain Registrar", state: "pending" },
   { label: "Validate every immutable binding", state: "pending" },
-  { label: "Propose the compatible Registrar in Registry V2", state: "pending" },
-  { label: "Propose the compatible Registrar as discount consumer", state: "pending" },
+  { label: "Verify the compatible Registrar proposal in Registry V2", state: "pending" },
+  { label: "Verify the compatible discount-consumer proposal", state: "pending" },
   { label: "Confirm both synchronized timelocks", state: "pending" },
 ];
 
@@ -79,6 +86,7 @@ export default function ApothemRegistryV2DeploymentClient() {
   const [deployment, setDeployment] = useState<Deployment>();
   const [steps, setSteps] = useState<Step[]>(initialSteps);
   const [activationTime, setActivationTime] = useState<bigint>(0n);
+  const [activationStage, setActivationStage] = useState<ActivationStage>("unknown");
   const [activationHashes, setActivationHashes] = useState<Hex[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(
@@ -112,11 +120,23 @@ export default function ApothemRegistryV2DeploymentClient() {
       await validateDependencies(publicClient, selected);
       const predicted = predictDeployment();
       await validateExistingPredictions(publicClient, predicted);
+      const activation = await validateProposal(
+        publicClient,
+        predicted.registry,
+        predicted.registrar,
+        selected,
+      );
       setAccount(selected);
       setDeployment(predicted);
-      updateStep(0, { state: "complete", error: undefined });
+      setActivationTime(activation.activationTime);
+      setActivationStage(activation.stage);
+      setSteps(initialSteps.map((step) => ({ ...step, state: "complete" })));
       setMessage(
-        "Preflight passed. Existing modules will be reused; only the compatible Registrar and Subdomain Registrar need deployment.",
+        activation.stage === "active"
+          ? "Compatibility activation is complete. Apply the displayed Preview variables and run the post-activation checks."
+          : activation.stage === "ready"
+            ? "Both reviewed delays have elapsed. The two exact compatibility activations are ready."
+            : "The verified compatibility contracts and both exact proposals are present. No deployment or reproposal is required.",
       );
     } catch (cause) {
       const error = errorMessage(cause);
@@ -129,6 +149,7 @@ export default function ApothemRegistryV2DeploymentClient() {
     if (!account || !deployment || busy) return;
     setBusy(true);
     setActivationTime(0n);
+    setActivationStage("unknown");
     setSteps((current) => [
       { ...current[0], state: "complete", error: undefined },
       ...initialSteps.slice(1),
@@ -286,16 +307,17 @@ export default function ApothemRegistryV2DeploymentClient() {
 
       updateStep(10, { state: "confirming" });
       await validateDeployment(publicClient, deployment, true);
-      const pendingTime = await validateProposal(
+      const activation = await validateProposal(
         publicClient,
         deployment.registry,
         deployment.registrar,
         signer,
       );
-      setActivationTime(pendingTime);
+      setActivationTime(activation.activationTime);
+      setActivationStage(activation.stage);
       updateStep(10, { state: "complete" });
       setMessage(
-        pendingTime === 0n
+        activation.stage === "active"
           ? "Compatibility activation is already complete. Apply the displayed Preview variables and redeploy dev."
           : "The compatible modules are deployed and both 48-hour proposals are synchronized. The dev app remains on the current Registrar until activation.",
       );
@@ -318,7 +340,7 @@ export default function ApothemRegistryV2DeploymentClient() {
   }
 
   async function activate() {
-    if (!account || !deployment || busy || activationTime === 0n) return;
+    if (!account || !deployment || busy || activationStage !== "ready") return;
     setBusy(true);
     setActivationHashes([]);
     try {
@@ -332,11 +354,16 @@ export default function ApothemRegistryV2DeploymentClient() {
         chain: apothem,
         transport: custom(provider),
       });
-      const latestBlock = await publicClient.getBlock({ blockTag: "latest" });
-      if (latestBlock.timestamp < activationTime) {
-        throw new Error("The synchronized 48-hour delay has not finished");
-      }
       await validateDeployment(publicClient, deployment, true);
+      const checked = await validateProposal(
+        publicClient,
+        deployment.registry,
+        deployment.registrar,
+        account,
+      );
+      if (checked.stage !== "ready") {
+        throw new Error("The exact reviewed activation is not ready");
+      }
 
       const hashes: Hex[] = [];
       const activeRegistrar = getAddress(
@@ -381,6 +408,7 @@ export default function ApothemRegistryV2DeploymentClient() {
 
       await validateActiveConfiguration(publicClient, deployment.registrar);
       setActivationTime(0n);
+      setActivationStage("active");
       setMessage(
         "Compatibility activation is complete. Apply the displayed Preview variables, redeploy dev, and run registration lifecycle tests.",
       );
@@ -399,12 +427,12 @@ export default function ApothemRegistryV2DeploymentClient() {
             Apothem only · pricing compatibility recovery
           </p>
           <h1 className="mt-3 text-3xl font-semibold sm:text-4xl">
-            Deploy compatible registration modules
+            Activate verified compatibility modules
           </h1>
           <p className="mt-3 text-slate-700">
-            This protected preview reuses the active Registry V2 stack and
-            deploys only two corrected modules. It never changes production,
-            reads a private key, activates either proposal, or switches the dev app.
+            This protected Preview validates the two verified compatibility modules
+            and their exact delayed proposals. It never changes production, reads a
+            private key, reproposes a change, or switches the dev app.
           </p>
         </section>
 
@@ -428,20 +456,13 @@ export default function ApothemRegistryV2DeploymentClient() {
               {account ? "Owner wallet verified" : "Connect and run preflight"}
             </button>
             <button
-              className="rounded-xl bg-teal-700 px-5 py-3 font-semibold text-white disabled:opacity-50"
-              onClick={deploy}
-              disabled={!account || !deployment || busy}
-            >
-              {busy ? "Transaction sequence in progress..." : "Deploy reviewed addresses"}
-            </button>
-            <button
               className="rounded-xl bg-amber-600 px-5 py-3 font-semibold text-white disabled:opacity-50"
               onClick={activate}
               disabled={
                 !account ||
                 !deployment ||
                 busy ||
-                activationTime === 0n
+                activationStage !== "ready"
               }
             >
               Activate after both delays
@@ -450,6 +471,10 @@ export default function ApothemRegistryV2DeploymentClient() {
           {activationHashes.map((hash) => (
             <TransactionLink key={hash} hash={hash} />
           ))}
+          <div className="mt-5 grid gap-3 text-sm md:grid-cols-2">
+            <TransactionLink hash={REGISTRAR_PROPOSAL_TRANSACTION} label="Registry registrar proposal" />
+            <TransactionLink hash={DISCOUNT_PROPOSAL_TRANSACTION} label="Discount consumer proposal" />
+          </div>
         </section>
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
@@ -475,7 +500,7 @@ export default function ApothemRegistryV2DeploymentClient() {
         </section>
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
-          <h2 className="text-2xl font-semibold">Transaction sequence</h2>
+          <h2 className="text-2xl font-semibold">Verified preparation sequence</h2>
           <ol className="mt-5 space-y-4">
             {steps.map((step, index) => (
               <li key={step.label} className="rounded-xl border p-4">
@@ -504,7 +529,7 @@ export default function ApothemRegistryV2DeploymentClient() {
             Do not apply these values until every contract is verified and both
             delayed Registrar and discount-consumer proposals have been activated.
           </p>
-          {activationTime > 0n ? (
+          {activationStage !== "active" && activationTime > 0n ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
               Earliest synchronized activation: {new Date(Number(activationTime) * 1000).toLocaleString()}
             </p>
@@ -527,6 +552,9 @@ function predictDeployment(): Deployment {
     [registry, ORIGINAL_LEGACY_REGISTRY, PRICING_POLICY, DISCOUNT_AUTHORIZATION, reverseResolver, OWNER],
     salt(24004),
   );
+  if (registrar !== COMPATIBLE_REGISTRAR) {
+    throw new Error("Compatible Registrar deterministic address changed unexpectedly");
+  }
   const multichainResolver = predictedAddress(
     artifacts.multichainResolver,
     [registry, reverseResolver],
@@ -537,6 +565,9 @@ function predictDeployment(): Deployment {
     [registry, PRICING_POLICY, OWNER],
     salt(24006),
   );
+  if (subdomainRegistrar !== COMPATIBLE_SUBDOMAIN_REGISTRAR) {
+    throw new Error("Compatible Subdomain Registrar deterministic address changed unexpectedly");
+  }
   return {
     registry,
     forwardResolver,
@@ -641,8 +672,8 @@ async function validateDependencies(
     throw new Error("The connected wallet does not own every reused Apothem control contract");
   }
   if (
-    getAddress(activeRegistrar as Address) !== CURRENT_REGISTRAR ||
-    getAddress(consumer as Address) !== CURRENT_REGISTRAR
+    ![CURRENT_REGISTRAR, COMPATIBLE_REGISTRAR].includes(getAddress(activeRegistrar as Address)) ||
+    ![CURRENT_REGISTRAR, COMPATIBLE_REGISTRAR].includes(getAddress(consumer as Address))
   ) {
     throw new Error("The current Apothem Registrar or discount consumer changed unexpectedly");
   }
@@ -793,7 +824,7 @@ async function validateProposal(
   registry: Address,
   registrar: Address,
   signer: Address,
-): Promise<bigint> {
+): Promise<{ activationTime: bigint; stage: Exclude<ActivationStage, "unknown"> }> {
   const [
     activeRegistrar,
     pendingRegistrar,
@@ -814,21 +845,46 @@ async function validateProposal(
       client.readContract({ address: DISCOUNT_AUTHORIZATION, abi: artifacts.discountAuthorization.abi, functionName: "pendingConsumer" }),
       client.readContract({ address: DISCOUNT_AUTHORIZATION, abi: artifacts.discountAuthorization.abi, functionName: "pendingActivationTime" }),
     ]);
-  if (
+  const registryActive =
     getAddress(activeRegistrar as Address) === registrar &&
-    getAddress(consumer as Address) === registrar
-  ) return 0n;
-  if (
-    getAddress(pendingRegistrar as Address) !== registrar ||
-    !Boolean(hasPending) ||
-    getAddress(pendingSigner as Address) !== signer ||
-    getAddress(pendingConsumer as Address) !== registrar
-  ) {
+    getAddress(pendingRegistrar as Address) === ZERO_ADDRESS &&
+    BigInt(registrarActivationTime as bigint) === 0n;
+  const registryPending =
+    getAddress(activeRegistrar as Address) === CURRENT_REGISTRAR &&
+    getAddress(pendingRegistrar as Address) === registrar &&
+    BigInt(registrarActivationTime as bigint) === REGISTRY_ACTIVATION_TIME;
+  const discountActive =
+    getAddress(consumer as Address) === registrar &&
+    !Boolean(hasPending) &&
+    getAddress(pendingSigner as Address) === ZERO_ADDRESS &&
+    getAddress(pendingConsumer as Address) === ZERO_ADDRESS &&
+    BigInt(consumerActivationTime as bigint) === 0n;
+  const discountPending =
+    getAddress(consumer as Address) === CURRENT_REGISTRAR &&
+    Boolean(hasPending) &&
+    getAddress(pendingSigner as Address) === signer &&
+    getAddress(pendingConsumer as Address) === registrar &&
+    BigInt(consumerActivationTime as bigint) === DISCOUNT_ACTIVATION_TIME;
+
+  if (!(registryActive || registryPending) || !(discountActive || discountPending)) {
     throw new Error("The pending Registry and discount proposals could not be verified");
   }
-  const registryReadyAt = BigInt(registrarActivationTime as bigint);
-  const discountReadyAt = BigInt(consumerActivationTime as bigint);
-  return registryReadyAt > discountReadyAt ? registryReadyAt : discountReadyAt;
+  if (registryActive && discountActive) {
+    return { activationTime: 0n, stage: "active" };
+  }
+
+  const latestBlock = await client.getBlock({ blockTag: "latest" });
+  const activationTime = registryPending && discountPending
+    ? REGISTRY_ACTIVATION_TIME > DISCOUNT_ACTIVATION_TIME
+      ? REGISTRY_ACTIVATION_TIME
+      : DISCOUNT_ACTIVATION_TIME
+    : registryPending
+      ? REGISTRY_ACTIVATION_TIME
+      : DISCOUNT_ACTIVATION_TIME;
+  return {
+    activationTime,
+    stage: latestBlock.timestamp >= activationTime ? "ready" : "waiting",
+  };
 }
 
 async function validateActiveConfiguration(
@@ -890,7 +946,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TransactionLink({ hash }: { hash: Hex }) {
+function TransactionLink({ hash, label }: { hash: Hex; label?: string }) {
   return (
     <a
       className="mt-2 block break-all font-mono text-sm text-blue-700 underline"
@@ -898,7 +954,7 @@ function TransactionLink({ hash }: { hash: Hex }) {
       target="_blank"
       rel="noreferrer"
     >
-      {hash}
+      {label ? `${label}: ${hash}` : hash}
     </a>
   );
 }
