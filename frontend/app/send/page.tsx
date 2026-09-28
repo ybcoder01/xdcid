@@ -52,6 +52,13 @@ import {
   type ExchangeAddressBookEntry,
 } from "../../lib/exchangeAddressBook";
 import { trackPayment } from "../../lib/productAnalytics";
+import {
+  PENDING_CCTP_CHANGED_EVENT,
+  PENDING_CCTP_STORAGE_KEY,
+  readPendingCctpTransfers,
+  removePendingCctpTransfer,
+  type PendingCctpTransfer
+} from "../../lib/pendingCctpTransfers";
 
 const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 const DEFAULT_SOURCE_CHAIN_ID =
@@ -86,6 +93,9 @@ export default function SendPage() {
   const [selectedEntryId, setSelectedEntryId] = useState("");
   const [walletSwitchStatus, setWalletSwitchStatus] = useState("");
   const [pendingWalletChainId, setPendingWalletChainId] = useState<number | null>(null);
+  const [pendingCctpTransfers, setPendingCctpTransfers] = useState<
+    PendingCctpTransfer[]
+  >([]);
   const recordingHashes = useRef(new Set<string>());
   const analyticsHashes = useRef(new Set<string>());
 
@@ -104,6 +114,31 @@ export default function SendPage() {
     chainId: sourceChainId,
     hash
   });
+
+  useEffect(() => {
+    if (!connectedAddress) {
+      setPendingCctpTransfers([]);
+      return;
+    }
+    const refreshPendingTransfers = () => {
+      const payer = connectedAddress.toLowerCase();
+      setPendingCctpTransfers(
+        readPendingCctpTransfers(window.localStorage).filter(
+          (transfer) => transfer.payer.toLowerCase() === payer
+        )
+      );
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === PENDING_CCTP_STORAGE_KEY) refreshPendingTransfers();
+    };
+    refreshPendingTransfers();
+    window.addEventListener(PENDING_CCTP_CHANGED_EVENT, refreshPendingTransfers);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(PENDING_CCTP_CHANGED_EVENT, refreshPendingTransfers);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [connectedAddress]);
 
   useEffect(() => {
     resetNativeTransaction();
@@ -446,6 +481,28 @@ export default function SendPage() {
     setDestinationChainId(swapped.destinationChainId);
   }
 
+  function resumePendingCctpTransfer(transfer: PendingCctpTransfer) {
+    setSelectedEntryId("");
+    setPaymentReference("");
+    setRecipient(transfer.recipient);
+    setAmount(transfer.amount);
+    setToken("USDC");
+    setSourceChainId(transfer.sourceChainId);
+    setDestinationChainId(transfer.destinationChainId);
+    setWalletSwitchStatus(
+      "Pending transfer restored. Review the public burn reference, then resume the attestation lookup."
+    );
+  }
+
+  function forgetPendingCctpTransfer(burnHash: string) {
+    if (!removePendingCctpTransfer(window.localStorage, burnHash)) return;
+    setPendingCctpTransfers((current) =>
+      current.filter(
+        (transfer) => transfer.burnHash.toLowerCase() !== burnHash.toLowerCase()
+      )
+    );
+  }
+
   const resolutionMessage = directRecipient
     ? "Direct wallet address. XDCID resolution is not required."
     : !isValid
@@ -482,6 +539,58 @@ export default function SendPage() {
           <p className="mt-2 text-sm text-neutral-600">
             Resolve an XDCID name or pay a verified EVM wallet address directly.
           </p>
+
+          {pendingCctpTransfers.length > 0 ? (
+            <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-4" aria-labelledby="pending-cctp-heading">
+              <h2 id="pending-cctp-heading" className="text-sm font-semibold text-slate-950">
+                Pending cross-chain transfers
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-neutral-600">
+                These public burn references are saved only in this browser so a refresh does not interrupt recovery.
+              </p>
+              <div className="mt-3 grid gap-3">
+                {pendingCctpTransfers.map((transfer) => {
+                  const pendingSource = getPaymentNetwork(transfer.sourceChainId);
+                  const pendingDestination = getPaymentNetwork(transfer.destinationChainId);
+                  return (
+                    <article key={transfer.burnHash} className="rounded-xl border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-950">
+                        {transfer.amount} USDC · {pendingSource?.name || transfer.sourceChainId} → {pendingDestination?.name || transfer.destinationChainId}
+                      </p>
+                      <p className="mt-1 break-all font-mono text-[11px] leading-5 text-neutral-600">
+                        Burn: {pendingSource?.explorerUrl ? (
+                          <a
+                            className="text-teal-700 underline"
+                            href={`${pendingSource.explorerUrl}/tx/${transfer.burnHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {transfer.burnHash}
+                          </a>
+                        ) : transfer.burnHash}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"
+                          onClick={() => resumePendingCctpTransfer(transfer)}
+                        >
+                          Resume transfer
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-red-300 hover:text-red-700"
+                          onClick={() => forgetPendingCctpTransfer(transfer.burnHash)}
+                        >
+                          Remove reference
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           {token === "USDC" && sourceChainId !== destinationChainId ? (
             <CrossChainPaymentNotice sourceChainId={sourceChainId} />

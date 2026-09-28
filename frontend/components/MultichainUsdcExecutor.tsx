@@ -36,6 +36,13 @@ import {
   getPaymentRouteCapability
 } from "../lib/paymentRouteCapabilities";
 import {
+  findMatchingPendingCctpTransfer,
+  PENDING_CCTP_CHANGED_EVENT,
+  readPendingCctpTransfers,
+  removePendingCctpTransfer,
+  savePendingCctpTransfer
+} from "../lib/pendingCctpTransfers";
+import {
   estimateAdaptiveGasFees,
   isBaseFeeTooLowError
 } from "../lib/gasFeePolicy";
@@ -132,6 +139,7 @@ export function MultichainUsdcExecutor({
   const [recoveryStatus, setRecoveryStatus] = useState<
     "idle" | "checking" | "ready" | "error"
   >("idle");
+  const [restoredPendingTransfer, setRestoredPendingTransfer] = useState(false);
 
   const { address, isConnected, status: accountStatus } = useAccount();
   const { canRequestConnection, requestConnection, connectionTimedOut } =
@@ -157,6 +165,42 @@ export function MultichainUsdcExecutor({
     forwardingAvailable && transferMode === "forwarded";
   const transferModeLocked = requestedTransferMode !== "payer-choice";
   const checkout = presentation === "checkout";
+
+  function notifyPendingTransfersChanged() {
+    window.dispatchEvent(new Event(PENDING_CCTP_CHANGED_EVENT));
+  }
+
+  function rememberPendingTransfer(nextBurnHash: Hash, nextFeeHash?: Hash | "") {
+    if (!address) return;
+    const saved = savePendingCctpTransfer(window.localStorage, {
+      burnHash: nextBurnHash,
+      payer: address,
+      sourceChainId,
+      destinationChainId,
+      amount,
+      recipient,
+      transferMode: automaticForwarding ? "forwarded" : "standard",
+      feeHash: nextFeeHash || undefined
+    });
+    if (saved) notifyPendingTransfersChanged();
+  }
+
+  function forgetPendingTransfer(nextBurnHash: string) {
+    if (!isCctpTransactionHash(nextBurnHash)) return;
+    if (removePendingCctpTransfer(window.localStorage, nextBurnHash)) {
+      notifyPendingTransfersChanged();
+    }
+    setRestoredPendingTransfer(false);
+  }
+
+  useEffect(() => {
+    if (phase !== "complete" || !burnHash) return;
+    if (!isCctpTransactionHash(burnHash)) return;
+    if (removePendingCctpTransfer(window.localStorage, burnHash)) {
+      window.dispatchEvent(new Event(PENDING_CCTP_CHANGED_EVENT));
+    }
+    setRestoredPendingTransfer(false);
+  }, [burnHash, phase]);
 
   useEffect(() => {
     if (phase !== "complete" || !onCompleted || !receiveHash) return;
@@ -225,6 +269,50 @@ export function MultichainUsdcExecutor({
     setRecoveryStatus("idle");
     setFeeHash("");
   }, [amount, sourceChainId, destinationChainId, recipient]);
+
+  useEffect(() => {
+    if (!address || !crossChain) {
+      setRestoredPendingTransfer(false);
+      return;
+    }
+    const pending = findMatchingPendingCctpTransfer(
+      readPendingCctpTransfers(window.localStorage),
+      {
+        payer: address,
+        sourceChainId,
+        destinationChainId,
+        amount,
+        recipient
+      }
+    );
+    if (!pending) {
+      setRestoredPendingTransfer(false);
+      return;
+    }
+    const lockedMode = requestedTransferMode === "automatic"
+      ? "forwarded"
+      : requestedTransferMode === "standard"
+        ? "standard"
+        : null;
+    if (lockedMode && pending.transferMode !== lockedMode) {
+      setRestoredPendingTransfer(false);
+      return;
+    }
+    setBurnHash(pending.burnHash);
+    setFeeHash(pending.feeHash || "");
+    setRecoveryFeeHash(pending.feeHash || "");
+    if (!lockedMode) setTransferMode(pending.transferMode);
+    setRecoveredMode(true);
+    setRestoredPendingTransfer(true);
+  }, [
+    address,
+    amount,
+    crossChain,
+    destinationChainId,
+    recipient,
+    requestedTransferMode,
+    sourceChainId
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -430,6 +518,7 @@ export function MultichainUsdcExecutor({
           source.chainId
         );
         setBurnHash(nextBurnHash);
+        rememberPendingTransfer(nextBurnHash, activeFeeHash);
         await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
 
         setPhase("registeringRecovery");
@@ -471,6 +560,7 @@ export function MultichainUsdcExecutor({
         source.chainId
       );
       setBurnHash(nextBurnHash);
+      rememberPendingTransfer(nextBurnHash);
       await sourceClient.waitForTransactionReceipt({ hash: nextBurnHash });
 
       setPhase("waiting");
@@ -494,6 +584,7 @@ export function MultichainUsdcExecutor({
       setError("Enter a valid 32-byte CCTP burn transaction hash");
       return;
     }
+    rememberPendingTransfer(burnHash as Hash, feeHash);
 
     try {
       setPhase("waiting");
@@ -871,7 +962,9 @@ export function MultichainUsdcExecutor({
             Resume after closing or reloading
           </p>
           <p className="mt-1 text-xs text-neutral-600">
-            Select the original source network and paste its public burn transaction hash.
+            {restoredPendingTransfer
+              ? "This public burn reference was restored from this browser. Resume to check Circle and continue the transfer."
+              : "Select the original source network and paste its public burn transaction hash."}
           </p>
           <div className="mt-3 grid gap-2">
             <input
@@ -888,6 +981,16 @@ export function MultichainUsdcExecutor({
             >
               Resume attestation lookup
             </button>
+            {restoredPendingTransfer ? (
+              <button
+                className="justify-self-start text-xs font-semibold text-neutral-500 underline hover:text-red-700 disabled:opacity-50"
+                type="button"
+                onClick={() => forgetPendingTransfer(burnHash)}
+                disabled={working}
+              >
+                Remove this pending reference
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
