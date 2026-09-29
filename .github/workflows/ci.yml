@@ -27,6 +27,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Audit production dependencies
+        run: pnpm audit:production
       - name: Test contracts
         run: pnpm test
       - name: Build frontend

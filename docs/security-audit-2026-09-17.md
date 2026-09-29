@@ -3,7 +3,23 @@
 **Review date:** 17 September 2026  
 **Scope:** XDC mainnet registry, Registrar V2, Pricing Policy V2, Discount Authorization, forward/reverse/multichain resolvers, and the deployed Subdomain Registrar  
 **Review type:** Internal source, test, configuration, bytecode, and live-state review  
-**Status:** High-severity issue remediated in code; Resolver V2 deployment and activation remain pending
+**Status:** Reviewed resolver and registrar remediations deployed and activated on XDC mainnet; multisig ownership and an independent external audit remain pending
+
+## Post-review activation update
+
+The owner-bound forward resolver, owner-verified reverse resolver,
+primary-aware multichain resolver, and primary-aware signed-quote registrar were
+activated on XDC mainnet on 29 September 2026. The active addresses,
+transaction evidence, preserved rollback registrar, and latest read-only
+preflight procedure are recorded in
+[`mainnet-deployment-manifest.md`](./mainnet-deployment-manifest.md).
+
+The findings below describe the deployment state observed on 17 September 2026
+and preserve the original review evidence. Statements that deployment or
+activation remained pending should be read as historical status at the time of
+the review. The current outstanding governance risk is the temporary single-EOA
+protocol owner; the Trust Center also continues to disclose that no independent
+third-party audit has been completed.
 
 ## Executive summary
 
