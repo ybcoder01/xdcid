@@ -1,14 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { NetworkLogo } from "./NetworkLogo";
 
+export type HomepageAvailabilityState =
+  | "idle"
+  | "invalid"
+  | "checking"
+  | "available"
+  | "registered"
+  | "reserved"
+  | "review"
+  | "unavailable"
+  | "error"
+  | "unconfigured"
+  | "unsupported";
+
 type Props = {
+  availabilityState: HomepageAvailabilityState;
   input: string;
   name: string;
   isValid: boolean;
   validationError?: string;
   onInput: (value: string) => void;
-  onCheckAvailability: () => void;
 };
 
 const networks = [
@@ -21,11 +35,11 @@ const networks = [
 
 export function HomepageConceptReview(props: Props) {
   const displayName = props.input.trim() && props.isValid ? props.name : "YOURNAME.XDC";
-  const message = !props.input.trim()
-    ? "Enter a name to check availability"
-    : props.isValid
-      ? `${props.name} is ready to check`
-      : props.validationError;
+  const presentation = availabilityPresentation(
+    props.availabilityState,
+    props.name,
+    props.validationError,
+  );
 
   return (
     <main className="relative h-[calc(100dvh-73px)] min-h-[520px] overflow-hidden bg-white">
@@ -71,9 +85,17 @@ export function HomepageConceptReview(props: Props) {
                   <input aria-invalid={!!props.input.trim() && !props.isValid} className="min-w-0 flex-1 border-0 bg-transparent px-0 py-3 font-mono text-base shadow-none placeholder:text-black/30 focus:shadow-none min-[700px]:text-lg" id="homepage-name" onChange={(event) => props.onInput(event.target.value)} placeholder="yourname" value={props.input} />
                   <span className="font-mono text-base text-[#0d7775] min-[700px]:text-lg">.xdc</span>
                 </div>
-                <button className="border-l-2 border-black bg-black px-4 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white hover:bg-[#0d7775] disabled:cursor-not-allowed disabled:bg-black/35 min-[700px]:px-6" disabled={!props.input.trim() || !props.isValid} onClick={props.onCheckAvailability} type="button">Check availability</button>
+                {presentation.href ? (
+                  <Link className="grid min-w-32 place-items-center border-l-2 border-black bg-black px-4 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white hover:bg-[#0d7775] focus-visible:bg-[#0d7775] min-[700px]:min-w-44 min-[700px]:px-6" href={presentation.href}>
+                    {presentation.action}
+                  </Link>
+                ) : (
+                  <span className="grid min-w-32 place-items-center border-l-2 border-black bg-black/35 px-4 text-center font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white min-[700px]:min-w-44 min-[700px]:px-6">
+                    {presentation.action}
+                  </span>
+                )}
               </div>
-              <p className={props.input.trim() && !props.isValid ? "mt-2 font-mono text-[9px] uppercase tracking-[0.12em] text-red-600" : "mt-2 font-mono text-[9px] uppercase tracking-[0.12em] text-black/40"}>{message}</p>
+              <p aria-live="polite" className={presentation.error ? "mt-2 font-mono text-[9px] uppercase tracking-[0.12em] text-red-600" : presentation.success ? "mt-2 font-mono text-[9px] uppercase tracking-[0.12em] text-[#0d7775]" : "mt-2 font-mono text-[9px] uppercase tracking-[0.12em] text-black/40"}>{presentation.message}</p>
             </div>
           </div>
           <div className="hidden flex-col justify-between border-l border-black bg-[#ff735d] p-5 min-[700px]:col-span-4 min-[700px]:flex min-[700px]:p-6">
@@ -84,4 +106,68 @@ export function HomepageConceptReview(props: Props) {
       </section>
     </main>
   );
+}
+
+function availabilityPresentation(
+  state: HomepageAvailabilityState,
+  name: string,
+  validationError?: string,
+): { action: string; error?: boolean; href?: string; message: string; success?: boolean } {
+  switch (state) {
+    case "available":
+      return {
+        action: "Register →",
+        href: `/register/${encodeURIComponent(name)}`,
+        message: `${name} is available`,
+        success: true,
+      };
+    case "registered":
+      return {
+        action: "View ID →",
+        href: `/name/${encodeURIComponent(name)}`,
+        message: `${name} is already registered`,
+      };
+    case "checking":
+      return { action: "Checking…", message: `Checking ${name}…` };
+    case "invalid":
+      return {
+        action: "Unavailable",
+        error: true,
+        message: validationError || "Enter a valid XDCID",
+      };
+    case "reserved":
+      return {
+        action: "Reserved",
+        message: "Reserved in XDCDomains; migration is required",
+      };
+    case "review":
+      return {
+        action: "Review",
+        message: "Registered in both registries; review is required",
+      };
+    case "unsupported":
+      return {
+        action: "Unavailable",
+        message: "This name length is not currently supported",
+      };
+    case "unconfigured":
+      return {
+        action: "Unavailable",
+        error: true,
+        message: "Registration is not configured",
+      };
+    case "error":
+      return {
+        action: "Try again",
+        error: true,
+        message: "Could not check registry status",
+      };
+    case "unavailable":
+      return { action: "Unavailable", message: `${name} is unavailable` };
+    default:
+      return {
+        action: "Enter a name",
+        message: "Availability is checked automatically",
+      };
+  }
 }
