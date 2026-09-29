@@ -110,13 +110,6 @@ export function Nav() {
           .some((candidate) => candidate.toLowerCase() === address.toLowerCase())),
     [address, authorizedSessionAddress, policyOwner.data, registryOwner.data],
   );
-  const isHomepage = pathname === "/";
-  const displayedNavigationItems = isHomepage
-    ? navigationItems.filter(({ href }) =>
-        ["/send", "/dashboard", "/developers"].includes(href),
-      )
-    : navigationItems;
-
   if (/^\/pay\/[^/]+/.test(pathname)) return null;
 
   return (
@@ -135,7 +128,7 @@ export function Nav() {
           </span>
         </Link>
         <nav className="hidden min-w-0 items-center gap-1 text-sm xl:flex">
-          {displayedNavigationItems.map((item) => (
+          {navigationItems.map((item) => (
             <NavigationLink key={item.href} {...item} />
           ))}
           {canSeeAdmin ? (
@@ -158,7 +151,7 @@ export function Nav() {
         </div>
         {menuOpen ? (
           <nav className="absolute left-4 right-4 top-[calc(100%+0.5rem)] grid gap-1 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-xl xl:hidden">
-            {displayedNavigationItems.map((item) => (
+            {navigationItems.map((item) => (
               <NavigationLink key={item.href} mobile {...item} />
             ))}
             {canSeeAdmin ? (
