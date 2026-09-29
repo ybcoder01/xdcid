@@ -15,7 +15,9 @@ signer, token, and treasury addresses are public on-chain data.
 The manifest separates two states:
 
 - `active` records the contracts currently authorized or used on XDC mainnet.
-- `candidate` records the next owner-bound primary-resolution stack.
+- `candidate` records the reviewed owner-bound primary-resolution rollout
+  target. It remains recorded after activation as immutable release evidence and
+  may therefore equal the corresponding `active` addresses.
 
 Candidate values remain `null` until every contract has been deployed,
 independently verified, and approved for release. A missing candidate value is a
@@ -127,6 +129,25 @@ NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER=0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232
 
 The preserved previous Registrar is
 `0xdEaf1742614908a8d170f4c9520c3cd1e967ef36`.
+
+## Primary-resolution activation evidence
+
+The reviewed rollout was activated on XDC mainnet on 29 September 2026. The
+Discount Authorization consumer was activated first, followed immediately by
+the Registry registrar rotation:
+
+- Discount configuration activation:
+  [`0x716a1893…ec5786`](https://xdcscan.com/tx/0x716a1893de58412cc35ba4a29a15ab6c8069e14e2d4050f74f5ac65984ec5786)
+- Registry registrar activation:
+  [`0x3459526b…0abfab`](https://xdcscan.com/tx/0x3459526b6cc5536e7984ccd4ef4423f3527cbcba63894b8946e8111e6e0abfab)
+
+Post-activation verification at block `107801294` (`2026-09-29T11:10:51Z`)
+confirmed the rollout state as `active`, the Registry registrar as
+`0x3D87B064a06f62cc4a24EAff13A591C9Ba791135`, and every candidate bytecode,
+owner, Registry, Pricing Policy, Discount Authorization, primary resolver, and
+multichain resolver binding. The temporary single-EOA administration exception
+remains recorded and must be resolved through a separate multisig ownership
+migration.
 
 ## Ownership migration
 
