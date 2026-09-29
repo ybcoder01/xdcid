@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatEther, keccak256, stringToHex } from "viem";
-import { BaseNetworkLogo } from "../components/BaseNetworkLogo";
-import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi";
+import { HomepageConceptReview } from "../components/HomepageConceptReview";
+import { SignedRegistrationControls } from "../components/SignedRegistrationControls";
 import {
   addresses,
   apothemRegistration,
@@ -21,63 +21,16 @@ import { parseXnsName } from "../lib/names";
 import { xdcidRegistrationFromOwner } from "../lib/registryStatus";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
 
-type Network = {
-  name: string;
-  logoClass: string;
-  logoSrc?: string;
-  logoImageClass?: string;
-};
-
-const networks: Network[] = [
-  {
-    name: "XDC",
-    logoClass: "bg-white",
-    logoSrc: "https://xinfin.org/assets/images/brand-assets/primary-icon.svg",
-    logoImageClass: "h-7 w-7 scale-[4.4] object-contain"
-  },
-  {
-    name: "Ethereum",
-    logoClass: "bg-white",
-    logoSrc: "https://ethereum.org/images/assets/svgs/eth-diamond-black.svg"
-  },
-  {
-    name: "Base",
-    logoClass: "bg-white"
-  },
-  {
-    name: "Arbitrum",
-    logoClass: "bg-white",
-    logoSrc: "https://raw.githubusercontent.com/OffchainLabs/arbitrum-docs/master/static/img/logo.svg"
-  },
-  {
-    name: "Polygon",
-    logoClass: "bg-white",
-    logoSrc: "https://cdn.simpleicons.org/polygon/8247E5"
-  }
-];
-
-const capabilities = [
-  { name: "Profile", symbol: "ID", color: "text-[#0b6670] bg-[#d9f2f0]" },
-  { name: "Payments", symbol: "$", color: "text-[#c95742] bg-[#ffe8e1]" },
-  { name: "Pay Links", symbol: "↗", color: "text-[#0b6670] bg-[#dff6fb]" },
-  { name: "API", symbol: "</>", color: "text-[#c95742] bg-[#fff0ea]" }
-];
-
 export default function Home() {
   const [input, setInput] = useState("");
+  const [registrationOpen, setRegistrationOpen] = useState(false);
   const { address, isConnected } = useAccount();
   const connectedChainId = useChainId();
   const apothemMode = process.env.NEXT_PUBLIC_PAYMENT_NETWORK_ENV === "testnet";
   const registrationChainId = apothemMode ? apothemRegistration.chainId : 50;
-  const registrationRegistrar = apothemMode
-    ? apothemRegistration.registrar
-    : addresses.registrar;
-  const registrationRegistry = apothemMode
-    ? apothemRegistration.registry
-    : addresses.registry;
-  const registrationPricingPolicy = apothemMode
-    ? apothemRegistration.pricingPolicy
-    : addresses.pricingPolicy;
+  const registrationRegistrar = apothemMode ? apothemRegistration.registrar : addresses.registrar;
+  const registrationRegistry = apothemMode ? apothemRegistration.registry : addresses.registry;
+  const registrationPricingPolicy = apothemMode ? apothemRegistration.pricingPolicy : addresses.pricingPolicy;
   const registrationSignedEnabled = apothemMode || signedRegistrarEnabled;
   const registrationContractsConfigured = apothemMode
     ? registrationRegistrar !== zeroAddress && registrationPricingPolicy !== zeroAddress
@@ -87,13 +40,11 @@ export default function Home() {
   const parsedName = useMemo(() => parseXnsName(input), [input]);
   const { name, isValid, error: validationError } = parsedName;
   const hasInput = input.trim().length > 0;
-  const registrarSupportsName =
-    registrationSignedEnabled || parsedName.label.length >= 3;
-  const canReadContracts =
-    isValid && registrationContractsConfigured && registrarSupportsName;
+  const registrarSupportsName = registrationSignedEnabled || parsedName.label.length >= 3;
+  const canReadContracts = isValid && registrationContractsConfigured && registrarSupportsName;
   const node = useMemo(
     () => (canReadContracts ? keccak256(stringToHex(name)) : undefined),
-    [canReadContracts, name]
+    [canReadContracts, name],
   );
   const availability = useReadContract({
     address: registrationRegistrar,
@@ -101,38 +52,50 @@ export default function Home() {
     abi: registrarAbi,
     functionName: "available",
     args: [name],
-    query: { enabled: canReadContracts }
+    query: { enabled: canReadContracts },
   });
-
   const xdcidOwner = useReadContract({
     address: registrationRegistry,
     chainId: registrationChainId,
     abi: registryAbi,
     functionName: "ownerOf",
     args: node ? [node] : undefined,
-    query: { enabled: !!node }
+    query: { enabled: !!node },
   });
-
   const price = useReadContract({
     address: registrationRegistrar,
     chainId: registrationChainId,
     abi: registrarAbi,
     functionName: "price",
     args: [name],
-    query: { enabled: canReadContracts && !registrationSignedEnabled }
+    query: { enabled: canReadContracts && !registrationSignedEnabled },
   });
-
   const registry = useRegistryStatus(
     name,
     xdcidRegistrationFromOwner(xdcidOwner.data),
     canReadContracts,
-    registrationChainId
+    registrationChainId,
   );
-  const registrationAllowed =
-    availability.data === true && registry.status?.registrationAllowed === true;
+  const registrationAllowed = availability.data === true && registry.status?.registrationAllowed === true;
+
+  useEffect(() => {
+    if (!registrationOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRegistrationOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [registrationOpen]);
 
   function claim() {
-    if (registrationSignedEnabled || !isValid || !registrationContractsConfigured || !address || !price.data || !registrationAllowed) return;
+    if (
+      registrationSignedEnabled ||
+      !isValid ||
+      !registrationContractsConfigured ||
+      !address ||
+      !price.data ||
+      !registrationAllowed
+    ) return;
     writeContract(
       {
         address: registrationRegistrar,
@@ -140,323 +103,126 @@ export default function Home() {
         abi: registrarAbi,
         functionName: "register",
         args: [name, address, 1n],
-        value: price.data
+        value: price.data,
       },
-      {
-        onSuccess: () => saveName(address, name)
-      }
+      { onSuccess: () => saveName(address, name) },
     );
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 md:py-12">
-      <section className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[#f8fbfc] px-6 py-10 shadow-[0_24px_80px_rgba(15,23,42,0.08)] md:px-10 md:py-14">
-        <div aria-hidden="true" className="absolute -right-24 -top-28 h-72 w-72 rounded-full bg-[#9ff3ff]/35 blur-3xl" />
-        <div aria-hidden="true" className="absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-[#ffbfab]/25 blur-3xl" />
-
-        <div className="relative grid items-center gap-12 lg:grid-cols-[0.88fr_1.12fr]">
-          <div className="max-w-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#0b6670]">One name. Five networks.</p>
-            <h1 className="mt-5 text-5xl font-semibold leading-[0.98] tracking-[-0.045em] text-[#131619] sm:text-6xl lg:text-7xl">
-              One XDCID. Five EVM networks.
-            </h1>
-            <p className="mt-6 max-w-lg text-lg leading-8 text-slate-600">
-              Register and own your .xdc name on XDC Network, then set distinct
-              receiving addresses for XDC, Ethereum, Base, Arbitrum, and Polygon.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a className="rounded-xl bg-[#0b6670] px-6 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-[#084f57]" href="#register">
-                Claim your name
-              </a>
-              <Link className="rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-sm font-semibold text-slate-800 hover:border-slate-400 hover:bg-slate-50" href="/dashboard">
-                Go to dashboard
-              </Link>
-            </div>
-            <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-600">
-              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#0b6670]" />User owned</span>
-              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#ff735d]" />Secure by design</span>
-              <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#65d4e1]" />Developer friendly</span>
-            </div>
-          </div>
-
-          <div className="relative rounded-[1.75rem] border border-slate-200/80 bg-white/75 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.09)] backdrop-blur md:p-7">
-            <div className="grid gap-5 md:grid-cols-[1fr_0.95fr]">
-              <div className="relative flex min-h-72 items-center justify-center rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div aria-hidden="true" className="absolute right-[-1.3rem] top-1/2 hidden h-px w-6 bg-[#65d4e1] md:block" />
-                <div className="text-center">
-                  <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-[#0b6670] to-[#19a6a6] text-2xl font-semibold text-white shadow-lg shadow-teal-900/15">
-                    ID
-                  </div>
-                  <p className="mt-5 text-3xl font-semibold tracking-tight text-[#131619]">alice.xdc</p>
-                  <span className="mt-3 inline-flex rounded-full bg-[#dff6fb] px-3 py-1 text-xs font-semibold uppercase tracking-wider text-[#0b6670]">
-                    XDCID
-                  </span>
-                </div>
+    <>
+      <HomepageConceptReview
+        input={input}
+        isValid={isValid}
+        name={name}
+        onCheckAvailability={() => setRegistrationOpen(true)}
+        onInput={setInput}
+        validationError={validationError}
+      />
+      {registrationOpen ? (
+        <div
+          aria-labelledby="registration-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-[#071c1b]/75 p-4 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-black/10 bg-[#f8f5ed] p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#0d7775]">
+                  {apothemMode ? "XDC Apothem test identity" : "XDC mainnet identity"}
+                </p>
+                <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em]" id="registration-title">Claim {name}</h2>
               </div>
-
-              <div className="grid gap-2.5">
-                {networks.map((network) => (
-                  <div key={network.name} className="relative flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                    <span aria-hidden="true" className="absolute -left-5 top-1/2 hidden h-px w-5 bg-[#65d4e1] md:block" />
-                    <span className={"grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl " + network.logoClass}>
-                      {network.name === "Base" ? (
-                        <BaseNetworkLogo />
-                      ) : (
-                        <img
-                          alt=""
-                          aria-hidden="true"
-                          className={network.logoImageClass ?? "h-7 w-7 object-contain"}
-                          height="28"
-                          src={network.logoSrc}
-                          width={network.name === "XDC" ? "36" : "28"}
-                        />
-                      )}
-                    </span>
-                    <span className="font-medium text-slate-800">{network.name}</span>
-                  </div>
-                ))}
-              </div>
+              <button aria-label="Close registration" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-black/15 bg-white text-xl hover:bg-black hover:text-white" onClick={() => setRegistrationOpen(false)} type="button">×</button>
             </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {capabilities.map((capability) => (
-                <div key={capability.name} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-                  <span className={"mx-auto grid h-9 w-9 place-items-center rounded-lg text-xs font-bold " + capability.color}>{capability.symbol}</span>
-                  <p className="mt-2 text-xs font-semibold text-slate-700">{capability.name}</p>
-                </div>
-              ))}
+            <div className="mt-6 flex gap-2 border-2 border-black bg-white p-2">
+              <input aria-invalid={hasInput && !isValid} className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 font-mono text-lg shadow-none focus:shadow-none" onChange={(event) => setInput(event.target.value)} placeholder="yourname" value={input} />
+              <span className="grid min-w-20 place-items-center bg-[#0d7775] px-4 font-mono font-semibold text-white">.xdc</span>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-8 grid gap-4 md:grid-cols-2" aria-label="Choose how to use XDCID">
-        <article className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm md:p-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">For people and teams</p>
-          <h2 className="mt-3 text-2xl font-semibold text-slate-950">Claim and use an XDCID</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            Register a .xdc name, configure five network destinations, receive payments, and manage your wallet-owned identity.
-          </p>
-          <a className="mt-5 inline-flex text-sm font-semibold text-[#0b6670] hover:text-[#084f57]" href="#register">
-            Start with a name →
-          </a>
-        </article>
-        <article className="rounded-2xl border border-slate-800 bg-slate-950 p-6 text-white shadow-sm md:p-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">For developers</p>
-          <h2 className="mt-3 text-2xl font-semibold">Integrate XDCID</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            Start with public HTTPS APIs, contract references, and organization subdomains. The public TypeScript package remains upcoming.
-          </p>
-          <Link className="mt-5 inline-flex text-sm font-semibold text-teal-300 hover:text-teal-200" href="/developers">
-            Open the developer portal →
-          </Link>
-        </article>
-      </section>
-
-      <section className="mt-10 grid gap-6 lg:grid-cols-[1fr_340px]" id="register">
-        <div className="min-w-0 rounded-2xl border border-black/10 bg-white/95 p-6 shadow-sm md:p-8">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">{apothemMode ? "XDC Apothem test identity" : "XDC mainnet identity"}</p>
-            <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950 md:text-4xl">Claim your .XDC name</h2>
-            <p className="mt-3 text-base text-neutral-600">
-              Search, register, and manage XDCID names with wallet-native ownership and resolver records.
+            <p className={hasInput && !isValid ? "mt-2 text-sm text-red-600" : "mt-2 text-sm text-black/50"}>
+              {hasInput && !isValid
+                ? validationError
+                : registrationSignedEnabled
+                  ? "Use 2–63 letters, numbers, or hyphens; a hyphen cannot be first or last."
+                  : "Use 3–63 letters, numbers, or hyphens."}
             </p>
-          </div>
 
-          <div className="mt-8 flex max-w-2xl gap-2 rounded-xl border border-black/10 bg-slate-950 p-2 shadow-sm">
-            <input
-              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white px-4 py-4 text-lg"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="yourname"
-              aria-invalid={hasInput && !isValid}
-            />
-            <span className="grid min-w-20 place-items-center rounded-lg bg-[#65d4e1] px-4 py-4 text-sm font-semibold text-slate-950">
-              .XDC
-            </span>
-          </div>
+            {hasInput ? <LivePricingTiers chainId={registrationChainId} pricingPolicy={registrationPricingPolicy} signedEnabled={registrationSignedEnabled} /> : null}
 
-          <p className={"mt-2 text-sm " + (hasInput && !isValid ? "text-red-600" : "text-neutral-500")}>
-            {hasInput && !isValid
-              ? validationError
-              : signedRegistrarEnabled
-                ? "Use 2-63 letters, numbers, or hyphens; a hyphen cannot be first or last."
-                : "Use 3-63 letters, numbers, or hyphens; two-character names activate with Pricing V2."}
-          </p>
-
-          <LivePricingTiers
-            chainId={registrationChainId}
-            pricingPolicy={registrationPricingPolicy}
-            signedEnabled={registrationSignedEnabled}
-          />
-
-          {hasInput && (
-            <div className="mt-6 rounded-xl border border-black/10 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-lg font-semibold text-slate-950">{isValid ? name : input.trim()}</p>
-                  <p className="text-sm text-neutral-600">
-                    {!isValid
-                      ? validationError
-                      : !registrationContractsConfigured
-                        ? "Contracts not configured"
-                        : !registrarSupportsName
-                          ? "Two-character names become available when Pricing V2 is activated"
-                          : availability.isLoading || xdcidOwner.isLoading || (!registrationSignedEnabled && price.isLoading) || registry.isChecking
-                          ? "Checking both registries..."
-                          : availability.isError || xdcidOwner.isError || (!registrationSignedEnabled && price.isError) || registry.isError
-                            ? "Could not check registry status"
-                            : registry.status?.state === "legacy"
-                              ? "Reserved in XDCDomains; migration required"
-                              : registry.status?.state === "collision"
-                                ? "Registered in both registries; review required"
-                                : registrationAllowed
-                                  ? "Available to claim"
-                                  : registry.status?.state === "xdcid"
-                                    ? "Already registered with XDCID"
-                                    : "Unavailable"}
-                    {!registrationSignedEnabled && price.data ? " - " + formatEther(price.data) + " XDC/year" : ""}
-                  </p>
-                </div>
-                {isValid && registrationAllowed ? (
-                  registrationSignedEnabled ? (
-                    <SignedRegistrationControls
-                      name={name}
-                      enabled={
-                        registrationContractsConfigured &&
-                        isConnected &&
-                        connectedChainId === registrationChainId
-                      }
-                      expectedChainId={registrationChainId}
-                      registrarAddress={registrationRegistrar}
-                      pricingPolicyAddress={registrationPricingPolicy}
-                      nativeCurrencyLabel={apothemMode ? "TXDC" : "XDC"}
-                    />
+            {hasInput ? (
+              <div className="mt-6 border-t border-black/15 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-lg font-semibold">{isValid ? name : input.trim()}</p>
+                    <p className="mt-1 text-sm text-black/55">
+                      {!isValid
+                        ? validationError
+                        : !registrationContractsConfigured
+                          ? "Contracts not configured"
+                          : !registrarSupportsName
+                            ? "This name length is not currently supported"
+                            : availability.isLoading || xdcidOwner.isLoading || (!registrationSignedEnabled && price.isLoading) || registry.isChecking
+                              ? "Checking both registries…"
+                              : availability.isError || xdcidOwner.isError || (!registrationSignedEnabled && price.isError) || registry.isError
+                                ? "Could not check registry status"
+                                : registry.status?.state === "legacy"
+                                  ? "Reserved in XDCDomains; migration required"
+                                  : registry.status?.state === "collision"
+                                    ? "Registered in both registries; review required"
+                                    : registrationAllowed
+                                      ? "Available to claim"
+                                      : registry.status?.state === "xdcid"
+                                        ? "Already registered with XDCID"
+                                        : "Unavailable"}
+                      {!registrationSignedEnabled && price.data ? ` — ${formatEther(price.data)} XDC/year` : ""}
+                    </p>
+                  </div>
+                  {isValid && registrationAllowed ? (
+                    registrationSignedEnabled ? (
+                      <SignedRegistrationControls enabled={registrationContractsConfigured && isConnected && connectedChainId === registrationChainId} expectedChainId={registrationChainId} name={name} nativeCurrencyLabel={apothemMode ? "TXDC" : "XDC"} pricingPolicyAddress={registrationPricingPolicy} registrarAddress={registrationRegistrar} />
+                    ) : (
+                      <button className="bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-[#0d7775] disabled:opacity-50" disabled={!registrationContractsConfigured || !isConnected || isPending} onClick={claim} type="button">Claim</button>
+                    )
+                  ) : isValid && registry.status?.state === "xdcid" ? (
+                    <Link className="border border-black/15 px-5 py-3 text-sm font-semibold hover:bg-white" href={`/name/${name}`}>View</Link>
                   ) : (
-                    <button
-                      className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
-                      disabled={!registrationContractsConfigured || !isConnected || isPending}
-                      onClick={claim}
-                    >
-                      Claim
-                    </button>
-                  )
-                ) : isValid && registry.status?.state === "xdcid" ? (
-                  <Link className="rounded-xl border border-black/10 px-5 py-3 text-sm font-semibold hover:bg-neutral-50" href={"/name/" + name}>View</Link>
-                ) : (
-                  <button className="rounded-xl border border-black/10 px-5 py-3 text-sm text-neutral-400" disabled>
-                    {registry.status?.state === "legacy" ? "Reserved" : registry.status?.state === "collision" ? "Review required" : "Claim"}
-                  </button>
-                )}
+                    <button className="border border-black/15 px-5 py-3 text-sm text-black/35" disabled type="button">{registry.status?.state === "legacy" ? "Reserved" : registry.status?.state === "collision" ? "Review required" : "Claim"}</button>
+                  )}
+                </div>
+                {hash ? <p className="mt-3 break-all text-xs text-black/45">Transaction sent: {hash}</p> : null}
               </div>
-              {hash && <p className="mt-3 break-all text-xs text-neutral-500">Transaction sent: {hash}</p>}
-            </div>
-          )}
-        </div>
-
-        <aside className="min-w-0 rounded-2xl border border-black/10 bg-[#131619] p-6 text-white shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9ff3ff]">Connected identity</p>
-          <div className="mt-8 grid gap-5">
-            <div>
-              <p className="text-3xl font-semibold">One .XDC</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                One readable identity with a chain-specific receiving address
-                wherever you need one.
-              </p>
-            </div>
-            <div className="grid gap-3 text-sm">
-              <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Ownership</span><span>Your wallet</span></div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Home network</span><span>{apothemMode ? "XDC Apothem" : "XDC mainnet"}</span></div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Connections</span><span>5 EVM networks</span></div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-3"><span className="text-slate-400">Utilities</span><span>Profile + payments</span></div>
-            </div>
+            ) : null}
           </div>
-        </aside>
-      </section>
-    </main>
+        </div>
+      ) : null}
+    </>
   );
 }
 
-
-function LivePricingTiers(props: {
-  chainId: number;
-  pricingPolicy: `0x${string}`;
-  signedEnabled: boolean;
-}) {
+function LivePricingTiers(props: { chainId: number; pricingPolicy: `0x${string}`; signedEnabled: boolean }) {
   const enabled = props.signedEnabled && props.pricingPolicy !== zeroAddress;
-  const two = useReadContract({
-    address: props.pricingPolicy,
-    chainId: props.chainId,
-    abi: pricingPolicyAbi,
-    functionName: "priceUsdMicros",
-    args: [0, 2n, 1n],
-    query: { enabled },
-  });
-  const three = useReadContract({
-    address: props.pricingPolicy,
-    chainId: props.chainId,
-    abi: pricingPolicyAbi,
-    functionName: "priceUsdMicros",
-    args: [0, 3n, 1n],
-    query: { enabled },
-  });
-  const four = useReadContract({
-    address: props.pricingPolicy,
-    chainId: props.chainId,
-    abi: pricingPolicyAbi,
-    functionName: "priceUsdMicros",
-    args: [0, 4n, 1n],
-    query: { enabled },
-  });
-  const standard = useReadContract({
-    address: props.pricingPolicy,
-    chainId: props.chainId,
-    abi: pricingPolicyAbi,
-    functionName: "priceUsdMicros",
-    args: [0, 5n, 1n],
-    query: { enabled },
-  });
+  const two = useReadContract({ address: props.pricingPolicy, chainId: props.chainId, abi: pricingPolicyAbi, functionName: "priceUsdMicros", args: [0, 2n, 1n], query: { enabled } });
+  const three = useReadContract({ address: props.pricingPolicy, chainId: props.chainId, abi: pricingPolicyAbi, functionName: "priceUsdMicros", args: [0, 3n, 1n], query: { enabled } });
+  const four = useReadContract({ address: props.pricingPolicy, chainId: props.chainId, abi: pricingPolicyAbi, functionName: "priceUsdMicros", args: [0, 4n, 1n], query: { enabled } });
+  const standard = useReadContract({ address: props.pricingPolicy, chainId: props.chainId, abi: pricingPolicyAbi, functionName: "priceUsdMicros", args: [0, 5n, 1n], query: { enabled } });
 
   if (!props.signedEnabled) {
-    return (
-      <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-3">
-        <PriceCard label="3 chars" price="500 XDC/year" />
-        <PriceCard label="4 chars" price="100 XDC/year" />
-        <PriceCard label="5+ chars" price="10 XDC/year" />
-      </div>
-    );
+    return <div className="mt-5 grid gap-3 text-sm text-black/55 sm:grid-cols-3"><PriceCard label="3 chars" price="500 XDC/year" /><PriceCard label="4 chars" price="100 XDC/year" /><PriceCard label="5+ chars" price="10 XDC/year" /></div>;
   }
 
-  return (
-    <div className="mt-5 grid gap-3 text-sm text-neutral-600 sm:grid-cols-4">
-      <PriceCard label="2 chars" price={formatLiveTier(two.data, two.isLoading, two.isError)} />
-      <PriceCard label="3 chars" price={formatLiveTier(three.data, three.isLoading, three.isError)} />
-      <PriceCard label="4 chars" price={formatLiveTier(four.data, four.isLoading, four.isError)} />
-      <PriceCard label="5+ chars" price={formatLiveTier(standard.data, standard.isLoading, standard.isError)} />
-    </div>
-  );
+  return <div className="mt-5 grid gap-3 text-sm text-black/55 sm:grid-cols-4"><PriceCard label="2 chars" price={formatLiveTier(two.data, two.isLoading, two.isError)} /><PriceCard label="3 chars" price={formatLiveTier(three.data, three.isLoading, three.isError)} /><PriceCard label="4 chars" price={formatLiveTier(four.data, four.isLoading, four.isError)} /><PriceCard label="5+ chars" price={formatLiveTier(standard.data, standard.isLoading, standard.isError)} /></div>;
 }
 
-function PriceCard(props: { label: string; price: string }) {
-  return (
-    <div className="rounded-xl border border-black/10 bg-neutral-50 p-3">
-      <p className="font-semibold text-slate-950">{props.label}</p>
-      <p>{props.price}</p>
-    </div>
-  );
+function PriceCard({ label, price }: { label: string; price: string }) {
+  return <div className="flex items-center justify-between border-b border-black/10 py-2 sm:block sm:border-b-0 sm:border-l sm:py-0 sm:pl-4 first:sm:border-l-0 first:sm:pl-0"><p className="font-semibold text-black">{label}</p><p className="text-xs">{price}</p></div>;
 }
 
-function formatLiveTier(
-  value: unknown,
-  loading: boolean,
-  failed: boolean,
-): string {
+function formatLiveTier(value: unknown, loading: boolean, failed: boolean): string {
   if (loading) return "Loading live price…";
   if (failed || typeof value !== "bigint") return "Live price unavailable";
   const whole = value / 1_000_000n;
-  const fraction = (value % 1_000_000n)
-    .toString()
-    .padStart(6, "0")
-    .replace(/0+$/, "");
-  return "$" + whole.toString() + (fraction ? "." + fraction : "") + "/year";
+  const fraction = (value % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
+  return `$${whole.toString()}${fraction ? `.${fraction}` : ""}/year`;
 }

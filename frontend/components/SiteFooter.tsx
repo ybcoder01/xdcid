@@ -19,7 +19,10 @@ const projectLinks = [
 
 export function SiteFooter() {
   const pathname = usePathname();
-  if (/^\/pay\/[^/]+/.test(pathname)) return null;
+  if (
+    pathname === "/" ||
+    /^\/pay\/[^/]+/.test(pathname)
+  ) return null;
 
   return (
     <footer className="mt-12 border-t border-slate-200 bg-white/80">
