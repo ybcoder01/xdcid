@@ -30,7 +30,7 @@ The XDC route supports Standard Transfer finality, so the burn request uses fina
 7. When Circle returns a complete message and attestation, switch to the destination network and confirm `receiveMessage`.
 8. Verify the source burn and destination mint using the explorer links displayed by the page.
 
-If the page is reloaded after the burn, select the original source network and paste the public burn transaction hash into the resume field. No transfer session has to be stored by XDCID.
+If the page is reloaded after the burn, reconnect the wallet that submitted it. The Send page lists the pending transfer and restores the original route, amount, recipient, transfer mode, and public burn transaction hash. You can still paste a burn hash manually if browser storage was cleared or you resume on another device. No server-side transfer session is stored by XDCID.
 
 ## SDK exports
 
@@ -59,7 +59,9 @@ Test tokens have no monetary value. Never enter or commit a private key, seed ph
 - The approval is limited to the exact transfer amount.
 - The attestation route accepts only a supported source and a validated public transaction hash.
 - The route has no database and uses no API secret.
-- The page keeps its current transfer state only in browser memory; a reload requires the public burn hash to resume.
+- The page stores a versioned, 30-day local recovery checkpoint after a burn is submitted. It contains only public transaction metadata: payer and recipient addresses, route, amount, transfer mode, burn hash, and an optional public fee hash.
+- Private payment references, wallet signatures, attestations, keys, and secrets are never written to the recovery checkpoint.
+- A completed transfer removes its checkpoint. The user can also remove a stale reference manually.
 - Mainnet routes, relayers, paymasters, backend signers, and automatic destination execution are not enabled.
 
 ## Primary references
