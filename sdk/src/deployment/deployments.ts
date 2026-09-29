@@ -34,6 +34,8 @@ export type XdcidMainnetDeployment = {
   rollout: {
     primaryResolution: {
       proposalTransaction: `0x${string}`;
+      discountActivationTransaction: `0x${string}` | null;
+      registrarActivationTransaction: `0x${string}` | null;
       earliestActivation: number;
       previousRegistrar: Address;
       temporarySingleOwnerAccepted: boolean;
@@ -62,16 +64,16 @@ export const XDC_MAINNET_DEPLOYMENT = {
   products: { subdomains: "active" },
   active: {
     registry: "0x05fa64a05bc205DeDF47e023d2D90c2d119cd097",
-    registrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
+    registrar: "0x3D87B064a06f62cc4a24EAff13A591C9Ba791135",
     pricingPolicy: "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94",
     pricingPolicyVersion: 2,
     discountAuthorization: "0x9EE907230d351264403555fA6967EA44Ba31A5d1",
     subdomainRegistrar: "0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7",
     legacyForwardResolver: "0x52bfa70B30190050F77033Fe427De8B3d4A8F453",
     legacyReverseResolver: "0x8b1a236845b0CC84094578cEd97844b8dC5f139f",
-    ownerBoundForwardResolver: null,
-    ownerVerifiedReverseResolver: null,
-    multichainResolver: "0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240",
+    ownerBoundForwardResolver: "0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661",
+    ownerVerifiedReverseResolver: "0x2E17282219BB55359f5D07fAFfc406eE4EC97440",
+    multichainResolver: "0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232",
     historicalRegistrars: [
       "0x31c41237A551FCadf22F8B231D8accA2c16f669b",
       "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
@@ -88,6 +90,8 @@ export const XDC_MAINNET_DEPLOYMENT = {
   rollout: {
     primaryResolution: {
       proposalTransaction: "0x86131e67efb37588894aa122ad004593f7643ba153121ac9ae8c0e26c8674e6e",
+      discountActivationTransaction: "0x716a1893de58412cc35ba4a29a15ab6c8069e14e2d4050f74f5ac65984ec5786",
+      registrarActivationTransaction: "0x3459526b6cc5536e7984ccd4ef4423f3527cbcba63894b8946e8111e6e0abfab",
       earliestActivation: 1790255368,
       previousRegistrar: "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36",
       temporarySingleOwnerAccepted: true,
