@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Documentation",
-  description: "Integrate production XDCID APIs and contracts, and review upcoming SDK and subdomain capabilities."
+  description: "Integrate production XDCID APIs, contracts, and organization subdomains."
 };
 
 const publicEndpoints = [
@@ -47,6 +47,12 @@ const publicEndpoints = [
     path: "/api/pay-links/cancellations/{requestId}",
     title: "Monitor a Pay Link",
     description: "Returns active, cancelled, or paid so an integration can update immediately after completion."
+  },
+  {
+    method: "PRIVATE",
+    path: "/address-book",
+    title: "Encrypted Exchange Address Book",
+    description: "Wallet owners can save exchange, asset, network, address and memo together. Records are encrypted and require a short-lived wallet-authorized vault session."
   }
 ];
 
@@ -65,8 +71,8 @@ const integrationGuides = [
   },
   {
     eyebrow: "Organizations",
-    title: "Preview subdomain integration (upcoming)",
-    description: "Subdomain contracts and integration helpers are under development and are not part of the public product launch.",
+    title: "Create organization subdomains",
+    description: "Parent-name owners and approved operators can create wallet-owned subdomains using short-lived signed quotes.",
     code: 'const quote = await api.createSubdomainQuote({\n  parentName: "company.xdc", label: "alice",\n  action: "registration", termYears: 1,\n  paymentCurrency: "XDC", payer: account,\n  subdomainOwner: account\n});'
   },
   {
@@ -83,6 +89,33 @@ const paidCapabilities = [
   ["Availability", "Check whether a name is available and retrieve its registration price."],
   ["Profile", "Read the public profile records attached to an XDCID name."],
   ["Owned names", "List every active XDCID name owned by an address, including its verified primary ID."]
+];
+
+const supportedPaymentNetworks = [
+  ["Ethereum", "ETH", "1"],
+  ["XDC Network", "XDC", "50"],
+  ["Polygon", "POL", "137"],
+  ["Base", "ETH", "8453"],
+  ["Arbitrum One", "ETH", "42161"]
+];
+
+const destinationSafeguards = [
+  {
+    title: "Match the exchange exactly",
+    description: "Confirm the asset, deposit network, address, and any memo or tag against the exchange deposit screen. A valid EVM address does not prove that the exchange accepts the selected asset on that network."
+  },
+  {
+    title: "Saved routes update together",
+    description: "Selecting a saved destination applies its asset and network to both sides of a direct route and asks the connected wallet to switch to that network when necessary. Review the route before approving the transfer."
+  },
+  {
+    title: "Memo or tag payments are blocked",
+    description: "XDCID stores a memo or tag with the destination for reference, but Send cannot safely include it in the transfer yet. A saved entry that requires one is blocked instead of risking an uncredited exchange deposit."
+  },
+  {
+    title: "Reconfirm changed details",
+    description: "Treat any exchange notice, address change, network change, or asset change as a new destination. Verify the latest deposit instructions before sending again, and retire entries that are no longer valid."
+  }
 ];
 
 const exampleResponse = '{\n  "version": "v1",\n  "data": {\n    "name": "alice.xdc",\n    "available": false,\n    "resolvedAddress": "0x..."\n  }\n}';
@@ -130,6 +163,117 @@ export default function DocsPage() {
             View TypeScript SDK
           </a>
         </div>
+      </section>
+
+      <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Private destination vault</p>
+        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Encrypted exchange destinations</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+          The Exchange Address Book keeps an exchange name, your label, asset, network, deposit address, memo or tag, and private notes together. Each complete entry is encrypted at rest with authenticated AES-256-GCM encryption before it is stored. The database uses a wallet fingerprint to find the correct records and does not store the entry fields as readable columns.
+        </p>
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <article className="rounded-md border border-black/10 bg-neutral-50 p-5">
+            <h3 className="font-semibold text-slate-950">What remains private</h3>
+            <p className="mt-2 text-sm leading-6 text-neutral-600">
+              Destination details and notes are returned only through an active wallet-authorized vault session. Private payment references are likewise stored in encrypted XDCID history and are not written into transaction calldata.
+            </p>
+          </article>
+          <article className="rounded-md border border-black/10 bg-neutral-50 p-5">
+            <h3 className="font-semibold text-slate-950">What encryption means</h3>
+            <p className="mt-2 text-sm leading-6 text-neutral-600">
+              This is server-side encryption at rest, not end-to-end encryption. XDCID&apos;s protected server key is required to decrypt records after authorization. Public blockchain transfers still expose their normal on-chain sender, recipient, asset, amount, and transaction data.
+            </p>
+          </article>
+          <article className="rounded-md border border-black/10 bg-neutral-50 p-5">
+            <h3 className="font-semibold text-slate-950">How access is scoped</h3>
+            <p className="mt-2 text-sm leading-6 text-neutral-600">
+              Records are associated with the verified wallet and cannot be opened by merely knowing its address. The vault supports up to 100 saved destinations per wallet, and deleting an entry removes its encrypted record.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Wallet verification</p>
+          <h2 className="mt-3 text-2xl font-semibold text-slate-950">A signature unlocks the vault</h2>
+          <p className="mt-3 text-sm leading-6 text-neutral-600">
+            Connect the wallet that owns the address book, then sign the one-time XDCID challenge. This is an off-chain message signature: it costs no gas, submits no transaction, moves no funds, and grants no token allowance.
+          </p>
+          <ul className="mt-5 grid gap-3 text-sm leading-6 text-neutral-700">
+            <li className="rounded-md border border-black/10 bg-neutral-50 p-4"><span className="font-semibold text-slate-950">Short-lived challenge:</span> the signing request expires after five minutes and can be used only once.</li>
+            <li className="rounded-md border border-black/10 bg-neutral-50 p-4"><span className="font-semibold text-slate-950">Thirty-minute session:</span> successful verification creates a secure, HTTP-only vault session bound to the wallet and current client context.</li>
+            <li className="rounded-md border border-black/10 bg-neutral-50 p-4"><span className="font-semibold text-slate-950">Wallet changes:</span> switching accounts, disconnecting, expiring the session, or selecting Lock now requires verification again.</li>
+          </ul>
+        </div>
+
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-6 shadow-sm md:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">Deposit safety</p>
+          <h2 className="mt-3 text-2xl font-semibold text-slate-950">Network and memo warnings</h2>
+          <div className="mt-5 grid gap-3">
+            {destinationSafeguards.map((safeguard) => (
+              <article className="rounded-md border border-amber-200 bg-white/80 p-4" key={safeguard.title}>
+                <h3 className="text-sm font-semibold text-slate-950">{safeguard.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-neutral-700">{safeguard.description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Payments</p>
+        <h2 className="mt-3 text-3xl font-semibold text-slate-950">Supported payment routes</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+          XDCID currently supports payments across five EVM mainnets. An XDCID name resolves to the destination address for the selected network; a saved exchange destination supplies its verified address, asset, and network directly.
+        </p>
+
+        <div className="mt-6 overflow-x-auto rounded-md border border-black/10">
+          <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+            <thead className="bg-slate-950 text-white">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Network</th>
+                <th className="px-4 py-3 font-semibold">Native asset</th>
+                <th className="px-4 py-3 font-semibold">Chain ID</th>
+                <th className="px-4 py-3 font-semibold">Direct payments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {supportedPaymentNetworks.map(([network, nativeAsset, chainId]) => (
+                <tr className="border-t border-black/10" key={chainId}>
+                  <td className="px-4 py-3 font-semibold text-slate-950">{network}</td>
+                  <td className="px-4 py-3 text-neutral-700">{nativeAsset}</td>
+                  <td className="px-4 py-3 font-mono text-neutral-700">{chainId}</td>
+                  <td className="px-4 py-3 text-neutral-700">USDC and the network&apos;s native asset</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <article className="rounded-md border border-emerald-200 bg-emerald-50 p-5">
+            <h3 className="font-semibold text-slate-950">Same-network direct</h3>
+            <p className="mt-2 text-sm leading-6 text-neutral-700">
+              Send USDC or the source network&apos;s native asset directly when the source and destination networks match. The payer approves one wallet transaction and pays that network&apos;s gas.
+            </p>
+          </article>
+          <article className="rounded-md border border-teal-200 bg-teal-50 p-5">
+            <h3 className="font-semibold text-slate-950">Cross-network USDC</h3>
+            <p className="mt-2 text-sm leading-6 text-neutral-700">
+              Send USDC between any two supported networks using Circle CCTP. Standard mode requires the payer to complete the source burn and destination mint. Automatic mode asks Circle to submit the destination mint and shows its forwarding cost plus the XDCID convenience fee before approval.
+            </p>
+          </article>
+          <article className="rounded-md border border-red-200 bg-red-50 p-5">
+            <h3 className="font-semibold text-slate-950">Not supported</h3>
+            <p className="mt-2 text-sm leading-6 text-neutral-700">
+              Native assets cannot be transferred cross-network. Memo/tag exchange deposits remain blocked, and XDCID does not convert assets or route payments through unsupported networks.
+            </p>
+          </article>
+        </div>
+        <p className="mt-5 text-xs leading-5 text-neutral-500">
+          The dev environment mirrors these routes on Ethereum Sepolia, XDC Apothem, Polygon Amoy, Base Sepolia, and Arbitrum Sepolia. Always use test assets on dev and mainnet assets on production.
+        </p>
       </section>
 
       <section className="mt-8 rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8" id="public-api">

@@ -7,11 +7,14 @@ import {
   http,
   isAddress,
   keccak256,
+  parseAbiItem,
   stringToHex,
   type Address,
   type Hex
 } from "viem";
+import { XDC_MAINNET_DEPLOYMENT } from "../../sdk/src/deployment/deployments";
 import {
+  activeRegistryAddress,
   addresses,
   apothemRegistration,
   registryAbi,
@@ -28,13 +31,17 @@ import { xdcClient } from "./xdcClient";
 // inspect every registrar that has ever been allowed to create names. Keep
 // these addresses even after changing the active registrar; removing one
 // makes names registered through it disappear from the dashboard catalog.
-const MAINNET_REGISTRAR_HISTORY = [
-  "0x31c41237A551FCadf22F8B231D8accA2c16f669b",
-  "0x6955Be33d0B414784F9d3a6E71BAc1bb9B376cD7",
-  "0xa1584cb17523CEb991155328EdFAD2293b66bd94",
-  "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36"
+const MAINNET_REGISTRAR_HISTORY =
+  XDC_MAINNET_DEPLOYMENT.active.historicalRegistrars;
+const APOTHEM_REGISTRAR_HISTORY = [
+  "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d",
+  "0xE35722cB7d04Ba36ed284910528A64B1dE855a20"
 ] as const;
-const APOTHEM_REGISTRY = "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1";
+// XNSRegistrarV2 was activated shortly before its first registration at block
+// 86,906,032. Starting just before that deployment keeps Apothem discovery
+// deterministic without relying on browser-local registration history.
+const APOTHEM_REGISTRAR_V2_START_BLOCK = 86_900_000n;
+const APOTHEM_LOG_BLOCK_RANGE = 1_000_000n;
 const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
@@ -105,8 +112,56 @@ const registrationAbi = [
       { name: "signature", type: "bytes" }
     ],
     outputs: []
+  },
+  {
+    type: "function",
+    name: "registerWithDiscountQuote",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      {
+        name: "quote",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "payer", type: "address" },
+          { name: "nameOwner", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "paymentToken", type: "address" },
+          { name: "paymentAmount", type: "uint256" },
+          { name: "usdMicros", type: "uint256" },
+          { name: "policyVersion", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "issuedAt", type: "uint256" },
+          { name: "deadline", type: "uint256" }
+        ]
+      },
+      { name: "signature", type: "bytes" },
+      {
+        name: "authorization",
+        type: "tuple",
+        components: [
+          { name: "node", type: "bytes32" },
+          { name: "beneficiary", type: "address" },
+          { name: "product", type: "uint8" },
+          { name: "termYears", type: "uint256" },
+          { name: "discountBps", type: "uint16" },
+          { name: "maxUses", type: "uint32" },
+          { name: "validAfter", type: "uint64" },
+          { name: "deadline", type: "uint64" },
+          { name: "nonce", type: "uint256" }
+        ]
+      },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
   }
 ] as const;
+
+const nameRegisteredEvent = parseAbiItem(
+  "event NameRegistered(bytes32 indexed node,address indexed nameOwner,address indexed payer,uint256 expiry,address paymentToken,uint256 paymentAmount,uint256 grossUsdMicros,uint256 netUsdMicros,uint16 discountBps,bytes32 quoteHash)"
+);
 
 type ExplorerTransaction = {
   to?: string;
@@ -124,6 +179,8 @@ export type OwnedName = {
   name: string;
   node: Hex;
   primary: boolean;
+  ownershipGeneration: string | null;
+  migrationRequired: boolean;
   expiry: {
     timestamp: string;
     iso: string;
@@ -142,7 +199,14 @@ function useApothemIndex() {
 }
 
 function registrarHistory(): Address[] {
-  if (useApothemIndex()) return [getAddress(apothemRegistration.registrar)];
+  if (useApothemIndex()) {
+    const unique = new Set(
+      [...APOTHEM_REGISTRAR_HISTORY, apothemRegistration.registrar].map(
+        (value) => getAddress(value).toLowerCase()
+      )
+    );
+    return Array.from(unique, (value) => getAddress(value));
+  }
 
   const configured = (process.env.XDCID_REGISTRAR_HISTORY || "")
     .split(",")
@@ -260,7 +324,8 @@ function registeredName(
     const decoded = decodeFunctionData({ abi: registrationAbi, data: input });
     if (
       decoded.functionName !== "register" &&
-      decoded.functionName !== "registerWithQuote"
+      decoded.functionName !== "registerWithQuote" &&
+      decoded.functionName !== "registerWithDiscountQuote"
     ) {
       return null;
     }
@@ -272,13 +337,70 @@ function registeredName(
   }
 }
 
+async function loadApothemCatalog() {
+  const registrars = registrarHistory();
+  const latestBlock = await apothemClient.getBlockNumber();
+  const transactionRegistrars = new Map<Hex, Address>();
+
+  for (const registrar of registrars) {
+    for (
+      let fromBlock = APOTHEM_REGISTRAR_V2_START_BLOCK;
+      fromBlock <= latestBlock;
+      fromBlock += APOTHEM_LOG_BLOCK_RANGE
+    ) {
+      const toBlock =
+        fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n > latestBlock
+          ? latestBlock
+          : fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n;
+      const logs = await apothemClient.getLogs({
+        address: registrar,
+        event: nameRegisteredEvent,
+        fromBlock,
+        toBlock
+      });
+      logs.forEach((log) => {
+        if (log.transactionHash) {
+          transactionRegistrars.set(log.transactionHash, registrar);
+        }
+      });
+    }
+  }
+
+  const names = new Set<string>();
+  const hashes = Array.from(transactionRegistrars.keys());
+  for (let start = 0; start < hashes.length; start += READ_BATCH_SIZE) {
+    const transactions = await Promise.all(
+      hashes.slice(start, start + READ_BATCH_SIZE).map((hash) =>
+        apothemClient.getTransaction({ hash })
+      )
+    );
+    transactions.forEach((transaction, index) => {
+      const hash = hashes[start + index];
+      const registrar = transactionRegistrars.get(hash);
+      if (!registrar) return;
+      const name = registeredName(
+        { to: transaction.to ?? undefined, input: transaction.input },
+        registrar
+      );
+      if (name) names.add(name);
+    });
+  }
+
+  return Array.from(names).sort();
+}
+
 async function loadCatalog() {
-  if (useApothemIndex()) return [];
   if (catalog && Date.now() < catalogExpiresAt) return catalog;
   if (catalogRequest) return catalogRequest;
 
   catalogRequest = (async () => {
     try {
+      if (useApothemIndex()) {
+        catalog = await loadApothemCatalog();
+        catalogExpiresAt = Date.now() + CATALOG_TTL_MS;
+        return catalog;
+      }
+
       const registrars = registrarHistory();
       // XDCScan applies a shared request budget. Querying every historical
       // registrar concurrently causes otherwise valid requests to be rejected
@@ -369,7 +491,7 @@ export async function getOwnedNamesData(
   const isApothem = useApothemIndex();
   const activeClient = isApothem ? apothemClient : xdcClient;
   const registryAddress = getAddress(
-    isApothem ? APOTHEM_REGISTRY : addresses.registry
+    isApothem ? activeRegistryAddress : addresses.registry
   );
   const known = validKnownNames(knownNames);
   const cacheSuffix = known.slice().sort().join(",");
@@ -399,7 +521,7 @@ export async function getOwnedNamesData(
         const records = await Promise.all(
           batch.map(async (name) => {
             const node = keccak256(stringToHex(name));
-            const [owner, expiry] = await Promise.all([
+            const [owner, expiry, ownershipGeneration] = await Promise.all([
               activeClient.readContract({
                 address: registryAddress,
                 abi: registryAbi,
@@ -411,17 +533,25 @@ export async function getOwnedNamesData(
                 abi: registryAbi,
                 functionName: "expiryOf",
                 args: [node]
-              })
+              }),
+              activeClient.readContract({
+                address: registryAddress,
+                abi: registryAbi,
+                functionName: "ownershipGenerations",
+                args: [node]
+              }).catch(() => null)
             ]);
-            return { name, node, owner, expiry };
+            return { name, node, owner, expiry, ownershipGeneration };
           })
         );
 
-        records.forEach(({ name, node, owner, expiry }) => {
+        records.forEach(({ name, node, owner, expiry, ownershipGeneration }) => {
           if (owner.toLowerCase() === address.toLowerCase() && expiry > now) {
             owned.push({
               name,
               node,
+              ownershipGeneration: ownershipGeneration?.toString() ?? null,
+              migrationRequired: ownershipGeneration === 0n,
               expiry: {
                 timestamp: expiry.toString(),
                 iso: new Date(Number(expiry) * 1000).toISOString()
@@ -432,8 +562,8 @@ export async function getOwnedNamesData(
       }
 
       let primaryName: string | null = null;
-      if (!isApothem && verifiedReverseResolverAvailable) {
-        const storedPrimary = await xdcClient.readContract({
+      if (verifiedReverseResolverAvailable) {
+        const storedPrimary = await activeClient.readContract({
           address: addresses.verifiedReverseResolver,
           abi: reverseResolverAbi,
           functionName: "primaryNames",

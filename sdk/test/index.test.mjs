@@ -3,6 +3,7 @@ import test from "node:test";
 import { getAddress, keccak256, toBytes, zeroAddress } from "viem";
 import {
   SUPPORTED_MULTICHAIN_NETWORKS,
+  XDC_MAINNET_DEPLOYMENT,
   XDCID_CONTRACTS,
   XdcidClient,
   XdcidSdkError,
@@ -38,11 +39,34 @@ test("reports validation errors without throwing from parseXdcidName", () => {
 });
 
 test("exposes the verified resolver and initial multichain network metadata", () => {
-  assert.equal(XDCID_CONTRACTS.resolver, null);
-  assert.equal(XDCID_CONTRACTS.reverseResolver, null);
+  assert.equal(XDC_MAINNET_DEPLOYMENT.chainId, 50);
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.active.registrar,
+    XDCID_CONTRACTS.registrar
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.candidate.primaryRegistrar,
+    getAddress("0x3D87B064a06f62cc4a24EAff13A591C9Ba791135")
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.active.ownerBoundForwardResolver,
+    getAddress("0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661")
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.active.ownerVerifiedReverseResolver,
+    getAddress("0x2E17282219BB55359f5D07fAFfc406eE4EC97440")
+  );
+  assert.equal(
+    XDCID_CONTRACTS.resolver,
+    getAddress("0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661")
+  );
+  assert.equal(
+    XDCID_CONTRACTS.reverseResolver,
+    getAddress("0x2E17282219BB55359f5D07fAFfc406eE4EC97440")
+  );
   assert.equal(
     XDCID_CONTRACTS.multichainResolver,
-    getAddress("0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240")
+    getAddress("0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232")
   );
   assert.deepEqual(
     SUPPORTED_MULTICHAIN_NETWORKS.map(({ chainId }) => chainId),
@@ -50,11 +74,27 @@ test("exposes the verified resolver and initial multichain network metadata", ()
   );
   assert.equal(
     XDCID_CONTRACTS.registrar,
-    getAddress("0xdEaf1742614908a8d170f4c9520c3cd1e967ef36")
+    getAddress("0x3D87B064a06f62cc4a24EAff13A591C9Ba791135")
   );
   assert.equal(
     XDCID_CONTRACTS.subdomainRegistrar,
     getAddress("0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7")
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.proposalTransaction,
+    "0x86131e67efb37588894aa122ad004593f7643ba153121ac9ae8c0e26c8674e6e"
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.earliestActivation,
+    1790255368
+  );
+  assert.equal(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.previousRegistrar,
+    getAddress("0xdEaf1742614908a8d170f4c9520c3cd1e967ef36")
+  );
+  assert.notEqual(
+    XDC_MAINNET_DEPLOYMENT.rollout.primaryResolution.previousRegistrar,
+    XDC_MAINNET_DEPLOYMENT.active.registrar
   );
 });
 
@@ -222,6 +262,17 @@ test("returns on-chain availability and delegates current pricing to the quote A
   assert.equal(result.totalPrice, null);
 });
 
+test("reads ownership generation for Registry V2 migration checks", async () => {
+  const sdk = new XdcidClient(
+    mockClient(({ functionName }) => {
+      if (functionName === "ownershipGenerations") return 4n;
+      throw new Error("Unexpected read");
+    })
+  );
+
+  assert.equal(await sdk.getOwnershipGeneration("Alice"), 4n);
+});
+
 test("prepares identity management calls without submitting them", () => {
   const target = getAddress("0x9999999999999999999999999999999999999999");
   const sdk = new XdcidClient(mockClient(() => zeroAddress), {
@@ -231,6 +282,8 @@ test("prepares identity management calls without submitting them", () => {
   });
 
   assert.deepEqual(sdk.prepareTransferName("ai", target).args, [nodeForName("ai"), target]);
+  assert.deepEqual(sdk.prepareMigrateName("AI").args, [nodeForName("ai")]);
+  assert.equal(sdk.prepareMigrateName("ai").functionName, "migrateName");
   assert.equal(sdk.prepareSetResolver("ai").functionName, "setResolver");
   assert.equal(sdk.prepareSetAddress("ai", target).functionName, "setAddress");
   assert.deepEqual(sdk.prepareSetText("ai", "website", "https://example.com").args, [
@@ -241,19 +294,19 @@ test("prepares identity management calls without submitting them", () => {
   assert.deepEqual(sdk.prepareSetPrimaryName("AI").args, ["ai.xdc", nodeForName("ai")]);
 });
 
-test("fails closed for profile writes until Resolver V2 is configured", () => {
+test("uses the activated Resolver V2 contracts for profile writes", () => {
   const sdk = new XdcidClient(mockClient(() => zeroAddress));
-  assert.throws(
-    () => sdk.prepareSetAddress("ai", "0x9999999999999999999999999999999999999999"),
-    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CONFIG"
+  assert.equal(
+    sdk.prepareSetAddress("ai", "0x9999999999999999999999999999999999999999").address,
+    XDC_MAINNET_DEPLOYMENT.active.ownerBoundForwardResolver
   );
-  assert.throws(
-    () => sdk.prepareSetText("ai", "website", "https://example.com"),
-    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CONFIG"
+  assert.equal(
+    sdk.prepareSetText("ai", "website", "https://example.com").address,
+    XDC_MAINNET_DEPLOYMENT.active.ownerBoundForwardResolver
   );
-  assert.throws(
-    () => sdk.prepareSetPrimaryName("ai"),
-    (error) => error instanceof XdcidSdkError && error.code === "INVALID_CONFIG"
+  assert.equal(
+    sdk.prepareSetPrimaryName("ai").address,
+    XDC_MAINNET_DEPLOYMENT.active.ownerVerifiedReverseResolver
   );
 });
 

@@ -14,13 +14,16 @@ import {
 } from "wagmi";
 import {
   activeRegistryAddress,
-  activeResolverSuiteAvailable,
+  multichainResolverAvailable,
   activeXnsChainId,
   addresses,
   multichainResolverAbi,
   registryAbi
 } from "../../../config/contracts";
-import { getPaymentNetwork } from "../../../config/paymentNetworks";
+import {
+  getPaymentNetwork,
+  multichainRecordChainId
+} from "../../../config/paymentNetworks";
 
 const XDC_CHAIN_ID = activeXnsChainId;
 
@@ -300,13 +303,22 @@ export default function PayRequestPage() {
     args: node ? [node] : undefined,
     query: { enabled: !!node },
   });
+  const destinationRecordChainId =
+    multichainRecordChainId(route.destinationChainId);
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
     abi: multichainResolverAbi,
     functionName: "addressFor",
-    args: node ? [node, BigInt(route.destinationChainId)] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable },
+    args: node && destinationRecordChainId
+      ? [node, BigInt(destinationRecordChainId)]
+      : undefined,
+    query: {
+      enabled:
+        !!node &&
+        multichainResolverAvailable &&
+        destinationRecordChainId !== null
+    },
   });
 
   useEffect(() => {

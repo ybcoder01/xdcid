@@ -2,6 +2,7 @@ import { xnsAddresses } from "./addresses";
 import {
   MULTICHAIN_RESOLVER_ADDRESS,
   SUPPORTED_MULTICHAIN_NETWORKS,
+  XDC_MAINNET_DEPLOYMENT,
   multichainResolverAbi
 } from "../../sdk/src/index";
 
@@ -24,35 +25,48 @@ export const xdcMainnet = {
 
 export const apothemRegistration = {
   chainId: 51,
-  registry: "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1" as `0x${string}`,
-  registrar: "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d" as `0x${string}`,
+  registry: (
+    process.env.NEXT_PUBLIC_XNS_REGISTRY ||
+    "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1"
+  ) as `0x${string}`,
+  registrar: (
+    process.env.NEXT_PUBLIC_XNS_REGISTRAR ||
+    "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
+  ) as `0x${string}`,
   pricingPolicy: "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81" as `0x${string}`,
 } as const;
 
 export const apothemSubdomainRegistrar =
-  "0xa2135729ce122ef93158FCc4C69683155e6707d3" as `0x${string}`;
+  (process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
+    "0xa2135729ce122ef93158FCc4C69683155e6707d3") as `0x${string}`;
+
+const configuredVerifiedResolver = process.env.NEXT_PUBLIC_XNS_RESOLVER_V2;
+const configuredVerifiedReverseResolver =
+  process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2;
+const configuredMultichainResolver =
+  process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER;
 
 // Verified mainnet XNSPricingPolicyV2 deployment. This lets the frontend select
 // the correct tuple ABI immediately after the policy address is switched, while
 // the explicit public generation setting remains available for future policies.
 export const mainnetPricingPolicyV2 =
-  "0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94" as `0x${string}`;
+  XDC_MAINNET_DEPLOYMENT.active.pricingPolicy;
 
 export const addresses = {
   registry: (process.env.NEXT_PUBLIC_XNS_REGISTRY || xnsAddresses.registry) as `0x${string}`,
   registrar: (process.env.NEXT_PUBLIC_XNS_REGISTRAR || xnsAddresses.registrar) as `0x${string}`,
   resolver: (process.env.NEXT_PUBLIC_XNS_RESOLVER || xnsAddresses.resolver) as `0x${string}`,
   verifiedResolver: (
-    process.env.NEXT_PUBLIC_XNS_RESOLVER_V2 ||
+    configuredVerifiedResolver ||
     "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`,
   reverseResolver: (process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER || xnsAddresses.reverseResolver) as `0x${string}`,
   verifiedReverseResolver: (
-    process.env.NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2 ||
+    configuredVerifiedReverseResolver ||
     "0x0000000000000000000000000000000000000000"
   ) as `0x${string}`,
   multichainResolver: (
-    process.env.NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER || MULTICHAIN_RESOLVER_ADDRESS
+    configuredMultichainResolver || MULTICHAIN_RESOLVER_ADDRESS
   ) as `0x${string}`,
   pricingPolicy: (
     process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
@@ -60,7 +74,7 @@ export const addresses = {
   ) as `0x${string}`,
   subdomainRegistrar: (
     process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
-    "0x0000000000000000000000000000000000000000"
+    XDC_MAINNET_DEPLOYMENT.active.subdomainRegistrar
   ) as `0x${string}`
 };
 
@@ -95,31 +109,37 @@ export const legacyRegistrarAddress = (
   process.env.NEXT_PUBLIC_XNS_LEGACY_REGISTRAR ||
   (isTestnetEnvironment
     ? "0x0000000000000000000000000000000000000000"
-    : xnsAddresses.registrar)
+    : xnsAddresses.legacyRegistrar)
 ) as `0x${string}`;
 
-// Apothem currently has the registry and signed registrar, but no separately
-// deployed resolver suite. Dev therefore resolves registered names to their
-// registry owner as the safe EVM-wide fallback and never calls mainnet resolvers.
-export const activeResolverSuiteAvailable = !isTestnetEnvironment;
+// Resolver capabilities are enabled independently. This prevents a testnet
+// deployment from ever falling back to the mainnet multichain resolver while
+// still allowing the verified forward and reverse resolvers to be exercised.
+export const multichainResolverAvailable =
+  !isTestnetEnvironment ||
+  (!!configuredMultichainResolver &&
+    configuredMultichainResolver !==
+      "0x0000000000000000000000000000000000000000");
 
-// The original forward resolver does not bind records to the owner who wrote
-// them, so it must never be trusted after a name transfer or re-registration.
-// Profile reads and writes remain disabled until Resolver V2 is deployed and
-// this dedicated address is configured.
 export const verifiedResolverAvailable =
-  !isTestnetEnvironment && addresses.verifiedResolver !==
+  addresses.verifiedResolver !==
     "0x0000000000000000000000000000000000000000";
 
 export const verifiedReverseResolverAvailable =
-  !isTestnetEnvironment && addresses.verifiedReverseResolver !==
+  addresses.verifiedReverseResolver !==
     "0x0000000000000000000000000000000000000000";
+
+export const activeResolverSuiteAvailable =
+  verifiedResolverAvailable ||
+  verifiedReverseResolverAvailable ||
+  multichainResolverAvailable;
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
 
 export const subdomainRegistrationEnabled =
-  process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED === "true" &&
+  XDC_MAINNET_DEPLOYMENT.products.subdomains === "active" &&
+  process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED !== "false" &&
   activeSubdomainRegistrarAddress !==
     "0x0000000000000000000000000000000000000000";
 
@@ -410,6 +430,20 @@ export const registryAbi = [
     stateMutability: "view",
     inputs: [{ name: "node", type: "bytes32" }],
     outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "ownershipGenerations",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "migrateName",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: []
   },
   {
     type: "function",

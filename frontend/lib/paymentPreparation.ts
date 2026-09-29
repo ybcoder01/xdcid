@@ -1,5 +1,8 @@
 import { getAddress, isAddress, zeroAddress, type Address } from "viem";
-import { getPaymentNetwork } from "../config/paymentNetworks";
+import {
+  getPaymentNetwork,
+  multichainRecordChainId
+} from "../config/paymentNetworks";
 
 export type PaymentAddressSource = "multichain" | "registry-owner";
 
@@ -24,6 +27,11 @@ export function selectPaymentDestination(input: {
   }
 
   if (!getPaymentNetwork(input.destinationChainId)) return null;
+
+  // The registry owner is the legacy/default XDC destination only. Falling
+  // back to it for Ethereum, Base, Arbitrum or Polygon can send funds to the
+  // wrong address when that network-specific record is unset or unreadable.
+  if (multichainRecordChainId(input.destinationChainId) !== 50) return null;
 
   const currentOwner = validAddress(input.currentOwner);
   return currentOwner

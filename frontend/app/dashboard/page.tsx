@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
+import { RegistryV2MigrationAction } from "../../components/RegistryV2MigrationAction";
 import { loadNames, saveName } from "../../config/localNames";
 import {
   useAccount,
@@ -13,6 +14,8 @@ import {
 } from "wagmi";
 import {
   addresses,
+  activeRegistrarAddress,
+  activeXnsChainId,
   registrarAbi,
   reverseResolverAbi,
   signedRegistrarEnabled,
@@ -24,6 +27,8 @@ type OwnedName = {
   name: string;
   node: Hex;
   primary: boolean;
+  ownershipGeneration: string | null;
+  migrationRequired: boolean;
   expiry: {
     timestamp: string;
     iso: string;
@@ -43,14 +48,22 @@ type OwnedNamesResponse = {
   };
 };
 
-function NameRow({ record }: { record: OwnedName }) {
+function NameRow({
+  record,
+  onMigrated,
+  onRenewed,
+}: {
+  record: OwnedName;
+  onMigrated: () => void;
+  onRenewed: () => void | Promise<void>;
+}) {
   const { writeContract, isPending } = useWriteContract();
   const price = useReadContract({
     address: addresses.registrar,
     abi: registrarAbi,
     functionName: "price",
     args: [record.name],
-    query: { enabled: !signedRegistrarEnabled }
+    query: { enabled: !(isTestnetDashboard || signedRegistrarEnabled) }
   });
 
   return (
@@ -71,60 +84,101 @@ function NameRow({ record }: { record: OwnedName }) {
         </div>
         <p className="text-sm text-neutral-600">
           Expires: {new Date(record.expiry.iso).toLocaleDateString()}
-          {!signedRegistrarEnabled && price.data
+          {!(isTestnetDashboard || signedRegistrarEnabled) && price.data
             ? " - renew " + formatEther(price.data) + " XDC/year"
             : ""}
         </p>
       </div>
-      {signedRegistrarEnabled ? (
-        <SignedRenewalControls name={record.name} />
-      ) : (
-        <button
-          className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-          disabled={!price.data || isPending}
-          onClick={() =>
-            price.data &&
-            writeContract({
-              address: addresses.registrar,
-              abi: registrarAbi,
-              functionName: "renew",
-              args: [record.name, 1n],
-              value: price.data
-            })
-          }
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+          href={"/name/" + record.name}
         >
-          {isPending ? "Confirm in wallet" : "Renew"}
-        </button>
-      )}
+          Manage records
+        </Link>
+        {isTestnetDashboard || signedRegistrarEnabled ? (
+          <SignedRenewalControls
+            expectedChainId={activeXnsChainId}
+            name={record.name}
+            nativeCurrencyLabel={isTestnetDashboard ? "TXDC" : "XDC"}
+            onRenewed={onRenewed}
+            registrarAddress={activeRegistrarAddress}
+          />
+        ) : (
+          <button
+            className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+            disabled={!price.data || isPending}
+            onClick={() =>
+              price.data &&
+              writeContract({
+                address: addresses.registrar,
+                abi: registrarAbi,
+                functionName: "renew",
+                args: [record.name, 1n],
+                value: price.data
+              })
+            }
+          >
+            {isPending ? "Confirm in wallet" : "Renew"}
+          </button>
+        )}
+      </div>
+      <RegistryV2MigrationAction
+        migrationRequired={record.migrationRequired}
+        name={record.name}
+        node={record.node}
+        onMigrated={onMigrated}
+      />
     </div>
   );
 }
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
+  const requestController = useRef<AbortController | null>(null);
   const [names, setNames] = useState<OwnedName[]>([]);
   const [primaryName, setPrimaryName] = useState<string | null>(null);
   const [selectedPrimary, setSelectedPrimary] = useState("");
+  const [submittedPrimary, setSubmittedPrimary] = useState<string | null>(null);
+  const [confirmedPrimary, setConfirmedPrimary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState("");
+  const processedPrimaryHash = useRef<Hex | null>(null);
   const {
     data: primaryHash,
     error: primaryWriteError,
     isPending: isPrimaryPending,
+    reset: resetPrimaryWrite,
     writeContract
   } = useWriteContract();
   const primaryReceipt = useWaitForTransactionReceipt({ hash: primaryHash });
 
+  useEffect(() => {
+    processedPrimaryHash.current = null;
+    setSubmittedPrimary(null);
+    setConfirmedPrimary(null);
+    resetPrimaryWrite();
+  }, [address, resetPrimaryWrite]);
+
   const loadOwnedNames = useCallback(async () => {
+    requestController.current?.abort();
+
     if (!address) {
       setNames([]);
       setPrimaryName(null);
       setSelectedPrimary("");
+      setIsLoading(false);
+      setLookupError("");
       return;
     }
 
+    const controller = new AbortController();
+    requestController.current = controller;
     setIsLoading(true);
     setLookupError("");
+    setNames([]);
+    setPrimaryName(null);
+    setSelectedPrimary("");
 
     try {
       const params = new URLSearchParams();
@@ -134,7 +188,7 @@ export default function Dashboard() {
       const query = params.size > 0 ? "?" + params.toString() : "";
       const response = await fetch(
         "/api/v1/addresses/" + address + "/names" + query,
-        { cache: "no-store" }
+        { cache: "no-store", signal: controller.signal }
       );
       const body = (await response.json()) as OwnedNamesResponse;
       if (!response.ok || !body.data) {
@@ -148,34 +202,51 @@ export default function Dashboard() {
         body.data.primaryName || body.data.names[0]?.name || ""
       );
     } catch (error) {
+      if (controller.signal.aborted) return;
       setLookupError(
         error instanceof Error ? error.message : "Unable to load wallet names"
       );
     } finally {
-      setIsLoading(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+        setIsLoading(false);
+      }
     }
   }, [address]);
 
   useEffect(() => {
     void loadOwnedNames();
+    return () => {
+      requestController.current?.abort();
+      requestController.current = null;
+    };
   }, [loadOwnedNames]);
 
   useEffect(() => {
-    if (!primaryReceipt.isSuccess || !selectedPrimary) return;
+    if (
+      !primaryReceipt.isSuccess ||
+      !primaryHash ||
+      !submittedPrimary ||
+      processedPrimaryHash.current === primaryHash
+    ) return;
 
-    setPrimaryName(selectedPrimary);
+    const nextPrimary = submittedPrimary;
+    processedPrimaryHash.current = primaryHash;
+    setPrimaryName(nextPrimary);
+    setConfirmedPrimary(nextPrimary);
+    setSubmittedPrimary(null);
     setNames((current) =>
       current.map((record) => ({
         ...record,
-        primary: record.name === selectedPrimary
+        primary: record.name === nextPrimary
       }))
     );
     if (address) {
       window.dispatchEvent(new CustomEvent(PRIMARY_NAME_CHANGED_EVENT, {
-        detail: { address, name: selectedPrimary }
+        detail: { address, name: nextPrimary }
       }));
     }
-  }, [address, primaryReceipt.isSuccess, selectedPrimary]);
+  }, [address, primaryHash, primaryReceipt.isSuccess, submittedPrimary]);
 
   const selectedRecord = names.find(
     (record) => record.name === selectedPrimary
@@ -184,6 +255,8 @@ export default function Dashboard() {
   function savePrimary() {
     if (!selectedRecord) return;
 
+    setConfirmedPrimary(null);
+    setSubmittedPrimary(selectedRecord.name);
     writeContract({
       address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
@@ -203,7 +276,7 @@ export default function Dashboard() {
         </h1>
         <p className="mt-2 text-sm text-neutral-600">
           {isTestnetDashboard
-            ? "Test names created in this browser are verified directly against the Apothem registry."
+            ? "Test names are indexed from the Apothem registrar and ownership is verified directly against the registry."
             : "Names are indexed from XDCScan and ownership is verified directly against the XDCID registry."}
         </p>
         {isConnected && (
@@ -217,7 +290,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      {isConnected && names.length > 0 && !isTestnetDashboard && (
+      {isConnected && names.length > 0 && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
             Primary XDCID
@@ -241,7 +314,12 @@ export default function Dashboard() {
             <select
               className="min-w-64 rounded-md border border-black/20 bg-white px-4 py-3 text-sm"
               value={selectedPrimary}
-              onChange={(event) => setSelectedPrimary(event.target.value)}
+              disabled={isPrimaryPending || primaryReceipt.isLoading}
+              onChange={(event) => {
+                setSelectedPrimary(event.target.value);
+                setConfirmedPrimary(null);
+                resetPrimaryWrite();
+              }}
             >
               {names.map((record) => (
                 <option key={record.node} value={record.name}>
@@ -253,6 +331,7 @@ export default function Dashboard() {
               className="rounded-md bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
               disabled={
                 !selectedRecord ||
+                selectedRecord.migrationRequired ||
                 !verifiedReverseResolverAvailable ||
                 selectedPrimary === primaryName ||
                 isPrimaryPending ||
@@ -267,9 +346,15 @@ export default function Dashboard() {
                   : "Set primary ID"}
             </button>
           </div>
-          {primaryReceipt.isSuccess && (
+          {selectedRecord?.migrationRequired ? (
+            <p className="mt-3 text-sm text-amber-800">
+              Activate this existing ID on Registry V2 below before setting it
+              as primary.
+            </p>
+          ) : null}
+          {confirmedPrimary && (
             <p className="mt-3 text-sm text-teal-700">
-              Primary ID updated on XDC Network.
+              {confirmedPrimary} is now the Primary ID on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
             </p>
           )}
           {primaryWriteError && (
@@ -302,7 +387,24 @@ export default function Dashboard() {
           </p>
         )}
         {names.map((record) => (
-          <NameRow key={record.node} record={record} />
+          <NameRow
+            key={record.node}
+            onMigrated={() => {
+              setNames((current) =>
+                current.map((entry) =>
+                  entry.node === record.node
+                    ? {
+                        ...entry,
+                        migrationRequired: false,
+                        ownershipGeneration: "1"
+                      }
+                    : entry
+                )
+              );
+            }}
+            onRenewed={loadOwnedNames}
+            record={record}
+          />
         ))}
       </div>
     </main>

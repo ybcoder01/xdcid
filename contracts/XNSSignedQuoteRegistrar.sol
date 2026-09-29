@@ -38,6 +38,12 @@ interface IXNSQuotePricingPolicy {
         uint256 labelLength,
         uint256 years_
     ) external view returns (uint256);
+    function priceUsdMicrosForVersion(
+        Product product,
+        uint256 labelLength,
+        uint256 years_,
+        uint256 quoteVersion
+    ) external view returns (uint256);
     function isQuoteAuthorizationValid(
         address signer,
         uint256 quoteVersion
@@ -293,10 +299,11 @@ contract XNSSignedQuoteRegistrar is EIP712, ReentrancyGuard {
         }
         if (quote.nonce != nonces[msg.sender]) revert InvalidNonce();
 
-        uint256 expectedUsdMicros = pricingPolicy.priceUsdMicros(
+        uint256 expectedUsdMicros = pricingPolicy.priceUsdMicrosForVersion(
             IXNSQuotePricingPolicy.Product(quote.product),
             labelLength,
-            quote.termYears
+            quote.termYears,
+            quote.policyVersion
         );
         if (quote.usdMicros != expectedUsdMicros) revert InvalidQuote();
 

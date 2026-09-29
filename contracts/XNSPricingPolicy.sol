@@ -36,6 +36,7 @@ contract XNSPricingPolicy is Ownable {
 
     PricingConfig private _config;
     PricingConfig private _pendingConfig;
+    PricingConfig private _previousConfig;
     uint256 public version = 1;
     uint256 public pendingActivationTime;
     bool public hasPendingConfig;
@@ -49,6 +50,7 @@ contract XNSPricingPolicy is Ownable {
     error InvalidTerm();
     error NoPendingConfig();
     error UpdateDelayActive();
+    error InvalidQuoteVersion();
 
     event PricingConfigProposed(
         uint256 indexed nextVersion,
@@ -76,6 +78,10 @@ contract XNSPricingPolicy is Ownable {
 
     function pendingConfig() external view returns (PricingConfig memory) {
         return _pendingConfig;
+    }
+
+    function previousConfig() external view returns (PricingConfig memory) {
+        return _previousConfig;
     }
 
     function proposeConfig(
@@ -109,6 +115,7 @@ contract XNSPricingPolicy is Ownable {
         previousVersion = version;
         previousQuoteSigner = _config.quoteSigner;
         previousQuoteValidUntil = block.timestamp + QUOTE_GRACE_PERIOD;
+        _previousConfig = _config;
 
         _config = _pendingConfig;
         version += 1;
@@ -124,14 +131,46 @@ contract XNSPricingPolicy is Ownable {
         uint256 labelLength,
         uint256 years_
     ) external view returns (uint256) {
+        return _priceUsdMicros(_config, product, labelLength, years_);
+    }
+
+    function priceUsdMicrosForVersion(
+        Product product,
+        uint256 labelLength,
+        uint256 years_,
+        uint256 quoteVersion
+    ) external view returns (uint256) {
+        if (quoteVersion == version) {
+            return _priceUsdMicros(_config, product, labelLength, years_);
+        }
+        if (
+            quoteVersion == previousVersion &&
+            block.timestamp <= previousQuoteValidUntil
+        ) {
+            return _priceUsdMicros(
+                _previousConfig,
+                product,
+                labelLength,
+                years_
+            );
+        }
+        revert InvalidQuoteVersion();
+    }
+
+    function _priceUsdMicros(
+        PricingConfig memory target,
+        Product product,
+        uint256 labelLength,
+        uint256 years_
+    ) internal pure returns (uint256) {
         if (product == Product.Migration) {
             if (years_ != 0) revert InvalidTerm();
-            return _config.migrationUsdMicros;
+            return target.migrationUsdMicros;
         }
 
         uint256 annualPrice;
         if (product == Product.Subdomain) {
-            annualPrice = _config.subdomainAnnualUsdMicros;
+            annualPrice = target.subdomainAnnualUsdMicros;
         } else {
             if (
                 labelLength < MIN_LABEL_LENGTH ||
@@ -140,13 +179,13 @@ contract XNSPricingPolicy is Ownable {
                 revert InvalidLabelLength();
             }
             annualPrice = labelLength == 3
-                ? _config.threeCharacterAnnualUsdMicros
+                ? target.threeCharacterAnnualUsdMicros
                 : labelLength == 4
-                    ? _config.fourCharacterAnnualUsdMicros
-                    : _config.standardAnnualUsdMicros;
+                    ? target.fourCharacterAnnualUsdMicros
+                    : target.standardAnnualUsdMicros;
         }
 
-        uint256 discountBps = _discountForTerm(years_);
+        uint256 discountBps = _discountForTerm(target, years_);
         uint256 gross = annualPrice * years_;
         return _divideRoundingUp(
             gross * (BASIS_POINTS - discountBps),
@@ -174,12 +213,13 @@ contract XNSPricingPolicy is Ownable {
     }
 
     function _discountForTerm(
+        PricingConfig memory target,
         uint256 years_
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         if (years_ == 1) return 0;
-        if (years_ == 3) return _config.threeYearDiscountBps;
-        if (years_ == 5) return _config.fiveYearDiscountBps;
-        if (years_ == 10) return _config.tenYearDiscountBps;
+        if (years_ == 3) return target.threeYearDiscountBps;
+        if (years_ == 5) return target.fiveYearDiscountBps;
+        if (years_ == 10) return target.tenYearDiscountBps;
         revert InvalidTerm();
     }
 

@@ -2,7 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 
 const explorerApiKey =
-  process.env.ETHERSCAN_API_KEY || process.env.XDCSCAN_API_KEY || "";
+  process.env.XDCSCAN_API_KEY || process.env.ETHERSCAN_API_KEY || "";
 
 const config: HardhatUserConfig = {
   solidity: "0.8.24",

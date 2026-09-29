@@ -5,7 +5,6 @@ import {
   formatEther,
   formatUnits,
   getAddress,
-  isAddress,
   keccak256,
   toBytes,
   zeroAddress,
@@ -20,6 +19,7 @@ import {
   useSwitchChain,
   useWriteContract,
 } from "wagmi";
+import { isNonZeroAddress } from "../lib/addressValidation";
 import {
   activeSubdomainRegistrarAddress,
   activeXnsChainId,
@@ -144,7 +144,7 @@ export function SubdomainRegistration() {
       !address ||
       !client ||
       !inputValid ||
-      !isAddress(ownerInput)
+      !isNonZeroAddress(ownerInput)
     ) return;
 
     setBusy(true);
@@ -300,7 +300,7 @@ export function SubdomainRegistration() {
         disabled={
           !isConnected ||
           !inputValid ||
-          !isAddress(ownerInput) ||
+          !isNonZeroAddress(ownerInput) ||
           !availabilityReady ||
           busy ||
           (available.data === false && !hasActiveOwner)

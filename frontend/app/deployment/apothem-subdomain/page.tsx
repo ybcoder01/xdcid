@@ -1,15 +1,5 @@
-import { notFound } from "next/navigation";
-import ApothemSubdomainDeploymentClient from "./ApothemSubdomainDeploymentClient";
-
-export const dynamic = "force-dynamic";
+import { redirect } from "next/navigation";
 
 export default function ApothemSubdomainDeploymentPage() {
-  if (
-    process.env.VERCEL_ENV !== "preview" ||
-    process.env.ENABLE_APOTHEM_SUBDOMAIN_DEPLOYMENT !== "true"
-  ) {
-    notFound();
-  }
-
-  return <ApothemSubdomainDeploymentClient />;
+  redirect("/deployment/apothem-registry-v2-activation");
 }

@@ -16,12 +16,15 @@ import {
   type PublicClient,
 } from "viem";
 import { mainnetPricingDeploymentArtifacts } from "../../../generated/mainnetPricingDeployment";
+import { XDC_MAINNET_DEPLOYMENT } from "../../../../sdk/src/deployment/deployments";
 
-const OWNER = getAddress("0xe82a4267CC310FC6Db334601671A043DFc8Ce06A");
-const REGISTRY = getAddress("0x05fa64a05bc205DeDF47e023d2D90c2d119cd097");
-const LEGACY_REGISTRY = getAddress("0x295a7aB79368187a6CD03c464cfaAb04d799784E");
-const USDC = getAddress("0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1");
-const CHAIN_ID = 50;
+const OWNER = getAddress(XDC_MAINNET_DEPLOYMENT.protocolOwner);
+const REGISTRY = getAddress(XDC_MAINNET_DEPLOYMENT.active.registry);
+const LEGACY_REGISTRY = getAddress(
+  XDC_MAINNET_DEPLOYMENT.dependencies.legacyRegistry,
+);
+const USDC = getAddress(XDC_MAINNET_DEPLOYMENT.dependencies.usdcToken);
+const CHAIN_ID = XDC_MAINNET_DEPLOYMENT.chainId;
 const CREATE2_DEPLOYER = getAddress("0x4e59b44847b379578588920ca78fbf26c0b4956c");
 const CREATE2_SALT = (suffix: number) =>
   (`0x${suffix.toString(16).padStart(64, "0")}`) as Hex;

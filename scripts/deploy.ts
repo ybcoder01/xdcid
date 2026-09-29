@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { ethers } from "hardhat";
 
 async function main() {
@@ -30,10 +28,12 @@ async function main() {
     reverseResolver: await reverse.getAddress()
   };
 
-  const config = `export const xnsAddresses = ${JSON.stringify(addresses, null, 2)} as const;\n`;
-  fs.writeFileSync(path.join(__dirname, "..", "frontend", "config", "addresses.ts"), config);
-
   console.log(addresses);
+  console.log(
+    "Deployment complete. Record verified production addresses in " +
+      "sdk/src/deployment/deployments.ts through a reviewed pull request; this script " +
+      "does not rewrite application defaults.",
+  );
 }
 
 main().catch((error) => {

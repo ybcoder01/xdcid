@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAddress, isAddress, keccak256, parseEther, parseUnits, stringToHex, zeroAddress, type Hash } from "viem";
 import {
@@ -7,6 +8,7 @@ import {
   usePublicClient,
   useReadContract,
   useSendTransaction,
+  useSwitchChain,
   useWaitForTransactionReceipt
 } from "wagmi";
 import {
@@ -16,13 +18,14 @@ import {
 import { CrossChainPaymentNotice } from "../../components/CrossChainPaymentNotice";
 import {
   activeRegistryAddress,
-  activeResolverSuiteAvailable,
+  multichainResolverAvailable,
   addresses,
   multichainResolverAbi,
   registryAbi
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
+  multichainRecordChainId,
   PAYMENT_NETWORK_ENV,
   PAYMENT_NETWORKS,
   USDC_DECIMALS
@@ -44,7 +47,18 @@ import {
   estimateAdaptiveGasFees,
   isBaseFeeTooLowError
 } from "../../lib/gasFeePolicy";
+import {
+  paymentSelectionForSavedEntry,
+  type ExchangeAddressBookEntry,
+} from "../../lib/exchangeAddressBook";
 import { trackPayment } from "../../lib/productAnalytics";
+import {
+  PENDING_CCTP_CHANGED_EVENT,
+  PENDING_CCTP_STORAGE_KEY,
+  readPendingCctpTransfers,
+  removePendingCctpTransfer,
+  type PendingCctpTransfer
+} from "../../lib/pendingCctpTransfers";
 
 const XDC_CHAIN_ID = PAYMENT_NETWORK_ENV === "testnet" ? 51 : 50;
 const DEFAULT_SOURCE_CHAIN_ID =
@@ -74,11 +88,20 @@ export default function SendPage() {
   const [token, setToken] = useState<PaymentToken>("USDC");
   const [paymentReference, setPaymentReference] = useState("");
   const [historyStatus, setHistoryStatus] = useState("");
+  const [savedEntries, setSavedEntries] = useState<ExchangeAddressBookEntry[]>([]);
+  const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [selectedEntryId, setSelectedEntryId] = useState("");
+  const [walletSwitchStatus, setWalletSwitchStatus] = useState("");
+  const [pendingWalletChainId, setPendingWalletChainId] = useState<number | null>(null);
+  const [pendingCctpTransfers, setPendingCctpTransfers] = useState<
+    PendingCctpTransfer[]
+  >([]);
   const recordingHashes = useRef(new Set<string>());
   const analyticsHashes = useRef(new Set<string>());
 
   useEffect(() => installPaymentCompletionRetry(), []);
-  const { chainId: connectedChainId, isConnected } = useAccount();
+  const { address: connectedAddress, chainId: connectedChainId, isConnected } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const {
     sendTransactionAsync,
     isPending,
@@ -91,6 +114,31 @@ export default function SendPage() {
     chainId: sourceChainId,
     hash
   });
+
+  useEffect(() => {
+    if (!connectedAddress) {
+      setPendingCctpTransfers([]);
+      return;
+    }
+    const refreshPendingTransfers = () => {
+      const payer = connectedAddress.toLowerCase();
+      setPendingCctpTransfers(
+        readPendingCctpTransfers(window.localStorage).filter(
+          (transfer) => transfer.payer.toLowerCase() === payer
+        )
+      );
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === PENDING_CCTP_STORAGE_KEY) refreshPendingTransfers();
+    };
+    refreshPendingTransfers();
+    window.addEventListener(PENDING_CCTP_CHANGED_EVENT, refreshPendingTransfers);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener(PENDING_CCTP_CHANGED_EVENT, refreshPendingTransfers);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [connectedAddress]);
 
   useEffect(() => {
     resetNativeTransaction();
@@ -116,6 +164,94 @@ export default function SendPage() {
   const enabled = !directRecipient && isValid;
   const units = useMemo(() => paymentUnits(amount, token), [amount, token]);
   const sourceNetwork = getPaymentNetwork(sourceChainId);
+  const selectedEntry = useMemo(
+    () => savedEntries.find((entry) => entry.id === selectedEntryId),
+    [savedEntries, selectedEntryId],
+  );
+  const selectedEntryPayment = useMemo(
+    () => selectedEntry
+      ? paymentSelectionForSavedEntry(selectedEntry, PAYMENT_NETWORKS)
+      : null,
+    [selectedEntry],
+  );
+  const selectedEntryToken: PaymentToken | null = selectedEntryPayment?.token || null;
+  const savedDestinationMismatch = !!selectedEntry && (
+    directRecipient?.toLowerCase() !== selectedEntry.address.toLowerCase()
+    || destinationChainId !== selectedEntryPayment?.chainId
+    || sourceChainId !== selectedEntryPayment?.chainId
+    || selectedEntryToken !== token
+  );
+
+  const applySavedEntry = useCallback((entry: ExchangeAddressBookEntry) => {
+    const selection = paymentSelectionForSavedEntry(entry, PAYMENT_NETWORKS);
+    setSelectedEntryId(entry.id);
+    setRecipient(entry.address);
+    setWalletSwitchStatus("");
+    if (!selection) return;
+    setSourceChainId(selection.chainId);
+    setDestinationChainId(selection.chainId);
+    setToken(selection.token);
+    setPendingWalletChainId(selection.chainId);
+  }, []);
+
+  useEffect(() => {
+    if (!isConnected || !connectedAddress || pendingWalletChainId === null) return;
+    if (connectedChainId === pendingWalletChainId) {
+      setPendingWalletChainId(null);
+      setWalletSwitchStatus("");
+      return;
+    }
+    let active = true;
+    const requestedChainId = pendingWalletChainId;
+    setPendingWalletChainId(null);
+    try {
+      void switchChainAsync({ chainId: requestedChainId })
+        .then(() => {
+          if (active) setWalletSwitchStatus(
+            `Wallet switched to ${getPaymentNetwork(requestedChainId)?.name || "the saved network"}.`,
+          );
+        })
+        .catch(() => {
+          if (active) setWalletSwitchStatus(
+            `Route updated. Switch your wallet to ${getPaymentNetwork(requestedChainId)?.name || "the saved network"} before paying.`,
+          );
+        });
+    } catch {
+      setWalletSwitchStatus(
+        `Route updated. Switch your wallet to ${getPaymentNetwork(requestedChainId)?.name || "the saved network"} before paying.`,
+      );
+    }
+    return () => { active = false; };
+  }, [connectedAddress, connectedChainId, isConnected, pendingWalletChainId, switchChainAsync]);
+
+  useEffect(() => {
+    let active = true;
+    if (!connectedAddress) {
+      setSavedEntries([]);
+      setVaultUnlocked(false);
+      setSelectedEntryId("");
+      return;
+    }
+    void fetch("/api/private-vault/auth/session", { cache: "no-store" })
+      .then(async (response) => ({ response, body: await response.json() as { authenticated?: boolean; address?: string } }))
+      .then(async ({ response, body }) => {
+        if (!active || !response.ok || !body.authenticated || body.address?.toLowerCase() !== connectedAddress.toLowerCase()) {
+          if (active) { setSavedEntries([]); setVaultUnlocked(false); setSelectedEntryId(""); }
+          return;
+        }
+        const entriesResponse = await fetch("/api/address-book", { cache: "no-store" });
+        const entriesBody = await entriesResponse.json() as { entries?: ExchangeAddressBookEntry[] };
+        if (!active || !entriesResponse.ok) return;
+        const entries = entriesBody.entries || [];
+        setVaultUnlocked(true);
+        setSavedEntries(entries);
+        const requestedId = new URLSearchParams(window.location.search).get("destination");
+        const requested = entries.find((entry) => entry.id === requestedId && entry.status !== "retired");
+        if (requested) void applySavedEntry(requested);
+      })
+      .catch(() => { if (active) { setSavedEntries([]); setVaultUnlocked(false); } });
+    return () => { active = false; };
+  }, [applySavedEntry, connectedAddress]);
 
   const routeState = useMemo(() => {
     try {
@@ -161,13 +297,23 @@ export default function SendPage() {
     query: { enabled: !!node }
   });
 
+  const destinationRecordChainId =
+    multichainRecordChainId(destinationChainId);
+
   const multichainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: addresses.multichainResolver,
     abi: multichainResolverAbi,
     functionName: "addressFor",
-    args: node ? [node, BigInt(destinationChainId)] : undefined,
-    query: { enabled: !!node && activeResolverSuiteAvailable }
+    args: node && destinationRecordChainId
+      ? [node, BigInt(destinationRecordChainId)]
+      : undefined,
+    query: {
+      enabled:
+        !!node &&
+        multichainResolverAvailable &&
+        destinationRecordChainId !== null
+    }
   });
 
   const expired = expiry.data
@@ -215,7 +361,9 @@ export default function SendPage() {
     recipientReady &&
     !!destination &&
     !!routeState.route &&
-    units > 0n;
+    units > 0n &&
+    !savedDestinationMismatch &&
+    (!selectedEntry || (!!selectedEntryToken && !selectedEntry.memo));
 
   const canSendNative =
     routeReady &&
@@ -333,6 +481,28 @@ export default function SendPage() {
     setDestinationChainId(swapped.destinationChainId);
   }
 
+  function resumePendingCctpTransfer(transfer: PendingCctpTransfer) {
+    setSelectedEntryId("");
+    setPaymentReference("");
+    setRecipient(transfer.recipient);
+    setAmount(transfer.amount);
+    setToken("USDC");
+    setSourceChainId(transfer.sourceChainId);
+    setDestinationChainId(transfer.destinationChainId);
+    setWalletSwitchStatus(
+      "Pending transfer restored. Review the public burn reference, then resume the attestation lookup."
+    );
+  }
+
+  function forgetPendingCctpTransfer(burnHash: string) {
+    if (!removePendingCctpTransfer(window.localStorage, burnHash)) return;
+    setPendingCctpTransfers((current) =>
+      current.filter(
+        (transfer) => transfer.burnHash.toLowerCase() !== burnHash.toLowerCase()
+      )
+    );
+  }
+
   const resolutionMessage = directRecipient
     ? "Direct wallet address. XDCID resolution is not required."
     : !isValid
@@ -352,9 +522,9 @@ export default function SendPage() {
                   : routeState.error || destination.address;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
-      <section className="grid gap-6 lg:grid-cols-[1fr_380px]">
-        <div className="rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
+    <main className="mx-auto max-w-6xl px-4 py-8 md:py-10">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,23rem)]">
+        <div className="min-w-0 rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm md:p-8">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
               XDCID multichain payments
@@ -370,22 +540,110 @@ export default function SendPage() {
             Resolve an XDCID name or pay a verified EVM wallet address directly.
           </p>
 
+          {pendingCctpTransfers.length > 0 ? (
+            <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-4" aria-labelledby="pending-cctp-heading">
+              <h2 id="pending-cctp-heading" className="text-sm font-semibold text-slate-950">
+                Pending cross-chain transfers
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-neutral-600">
+                These public burn references are saved only in this browser so a refresh does not interrupt recovery.
+              </p>
+              <div className="mt-3 grid gap-3">
+                {pendingCctpTransfers.map((transfer) => {
+                  const pendingSource = getPaymentNetwork(transfer.sourceChainId);
+                  const pendingDestination = getPaymentNetwork(transfer.destinationChainId);
+                  return (
+                    <article key={transfer.burnHash} className="rounded-xl border border-amber-200 bg-white p-3">
+                      <p className="text-sm font-semibold text-slate-950">
+                        {transfer.amount} USDC · {pendingSource?.name || transfer.sourceChainId} → {pendingDestination?.name || transfer.destinationChainId}
+                      </p>
+                      <p className="mt-1 break-all font-mono text-[11px] leading-5 text-neutral-600">
+                        Burn: {pendingSource?.explorerUrl ? (
+                          <a
+                            className="text-teal-700 underline"
+                            href={`${pendingSource.explorerUrl}/tx/${transfer.burnHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {transfer.burnHash}
+                          </a>
+                        ) : transfer.burnHash}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"
+                          onClick={() => resumePendingCctpTransfer(transfer)}
+                        >
+                          Resume transfer
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 hover:border-red-300 hover:text-red-700"
+                          onClick={() => forgetPendingCctpTransfer(transfer.burnHash)}
+                        >
+                          Remove reference
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
           {token === "USDC" && sourceChainId !== destinationChainId ? (
             <CrossChainPaymentNotice sourceChainId={sourceChainId} />
           ) : null}
 
           <div className="mt-8 grid gap-4">
+            <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/90 to-white p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="grid flex-1 gap-2 text-sm">
+                  <span className="font-semibold text-slate-950">Saved exchange destination</span>
+                  <select
+                    className="min-w-0 rounded-xl border border-teal-200 bg-white px-4 py-3 shadow-sm disabled:text-neutral-400"
+                    disabled={!vaultUnlocked || savedEntries.length === 0}
+                    value={selectedEntryId}
+                    onChange={(event) => {
+                      const entry = savedEntries.find((candidate) => candidate.id === event.target.value);
+                      if (entry) void applySavedEntry(entry);
+                      else setSelectedEntryId("");
+                    }}
+                  >
+                    <option value="">{vaultUnlocked ? "Choose a saved destination" : "Unlock your address book first"}</option>
+                    {savedEntries.filter((entry) => entry.status !== "retired").map((entry) => (
+                      <option key={entry.id} value={entry.id}>{entry.exchange} Wallet · {entry.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <Link className="rounded-xl border border-teal-700 bg-white px-4 py-3 text-center text-sm font-semibold text-teal-800 transition hover:bg-teal-50" href="/address-book">
+                  {vaultUnlocked ? "Manage" : "Open address book"}
+                </Link>
+              </div>
+              {selectedEntry && selectedEntryPayment ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <span className="rounded-full bg-white px-3 py-1.5 shadow-sm">{selectedEntry.exchange}</span>
+                  <span className="rounded-full bg-white px-3 py-1.5 shadow-sm">{selectedEntry.asset}</span>
+                  <span className="rounded-full bg-white px-3 py-1.5 shadow-sm">{getPaymentNetwork(selectedEntryPayment.chainId)?.name}</span>
+                  <span className="text-teal-800">Route and wallet network applied</span>
+                </div>
+              ) : null}
+              {walletSwitchStatus ? (
+                <p className="mt-3 text-xs text-amber-800" role="status">{walletSwitchStatus}</p>
+              ) : null}
+            </div>
             <label className="grid gap-2 text-sm">
               <span className="font-semibold text-slate-950">Recipient</span>
-              <div className="flex gap-2 rounded-md border border-black/10 bg-slate-950 p-2">
+              <div className="flex gap-2 rounded-2xl border border-slate-800 bg-slate-950 p-2 shadow-sm">
                 <input
-                  className="min-w-0 flex-1 rounded-md border border-white/10 bg-white px-4 py-4 text-lg"
+                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white px-4 py-4 font-mono text-sm sm:text-base"
                   value={recipient}
                   onChange={(event) => setRecipient(event.target.value)}
                   placeholder="name.xdc or 0x wallet address"
                   aria-invalid={recipient.trim().length > 0 && !directRecipient && !isValid}
                 />
-                <span className="grid min-w-20 place-items-center rounded-md bg-teal-500 px-4 py-4 text-sm font-semibold text-slate-950">
+                <span className="grid min-w-20 place-items-center rounded-xl bg-teal-400 px-4 py-4 text-sm font-semibold text-slate-950">
                   {directRecipient ? "Wallet" : ".XDC"}
                 </span>
               </div>
@@ -394,11 +652,21 @@ export default function SendPage() {
               ) : null}
             </label>
 
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">Payment route</p>
+                  <p className="mt-0.5 text-xs text-slate-500">The connected wallet sends from the source network.</p>
+                </div>
+                {sourceChainId === destinationChainId ? (
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Direct</span>
+                ) : null}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
               <label className="grid gap-2 text-sm">
                 <span className="font-semibold text-slate-950">From network</span>
                 <select
-                  className="rounded-md border border-black/10 bg-white px-4 py-3"
+                  className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3"
                   value={sourceChainId}
                   onChange={(event) => setSourceChainId(Number(event.target.value))}
                 >
@@ -412,7 +680,7 @@ export default function SendPage() {
 
               <button
                 type="button"
-                className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-teal-700 bg-white text-xl font-semibold text-teal-800 transition hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="mx-auto grid h-11 w-11 place-items-center rounded-full border border-teal-700 bg-white text-xl font-semibold text-teal-800 shadow-sm transition hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500"
                 aria-label="Swap source and destination networks"
                 title="Swap networks"
                 onClick={swapNetworks}
@@ -423,7 +691,7 @@ export default function SendPage() {
               <label className="grid gap-2 text-sm">
                 <span className="font-semibold text-slate-950">To network</span>
                 <select
-                  className="rounded-md border border-black/10 bg-white px-4 py-3"
+                  className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3"
                   value={destinationChainId}
                   onChange={(event) => setDestinationChainId(Number(event.target.value))}
                 >
@@ -434,6 +702,7 @@ export default function SendPage() {
                   ))}
                 </select>
               </label>
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
@@ -480,19 +749,32 @@ export default function SendPage() {
                 {routeState.error}
               </p>
             ) : null}
+            {selectedEntry?.memo ? (
+              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                This exchange destination requires memo/tag “{selectedEntry.memo}”. XDCID Send cannot safely include exchange memos yet, so payment is blocked.
+              </p>
+            ) : selectedEntry && !selectedEntryToken ? (
+              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {selectedEntry.asset} is not supported on {getPaymentNetwork(selectedEntry.chainId)?.name || "this network"} by XDCID Send.
+              </p>
+            ) : savedDestinationMismatch ? (
+              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                The destination network or asset no longer matches the saved exchange entry. Re-select the entry before sending.
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <aside className="rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
+        <aside className="min-w-0 self-start overflow-hidden rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm lg:sticky lg:top-24">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
             Resolution and route
           </p>
           {recipient.trim().length > 0 ? (
             <div className="mt-5">
-              <p className="text-2xl font-semibold text-slate-950">
+              <p className="break-all font-mono text-sm font-semibold leading-6 text-slate-950 sm:text-base">
                 {directRecipient ? directRecipient : isValid ? name : recipient.trim()}
               </p>
-              <p className="mt-3 break-all text-sm text-neutral-600">
+              <p className="mt-3 break-words text-sm leading-5 text-neutral-600">
                 {resolutionMessage}
               </p>
 
@@ -503,7 +785,7 @@ export default function SendPage() {
               ) : null}
 
               {routeState.route ? (
-                <div className="mt-5 rounded-md border border-black/10 bg-neutral-50 p-4 text-sm">
+                <div className="mt-5 min-w-0 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-sm">
                   <p className="font-semibold text-slate-950">
                     {routeLabel(routeState.route)}
                   </p>
@@ -517,18 +799,22 @@ export default function SendPage() {
                     {routeState.route.steps.join(" → ")}
                   </p>
                   {destination ? (
-                    <p className="mt-3 break-all text-xs text-neutral-600">
-                      Receiving address: {destination.address}
-                      <br />
-                      Address source: {destination.source === "direct-wallet" ? "direct wallet address" : destination.source === "multichain" ? routeState.route.destination.name + " address configured for this XDCID" : "current XDCID owner"}
+                    <div className="mt-4 min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Receiving address</p>
+                      <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-800">{destination.address}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {destination.source === "direct-wallet"
+                          ? "Direct wallet address"
+                          : destination.source === "multichain"
+                            ? routeState.route.destination.name + " address configured for this XDCID"
+                            : "Current XDCID owner"}
+                      </p>
                       {!directRecipient ? (
-                        <>
-                          <br />
-                          One XDCID can use a different receiving address on each
-                          supported network.
-                        </>
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          One XDCID can use a different receiving address on each supported network.
+                        </p>
                       ) : null}
-                    </p>
+                    </div>
                   ) : null}
                 </div>
               ) : null}

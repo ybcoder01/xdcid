@@ -95,6 +95,46 @@ describe("XNSResolverV2", function () {
     expect(await resolver.text(node, "bio")).to.equal("");
   });
 
+  it("does not reactivate records when a name returns to a former owner", async function () {
+    const {
+      formerOwner,
+      newOwner,
+      formerDestination,
+      registry,
+      resolver,
+      node
+    } = await deploy();
+    await resolver
+      .connect(formerOwner)
+      .setAddress(node, formerDestination.address);
+    await resolver.connect(formerOwner).setText(node, "bio", "former owner");
+
+    await registry.connect(formerOwner).transferName(node, newOwner.address);
+    await registry.connect(newOwner).transferName(node, formerOwner.address);
+
+    expect(await resolver.addresses(node)).to.equal(formerOwner.address);
+    expect(await resolver.text(node, "bio")).to.equal("");
+    expect((await resolver.addressRecord(node)).active).to.equal(false);
+    expect((await resolver.textRecord(node, "bio")).active).to.equal(false);
+  });
+
+  it("does not reactivate records after the same owner re-registers an expired name", async function () {
+    const { admin, formerOwner, formerDestination, registry, resolver, node } =
+      await deploy();
+    await resolver
+      .connect(formerOwner)
+      .setAddress(node, formerDestination.address);
+    await resolver.connect(formerOwner).setText(node, "bio", "old lifecycle");
+
+    await ethers.provider.send("evm_increaseTime", [YEAR + 1]);
+    await ethers.provider.send("evm_mine", []);
+    const expiry = (await ethers.provider.getBlock("latest"))!.timestamp + YEAR;
+    await registry.connect(admin).register(node, formerOwner.address, expiry);
+
+    expect(await resolver.addresses(node)).to.equal(formerOwner.address);
+    expect(await resolver.text(node, "bio")).to.equal("");
+  });
+
   it("allows only the active owner to change records", async function () {
     const { formerOwner, newOwner, resolver, node } = await deploy();
     await expect(
@@ -103,5 +143,15 @@ describe("XNSResolverV2", function () {
 
     await resolver.connect(formerOwner).setAddress(node, ethers.ZeroAddress);
     expect(await resolver.addresses(node)).to.equal(formerOwner.address);
+  });
+
+  it("rejects a Registry that cannot expose ownership generations", async function () {
+    const Legacy = await ethers.getContractFactory("MockLegacyRegistry");
+    const legacy = await Legacy.deploy();
+    const Resolver = await ethers.getContractFactory("XNSResolverV2");
+
+    await expect(
+      Resolver.deploy(await legacy.getAddress()),
+    ).to.be.revertedWithCustomError(Resolver, "InvalidRegistry");
   });
 });

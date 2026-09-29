@@ -47,6 +47,14 @@ export function MultichainAddressManager({
       args: [node, BigInt(network.chainId)]
     }))
   });
+  const recordReads = useReadContracts({
+    contracts: supportedMultichainNetworks.map((network) => ({
+      address: addresses.multichainResolver,
+      abi: multichainResolverAbi,
+      functionName: "addressRecord",
+      args: [node, BigInt(network.chainId)]
+    }))
+  });
 
   const currentAddresses = useMemo(() => {
     return supportedMultichainNetworks.reduce<Record<number, Address | null>>(
@@ -61,6 +69,26 @@ export function MultichainAddressManager({
       {}
     );
   }, [addressReads.data]);
+
+  const currentOverrides = useMemo(() => {
+    return supportedMultichainNetworks.reduce<Record<number, Address | null>>(
+      (current, network, index) => {
+        const result = recordReads.data?.[index]?.result;
+        const tuple = Array.isArray(result) ? result : null;
+        const target = tuple?.[0];
+        const active = tuple?.[2];
+        current[network.chainId] =
+          active === true &&
+          typeof target === "string" &&
+          isAddress(target) &&
+          target !== zeroAddress
+            ? getAddress(target)
+            : null;
+        return current;
+      },
+      {}
+    );
+  }, [recordReads.data]);
 
   useEffect(() => {
     if (!addressReads.data) return;
@@ -85,6 +113,7 @@ export function MultichainAddressManager({
     );
     setActiveChainId(null);
     void addressReads.refetch();
+    void recordReads.refetch();
   }, [receipt.isSuccess, activeChainId]);
 
   function useConnectedAddressForAll() {
@@ -143,8 +172,9 @@ export function MultichainAddressManager({
             Multichain addresses
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-neutral-600">
-            Choose where {name} resolves on each supported EVM network. Record
-            changes are signed by the name owner and stored on XDC Network.
+            Your primary XDCID uses the owner wallet on all five supported
+            networks by default. Add an override only where you want {name} to
+            resolve somewhere else.
           </p>
         </div>
         <button
@@ -152,7 +182,7 @@ export function MultichainAddressManager({
           disabled={!connectedAddress || isPending || receipt.isLoading}
           onClick={useConnectedAddressForAll}
         >
-          Use my wallet for all
+          Reset drafts to my wallet
         </button>
       </div>
 
@@ -161,15 +191,17 @@ export function MultichainAddressManager({
           One ID, different receiving addresses
         </p>
         <p className="mt-1 leading-6">
-          {name} can resolve to a different address on each supported network.
-          Payments use the destination network&apos;s address when one is set;
-          otherwise, they use your default EVM address.
+          Payments use a custom destination when one is saved. Otherwise, your
+          verified primary ID resolves to its current owner wallet. Changing the
+          primary ID moves this default; custom records stay attached to their
+          individual names.
         </p>
       </div>
 
       <div className="mt-5 grid gap-3">
         {supportedMultichainNetworks.map((network) => {
           const currentAddress = currentAddresses[network.chainId];
+          const currentOverride = currentOverrides[network.chainId];
           const draft = drafts[network.chainId] || "";
           const validDraft = isAddress(draft) && draft !== zeroAddress;
           const unchanged =
@@ -195,13 +227,17 @@ export function MultichainAddressManager({
                 <span
                   className={
                     "rounded-full px-2 py-1 text-xs font-semibold " +
-                    (currentAddress
+                    (currentOverride
                       ? "bg-teal-100 text-teal-800"
+                      : currentAddress
+                        ? "bg-blue-100 text-blue-800"
                       : "bg-neutral-200 text-neutral-600")
                   }
                 >
-                  {currentAddress
-                    ? "Configured: " + shortAddress(currentAddress)
+                  {currentOverride
+                    ? "Custom: " + shortAddress(currentOverride)
+                    : currentAddress
+                      ? "Default: " + shortAddress(currentAddress)
                     : "Not set"}
                 </span>
               </div>
@@ -226,14 +262,18 @@ export function MultichainAddressManager({
                   }
                   onClick={() => saveAddress(network.chainId)}
                 >
-                  {busy ? "Confirming..." : currentAddress ? "Update" : "Save"}
+                  {busy
+                    ? "Confirming..."
+                    : currentOverride
+                      ? "Update custom"
+                      : "Set custom"}
                 </button>
                 <button
                   className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-neutral-100 disabled:opacity-50"
-                  disabled={!currentAddress || isPending || receipt.isLoading}
+                  disabled={!currentOverride || isPending || receipt.isLoading}
                   onClick={() => clearAddress(network.chainId)}
                 >
-                  Clear
+                  Use default
                 </button>
               </div>
             </div>
@@ -248,10 +288,10 @@ export function MultichainAddressManager({
         destination address.
       </div>
 
-      {addressReads.isLoading && (
+      {(addressReads.isLoading || recordReads.isLoading) && (
         <p className="mt-3 text-sm text-neutral-600">Loading address records...</p>
       )}
-      {addressReads.error && (
+      {(addressReads.error || recordReads.error) && (
         <p className="mt-3 text-sm text-red-600">
           Unable to load multichain address records.
         </p>

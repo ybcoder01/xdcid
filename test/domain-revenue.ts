@@ -1,8 +1,9 @@
 import { expect } from "chai";
 import { domainRevenueEventId } from "../frontend/lib/domainRevenueIdentity";
+import { XDC_MAINNET_DEPLOYMENT } from "../sdk/src/deployment/deployments";
 
 describe("domain revenue indexing", function () {
-  const contract = "0xdEaf1742614908a8d170f4c9520c3cd1e967ef36";
+  const contract = XDC_MAINNET_DEPLOYMENT.active.registrar;
   const transaction =
     "0x1111111111111111111111111111111111111111111111111111111111111111";
 

@@ -70,6 +70,14 @@ The reviewed owner address is an externally owned account rather than a contract
 
 **Recommendation:** Move ownership to a hardware-backed multisig with separated signers. Prefer `Ownable2Step` for future deployments. Add a timelock or delayed two-step registrar change to the Registry, monitoring for every proposed/activated policy change, and an incident runbook for pausing the registrar. Keep the quote signer and treasury operationally separate from protocol administration.
 
+**Interim mitigation implemented:** A scheduled read-only mainnet invariant
+monitor now checks the reviewed deployment through a two-of-three RPC quorum
+every six hours and fails on unexpected authority, ownership, configuration,
+bytecode, or dependency changes. `docs/security-incident-response.md` defines
+containment and recovery procedures for owner, registrar, signer, pricing, and
+treasury incidents. These controls improve detection and response but do not
+remove the single-owner risk; multisig migration remains required.
+
 ### M-02 — Checked-in deployment and ownership tooling targets the legacy registrar
 
 **Impact:** A production build missing the expected environment override can target the obsolete registrar. An administrator following the ownership-transfer script can transfer the Registry and legacy registrar while leaving Registrar V2, Pricing Policy V2, Discount Authorization, and Subdomain Registrar controlled by the former owner.
@@ -77,6 +85,16 @@ The reviewed owner address is an externally owned account rather than a contract
 `frontend/config/addresses.ts` defaults `registrar` to `0x6955...6cD7`, while the documented and Registry-authorized active registrar is `0xdEaf...ef36`. `scripts/transfer-ownership.ts` imports that legacy address and transfers only two contracts.
 
 **Recommendation:** Introduce a single typed mainnet deployment manifest as the source of truth. Validate at build/deploy time that the configured registrar equals `registry.registrar()`, has code, and references the expected dependencies. Replace the transfer script with a complete, resumable ownership-migration script that enumerates every governed V2 contract and verifies final ownership before reporting success.
+
+**Remediation implemented:** `sdk/src/deployment/deployments.ts` now provides one typed
+public manifest for SDK, frontend, release-preflight, and operator defaults. The
+read-only mainnet preflight verifies active bytecode, Registry authorization,
+immutable dependencies, ownership, signer/token/treasury configuration, pause
+state, and candidate dependencies. Ownership migration now enumerates every
+active governed V2 contract plus any configured candidate Primary Registrar,
+deduplicates promoted candidates, defaults to a dry run, skips completed
+transfers, and verifies every resulting owner. Mainnet candidate resolver
+deployment and the move from a single EOA to a multisig remain release blockers.
 
 ### L-01 — Reverse names remain stale after transfer or expiry
 
@@ -96,6 +114,17 @@ The Registry does not reject zero addresses in `setRegistrar`, `register`, or `t
 
 **Recommendation:** Reject zero addresses unless an explicit burn/release operation is intended. Make release a distinct operation. Return no resolver for inactive names, and emit events for every registry mutation.
 
+**Remediation implemented:** Registry source now rejects a zero registrar, zero
+registration owner, and zero transfer recipient. Registrar changes,
+registrations/renewals, ownership transfers, and resolver changes emit indexed
+events, and `resolverOf` returns the zero address for inactive names. The
+Registry also clears its stored resolver pointer when ownership changes and
+when an expired name is re-registered, preventing the former resolver from
+becoming active for the new lifecycle. An active same-owner renewal preserves
+the resolver. Transferring to the zero address is not treated as an implicit
+release. This hardening requires a future Registry deployment and migration;
+currently deployed bytecode is unchanged.
+
 ### L-03 — Previous-version quote grace is ineffective when prices change
 
 **Impact:** Quotes signed under the prior policy version can fail immediately after configuration activation even though the policy advertises a five-minute previous-signer grace period.
@@ -103,6 +132,15 @@ The Registry does not reject zero addresses in `setRegistrar`, `register`, or `t
 Registrar V2 accepts a previous signer/version during the grace period but recalculates the expected USD amount using the new current configuration. A prior quote based on an old price therefore fails `quote.usdMicros` validation.
 
 **Recommendation:** Either remove the advertised grace behavior and let clients request a new quote, or retain the previous pricing configuration for the grace interval and validate previous-version quotes against that configuration.
+
+**Remediation implemented:** Both pricing-policy variants retain the immediately
+previous configuration and expose version-aware pricing for the five-minute
+authorization window. Registrar V2, the signed-quote registrar, and the
+Subdomain Registrar now validate `usdMicros` against the quote's policy version.
+Tests change the active price after a quote is signed and confirm the original
+price remains valid during grace and becomes invalid when grace expires. This
+is source-level hardening for future deployments; existing deployed bytecode is
+unchanged.
 
 ### I-01 — The deployed subdomain contract is usable independently of its UI flag
 
@@ -115,6 +153,23 @@ The Subdomain Registrar is deployed and unpaused even though the product is labe
 The repository's contract and SDK test suites pass, including 243 contract/application tests and 27 SDK tests during this review. Slither, Aderyn, Mythril, and Foundry were not configured in this workspace, so this review did not include their automated detectors or invariant fuzzing.
 
 **Recommendation:** Add Slither to CI, add property/invariant tests for ownership transitions and resolver freshness, and commission an independent external audit before materially increasing protocol value or dependence.
+
+**Remediation implemented:** Slither `0.11.6` now runs in a dedicated CI job on
+every pull request and on pushes to `dev` and `main`. CI fails for any new High
+or Medium detector result outside an explicit function-level reviewed baseline.
+The baseline and its operational assumptions are documented in
+`docs/security-static-analysis.md`. Existing resolver ownership-lifecycle tests
+remain part of the blocking contract suite; broader stateful fuzzing and an
+independent external audit are still pending.
+
+**Follow-up remediation implemented:** The Subdomain Registrar now follows
+checks-effects-interactions for paid registration and renewal and uses the same
+reentrancy lock on every state-mutating entry point. Adversarial tests use a
+callback-capable treasury that owns the new subdomain and verify that it cannot
+change an address record or transfer ownership during payment. The two former
+Slither `reentrancy-eth` findings have been removed from the reviewed baseline.
+This is source-level hardening for the next deployment and does not mutate the
+currently deployed contract.
 
 ## Positive security properties
 

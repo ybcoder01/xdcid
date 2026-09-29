@@ -60,7 +60,27 @@ export async function getNameData(input: string, years: number) {
     const node = keccak256(stringToHex(parsed.name));
 
     if (isTestnetEnvironment) {
-      const [owner, expiry] = await Promise.all([
+      const resolvedAddressPromise = verifiedResolverAvailable
+        ? xdcClient.readContract({
+            address: addresses.verifiedResolver,
+            abi: resolverAbi,
+            functionName: "addresses",
+            args: [node]
+          })
+        : Promise.resolve(zeroAddress);
+      const profilePromise = verifiedResolverAvailable
+        ? Promise.all(
+            profileKeys.map((key) =>
+              xdcClient.readContract({
+                address: addresses.verifiedResolver,
+                abi: resolverAbi,
+                functionName: "text",
+                args: [node, key]
+              })
+            )
+          )
+        : Promise.resolve(profileKeys.map(() => ""));
+      const [owner, expiry, resolvedAddress, profileValues] = await Promise.all([
         xdcClient.readContract({
           address: activeRegistryAddress,
           abi: registryAbi,
@@ -72,12 +92,14 @@ export async function getNameData(input: string, years: number) {
           abi: registryAbi,
           functionName: "expiryOf",
           args: [node]
-        })
+        }),
+        resolvedAddressPromise,
+        profilePromise
       ]);
       const registered = owner !== zeroAddress;
       const normalizedOwner = registered ? getAddress(owner) : null;
       const profile = Object.fromEntries(
-        profileKeys.map((key) => [key, null])
+        profileKeys.map((key, index) => [key, profileValues[index] || null])
       ) as Profile;
 
       return {
@@ -88,7 +110,10 @@ export async function getNameData(input: string, years: number) {
         available: !registered,
         registered,
         owner: normalizedOwner,
-        resolvedAddress: normalizedOwner,
+        resolvedAddress:
+          resolvedAddress !== zeroAddress
+            ? getAddress(resolvedAddress)
+            : normalizedOwner,
         registry: {
           state: registered ? "xdcid" : "available",
           registrationAllowed: !registered,
@@ -269,9 +294,6 @@ export async function getReverseData(input: string) {
   }
 
   const address = getAddress(input);
-  if (isTestnetEnvironment) {
-    return { address, name: null, verified: false };
-  }
   if (!verifiedReverseResolverAvailable) {
     return { address, name: null, verified: false };
   }
@@ -294,7 +316,7 @@ export async function getReverseData(input: string) {
 
     const node = keccak256(stringToHex(parsed.name));
     const owner = await xdcClient.readContract({
-      address: addresses.registry,
+      address: activeRegistryAddress,
       abi: registryAbi,
       functionName: "ownerOf",
       args: [node]

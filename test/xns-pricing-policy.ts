@@ -100,6 +100,7 @@ describe("XNSPricingPolicy", function () {
     const { policy, config, signer, nextSigner } = await deployPolicy();
     await policy.proposeConfig({
       ...config,
+      standardAnnualUsdMicros: 7_000_000,
       quoteSigner: nextSigner.address,
     });
     await time.increase(48 * 60 * 60);
@@ -111,11 +112,19 @@ describe("XNSPricingPolicy", function () {
     expect(
       await policy.isQuoteAuthorizationValid(signer.address, 1),
     ).to.equal(true);
+    expect(await policy.priceUsdMicrosForVersion(0, 5, 1, 1)).to.equal(
+      5_000_000,
+    );
+    expect(await policy.priceUsdMicrosForVersion(0, 5, 1, 2)).to.equal(
+      7_000_000,
+    );
 
     await time.increase(5 * 60 + 1);
     expect(
       await policy.isQuoteAuthorizationValid(signer.address, 1),
     ).to.equal(false);
+    await expect(policy.priceUsdMicrosForVersion(0, 5, 1, 1))
+      .to.be.revertedWithCustomError(policy, "InvalidQuoteVersion");
   });
 
   it("rejects unsafe configuration", async function () {

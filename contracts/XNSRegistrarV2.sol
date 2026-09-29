@@ -8,7 +8,16 @@ import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import "./XNSRegistry.sol";
 import "./XNSPricingPolicyV2.sol";
+import "./XNSPricingPolicyCompatibility.sol";
 import "./XNSDiscountAuthorization.sol";
+
+interface IXNSPrimaryNameInitializer {
+    function initializePrimaryName(
+        address account,
+        string calldata name,
+        bytes32 node
+    ) external returns (bool initialized);
+}
 
 interface IXNSLegacyRegistryV2 {
     function _tokenIdMaps(string calldata name) external view returns (uint256);
@@ -140,7 +149,7 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
         string calldata name,
         Quote calldata quote,
         bytes calldata quoteSignature
-    ) external payable nonReentrant {
+    ) external payable virtual nonReentrant {
         _register(name, quote, quoteSignature, 0);
     }
 
@@ -150,7 +159,7 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
         bytes calldata quoteSignature,
         XNSDiscountAuthorization.DiscountAuthorization calldata authorization,
         bytes calldata authorizationSignature
-    ) external payable nonReentrant {
+    ) external payable virtual nonReentrant {
         uint16 discountBps = discountAuthorization.consume(
             authorization,
             authorizationSignature,
@@ -376,10 +385,12 @@ contract XNSRegistrarV2 is Ownable, EIP712, ReentrancyGuard {
         ) revert QuoteLifetimeTooLong();
         if (quote.nonce != nonces[msg.sender]) revert InvalidNonce();
 
-        grossUsdMicros = pricingPolicy.priceUsdMicros(
+        grossUsdMicros = XNSPricingPolicyCompatibility.priceUsdMicrosForVersion(
+            pricingPolicy,
             XNSPricingPolicyV2.Product(quote.product),
             labelLength,
-            quote.termYears
+            quote.termYears,
+            quote.policyVersion
         );
         uint256 expectedNetUsdMicros = discountAuthorization.applyDiscount(
             grossUsdMicros,

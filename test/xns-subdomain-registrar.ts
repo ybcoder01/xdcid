@@ -159,6 +159,103 @@ describe("XNSSubdomainRegistrar", function () {
     );
   });
 
+  it("blocks treasury callbacks from mutating state during registration and renewal", async function () {
+    const {
+      owner,
+      alice,
+      carol,
+      policy,
+      subdomains,
+      makeQuote,
+    } = await fixture();
+    const Treasury = await ethers.getContractFactory("MockReentrantTreasury");
+    const callbackTreasury = await Treasury.deploy();
+    const current = await policy.config();
+
+    await policy.connect(owner).proposeConfig({
+      twoCharacterAnnualUsdMicros: current.twoCharacterAnnualUsdMicros,
+      threeCharacterAnnualUsdMicros: current.threeCharacterAnnualUsdMicros,
+      fourCharacterAnnualUsdMicros: current.fourCharacterAnnualUsdMicros,
+      standardAnnualUsdMicros: current.standardAnnualUsdMicros,
+      subdomainAnnualUsdMicros: current.subdomainAnnualUsdMicros,
+      premiumSubdomainAnnualUsdMicros:
+        current.premiumSubdomainAnnualUsdMicros,
+      migrationUsdMicros: current.migrationUsdMicros,
+      threeYearDiscountBps: current.threeYearDiscountBps,
+      fiveYearDiscountBps: current.fiveYearDiscountBps,
+      tenYearDiscountBps: current.tenYearDiscountBps,
+      xdcQuoteBufferBps: current.xdcQuoteBufferBps,
+      quoteSigner: current.quoteSigner,
+      usdcToken: current.usdcToken,
+      treasury: await callbackTreasury.getAddress(),
+      xdcPaymentsEnabled: current.xdcPaymentsEnabled,
+      usdcPaymentsEnabled: current.usdcPaymentsEnabled,
+    });
+    await time.increase(48 * 60 * 60);
+    await policy.activatePendingConfig();
+
+    const registration = await makeQuote({
+      subdomainOwner: await callbackTreasury.getAddress(),
+      label: "callback",
+    });
+    await callbackTreasury.configure(
+      await subdomains.getAddress(),
+      subdomains.interface.encodeFunctionData("setAddress", [
+        registration.quote.node,
+        50,
+        carol.address,
+      ]),
+    );
+
+    await subdomains.connect(alice).registerWithQuote(
+      registration.parentName,
+      registration.label,
+      registration.quote,
+      registration.signature,
+      { value: registration.quote.paymentAmount },
+    );
+
+    expect(await callbackTreasury.callbackAttempted()).to.equal(true);
+    expect(await callbackTreasury.callbackSucceeded()).to.equal(false);
+    expect(await subdomains.ownerOf(registration.quote.node)).to.equal(
+      await callbackTreasury.getAddress(),
+    );
+    expect(await subdomains.addressOf(registration.quote.node, 50)).to.equal(
+      await callbackTreasury.getAddress(),
+    );
+
+    const expiryBefore = (await subdomains.records(registration.quote.node))
+      .expiry;
+    const renewal = await makeQuote({
+      subdomainOwner: await callbackTreasury.getAddress(),
+      label: "callback",
+    });
+    await callbackTreasury.configure(
+      await subdomains.getAddress(),
+      subdomains.interface.encodeFunctionData("transferSubdomain", [
+        registration.quote.node,
+        carol.address,
+      ]),
+    );
+
+    await subdomains.connect(alice).renewWithQuote(
+      renewal.parentName,
+      renewal.label,
+      renewal.quote,
+      renewal.signature,
+      { value: renewal.quote.paymentAmount },
+    );
+
+    expect(await callbackTreasury.callbackAttempted()).to.equal(true);
+    expect(await callbackTreasury.callbackSucceeded()).to.equal(false);
+    expect(await subdomains.ownerOf(registration.quote.node)).to.equal(
+      await callbackTreasury.getAddress(),
+    );
+    expect((await subdomains.records(registration.quote.node)).expiry).to.equal(
+      expiryBefore + 365n * 24n * 60n * 60n,
+    );
+  });
+
   it("allows an approved parent operator but rejects unrelated wallets", async function () {
     const { alice, bob, operator, carol, subdomains, parentName, makeQuote } =
       await fixture();

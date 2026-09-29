@@ -245,7 +245,7 @@ export default function Home() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">For developers</p>
           <h2 className="mt-3 text-2xl font-semibold">Integrate XDCID</h2>
           <p className="mt-3 text-sm leading-6 text-slate-300">
-            Start with public HTTPS APIs and contract references. The TypeScript SDK and subdomain product are explicitly marked as upcoming.
+            Start with public HTTPS APIs, contract references, and organization subdomains. The public TypeScript package remains upcoming.
           </p>
           <Link className="mt-5 inline-flex text-sm font-semibold text-teal-300 hover:text-teal-200" href="/developers">
             Open the developer portal →
