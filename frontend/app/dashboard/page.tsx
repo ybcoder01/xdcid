@@ -139,15 +139,26 @@ export default function Dashboard() {
   const [names, setNames] = useState<OwnedName[]>([]);
   const [primaryName, setPrimaryName] = useState<string | null>(null);
   const [selectedPrimary, setSelectedPrimary] = useState("");
+  const [submittedPrimary, setSubmittedPrimary] = useState<string | null>(null);
+  const [confirmedPrimary, setConfirmedPrimary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState("");
+  const processedPrimaryHash = useRef<Hex | null>(null);
   const {
     data: primaryHash,
     error: primaryWriteError,
     isPending: isPrimaryPending,
+    reset: resetPrimaryWrite,
     writeContract
   } = useWriteContract();
   const primaryReceipt = useWaitForTransactionReceipt({ hash: primaryHash });
+
+  useEffect(() => {
+    processedPrimaryHash.current = null;
+    setSubmittedPrimary(null);
+    setConfirmedPrimary(null);
+    resetPrimaryWrite();
+  }, [address, resetPrimaryWrite]);
 
   const loadOwnedNames = useCallback(async () => {
     requestController.current?.abort();
@@ -212,21 +223,30 @@ export default function Dashboard() {
   }, [loadOwnedNames]);
 
   useEffect(() => {
-    if (!primaryReceipt.isSuccess || !selectedPrimary) return;
+    if (
+      !primaryReceipt.isSuccess ||
+      !primaryHash ||
+      !submittedPrimary ||
+      processedPrimaryHash.current === primaryHash
+    ) return;
 
-    setPrimaryName(selectedPrimary);
+    const nextPrimary = submittedPrimary;
+    processedPrimaryHash.current = primaryHash;
+    setPrimaryName(nextPrimary);
+    setConfirmedPrimary(nextPrimary);
+    setSubmittedPrimary(null);
     setNames((current) =>
       current.map((record) => ({
         ...record,
-        primary: record.name === selectedPrimary
+        primary: record.name === nextPrimary
       }))
     );
     if (address) {
       window.dispatchEvent(new CustomEvent(PRIMARY_NAME_CHANGED_EVENT, {
-        detail: { address, name: selectedPrimary }
+        detail: { address, name: nextPrimary }
       }));
     }
-  }, [address, primaryReceipt.isSuccess, selectedPrimary]);
+  }, [address, primaryHash, primaryReceipt.isSuccess, submittedPrimary]);
 
   const selectedRecord = names.find(
     (record) => record.name === selectedPrimary
@@ -235,6 +255,8 @@ export default function Dashboard() {
   function savePrimary() {
     if (!selectedRecord) return;
 
+    setConfirmedPrimary(null);
+    setSubmittedPrimary(selectedRecord.name);
     writeContract({
       address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
@@ -292,7 +314,12 @@ export default function Dashboard() {
             <select
               className="min-w-64 rounded-md border border-black/20 bg-white px-4 py-3 text-sm"
               value={selectedPrimary}
-              onChange={(event) => setSelectedPrimary(event.target.value)}
+              disabled={isPrimaryPending || primaryReceipt.isLoading}
+              onChange={(event) => {
+                setSelectedPrimary(event.target.value);
+                setConfirmedPrimary(null);
+                resetPrimaryWrite();
+              }}
             >
               {names.map((record) => (
                 <option key={record.node} value={record.name}>
@@ -325,9 +352,9 @@ export default function Dashboard() {
               as primary.
             </p>
           ) : null}
-          {primaryReceipt.isSuccess && (
+          {confirmedPrimary && (
             <p className="mt-3 text-sm text-teal-700">
-              Primary ID updated on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
+              {confirmedPrimary} is now the Primary ID on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
             </p>
           )}
           {primaryWriteError && (
