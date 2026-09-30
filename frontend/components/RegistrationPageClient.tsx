@@ -17,10 +17,17 @@ import {
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 import { parseXnsName } from "../lib/names";
+import type { RegistrationTerm } from "../lib/pricingPolicy";
 import { xdcidRegistrationFromOwner } from "../lib/registryStatus";
 import { useRegistryStatus } from "../lib/useRegistryStatus";
 
-export function RegistrationPageClient({ initialName }: { initialName: string }) {
+export function RegistrationPageClient({
+  initialName,
+  initialTermYears = 1,
+}: {
+  initialName: string;
+  initialTermYears?: RegistrationTerm;
+}) {
   const { address, isConnected } = useAccount();
   const connectedChainId = useChainId();
   const { writeContract, isPending, data: hash } = useWriteContract();
@@ -183,6 +190,7 @@ export function RegistrationPageClient({ initialName }: { initialName: string })
                   <SignedRegistrationControls
                     enabled={registrationContractsConfigured && isConnected && connectedChainId === registrationChainId}
                     expectedChainId={registrationChainId}
+                    initialTermYears={initialTermYears}
                     name={name}
                     nativeCurrencyLabel={apothemMode ? "TXDC" : "XDC"}
                     pricingPolicyAddress={registrationPricingPolicy}
