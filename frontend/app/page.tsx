@@ -83,6 +83,8 @@ export default function Home() {
       isValid={isValid}
       name={name}
       onInput={setInput}
+      pricingPolicyAddress={apothemMode ? apothemRegistration.pricingPolicy : addresses.pricingPolicy}
+      registrationChainId={registrationChainId}
       validationError={validationError}
     />
   );
