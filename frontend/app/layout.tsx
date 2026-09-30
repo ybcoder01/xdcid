@@ -60,7 +60,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{document.documentElement.dataset.theme=localStorage.getItem("xdcid-theme")==="light"?"light":"dark"}catch{document.documentElement.dataset.theme="dark"}`,
+          }}
+        />
+      </head>
       <body>
         <script
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
