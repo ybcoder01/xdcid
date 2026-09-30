@@ -2,14 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: dark;
+  --site-bg: #071c1b;
+  --site-ink: #f7faf9;
+  --nav-bg: rgba(7, 28, 27, 0.9);
+  --nav-border: rgba(255, 255, 255, 0.12);
+  --home-bg: #071c1b;
+  --home-ink: #f8fbfa;
+  --home-muted: rgba(232, 241, 239, 0.58);
+  --home-panel: rgba(255, 255, 255, 0.07);
+  --home-panel-muted: rgba(255, 255, 255, 0.035);
+  --home-input: rgba(255, 255, 255, 0.1);
+  --home-border: rgba(255, 255, 255, 0.15);
+  --home-line: rgba(112, 216, 202, 0.13);
+  --home-glow: rgba(20, 111, 104, 0.22);
+  --home-shadow: rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --site-bg: #f5f1e8;
+  --site-ink: #151719;
+  --nav-bg: rgba(245, 241, 232, 0.92);
+  --nav-border: rgba(21, 23, 25, 0.12);
+  --home-bg: #f5f1e8;
+  --home-ink: #151719;
+  --home-muted: rgba(21, 23, 25, 0.55);
+  --home-panel: rgba(255, 255, 255, 0.78);
+  --home-panel-muted: rgba(255, 255, 255, 0.5);
+  --home-input: rgba(255, 255, 255, 0.9);
+  --home-border: rgba(21, 23, 25, 0.14);
+  --home-line: rgba(13, 119, 117, 0.13);
+  --home-glow: rgba(112, 216, 202, 0.22);
+  --home-shadow: rgba(30, 54, 51, 0.12);
+}
+
 body {
   min-height: 100vh;
-  background:
-    linear-gradient(135deg, rgba(21, 94, 117, 0.12), transparent 34%),
-    linear-gradient(315deg, rgba(22, 163, 74, 0.1), transparent 30%),
-    #f6f8f7;
-  color: #111827;
+  background: var(--site-bg);
+  color: var(--site-ink);
   text-rendering: geometricPrecision;
+}
+
+header.sticky {
+  border-color: var(--nav-border) !important;
+  background: var(--nav-bg) !important;
+  color: var(--site-ink);
+}
+
+header.sticky nav > a:not(:hover) {
+  color: var(--site-ink) !important;
+}
+
+:root:not([data-theme="light"]) header.sticky nav > a:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }
 
 input,
