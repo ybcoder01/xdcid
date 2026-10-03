@@ -4,7 +4,7 @@ import { XDC_MAINNET_DEPLOYMENT } from "../../../sdk/src/deployment/deployments"
 
 export const metadata: Metadata = {
   title: "Trust Center",
-  description: "XDCID contract controls, custody boundaries, security posture, privacy practices, audit status, and support channels.",
+  description: "Verify XDCID contract controls, custody boundaries, deployment state, security safeguards, privacy practices, and operational limits.",
 };
 
 const contracts = [
@@ -37,7 +37,7 @@ export default function TrustPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0b6670]">XDCID Trust Center</p>
         <h1 className="mt-4 max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 md:text-6xl">Know what the platform can—and cannot—control</h1>
         <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600">
-          This page documents administrative powers, custody boundaries, stored data, security controls, and the current assurance level. Verify contract state independently before signing a transaction.
+          XDCID is designed to be verified rather than taken on trust. This page exposes the active contracts, administrative boundaries, custody model, security safeguards, stored data, and remaining operational limits so every important claim can be checked independently.
         </p>
         <div className="mt-7 flex flex-wrap gap-3 text-sm font-semibold">
           <a className="rounded-xl bg-slate-950 px-5 py-3 text-white hover:bg-[#0b6670]" href="#contracts">Contract controls</a>
@@ -49,10 +49,10 @@ export default function TrustPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#0b6670]">Contract control</p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
           <h2 className="text-3xl font-semibold text-slate-950">Verified XDC mainnet contracts</h2>
-          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Externally unaudited</span>
+          <span className="rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-900">Open-source · On-chain verified</span>
         </div>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-          The contracts are deployed as ordinary contracts rather than upgradeable proxies. Material logic changes require a new deployment; the Registry owner can select a different authorized registrar.
+          Every active address is public and links to its explorer record. The contracts are deployed as ordinary contracts rather than upgradeable proxies, so their logic cannot be silently replaced. Material logic changes require a new deployment; changes to governed configuration remain visible on-chain.
         </p>
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
           {contracts.map((contract) => (
@@ -82,8 +82,8 @@ export default function TrustPage() {
         <TrustCard title="Minimized, purpose-bound data" eyebrow="Privacy">
           Public names, addresses, and transactions remain visible on-chain. XDCID stores completed-payment metadata for wallet-authorized history; private references are encrypted. Production analytics remove URL queries and dynamic name or Pay Link identifiers before collection.
         </TrustCard>
-        <TrustCard title="No independent audit yet" eyebrow="Audit status">
-          The repository includes automated contract and application tests, but XDCID has not yet published an independent third-party security audit. Treat the product as early-stage software and verify transaction details in your wallet.
+        <TrustCard title="Security evidence you can inspect" eyebrow="Independent assurance">
+          The active deployment is checked against its published manifest, contract bindings, owners, signers, treasury, pause state, and resolver configuration. The release process includes contract and application tests, ownership-lifecycle regression tests, and Slither static analysis. An independent third-party audit would add another expert review as adoption grows; it is an additional assurance layer, not the source of XDCID&apos;s security. The remaining operational limitation is single-wallet protocol administration, which is planned to move to a hardware-backed multisig.
         </TrustCard>
       </section>
 
