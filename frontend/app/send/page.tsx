@@ -522,7 +522,7 @@ export default function SendPage() {
                   : routeState.error || destination.address;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 md:py-10">
+    <main className="xdc-product-page mx-auto max-w-6xl px-4 py-8 md:py-10">
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,23rem)]">
         <div className="min-w-0 rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm md:p-8">
           <div className="flex flex-wrap items-center gap-2">
@@ -597,7 +597,7 @@ export default function SendPage() {
           ) : null}
 
           <div className="mt-8 grid gap-4">
-            <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/90 to-white p-4">
+            <div className="saved-destination-panel rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-50/90 to-white p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="grid flex-1 gap-2 text-sm">
                   <span className="font-semibold text-slate-950">Saved exchange destination</span>
