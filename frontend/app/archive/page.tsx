@@ -252,7 +252,7 @@ export default function ArchiveSubscriptionPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-5xl px-4 py-10">
       <section className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-10">
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#0b7477]">
           XDCID archive

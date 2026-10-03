@@ -32,7 +32,7 @@ const contracts = [
 
 export default function TrustPage() {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-6xl px-4 py-10">
       <section className="rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm md:px-10 md:py-14">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0b6670]">XDCID Trust Center</p>
         <h1 className="mt-4 max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 md:text-6xl">Know what the platform can—and cannot—control</h1>

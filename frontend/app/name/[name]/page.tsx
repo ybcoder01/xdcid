@@ -134,7 +134,7 @@ export default function NamePage() {
 
   if (!isValid) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-10">
+      <main className="xdc-product-page mx-auto max-w-3xl px-4 py-10">
         <section className="rounded-md border border-red-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-700">Invalid XDCID name</p>
           <h1 className="mt-3 text-3xl font-semibold text-slate-950">This name cannot be resolved</h1>
@@ -145,7 +145,7 @@ export default function NamePage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-5xl px-4 py-10">
       <div className="rounded-md border border-black/10 bg-slate-950 p-6 text-white shadow-sm md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">XDCID profile</p>
         <h1 className="mt-3 text-4xl font-semibold">{name}</h1>

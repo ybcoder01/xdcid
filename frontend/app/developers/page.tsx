@@ -36,7 +36,7 @@ const paths = [
 
 export default function DevelopersPage() {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-6xl px-4 py-10">
       <section className="rounded-[2rem] border border-slate-800 bg-slate-950 px-6 py-10 text-white shadow-xl md:px-10 md:py-14">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Developer portal</p>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">Build on XDCID with clear production boundaries</h1>

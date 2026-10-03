@@ -16,7 +16,7 @@ const capabilities = [
 
 export default function SubdomainsPage() {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-5xl px-4 py-10">
       <section className="overflow-hidden rounded-[2rem] border border-teal-200 bg-white shadow-sm">
         <div className="border-b border-teal-200 bg-teal-50 px-7 py-3 text-xs font-bold uppercase tracking-[0.2em] text-teal-900">
           Active product · XDC Network

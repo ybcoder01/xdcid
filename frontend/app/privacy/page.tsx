@@ -34,7 +34,7 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-5xl px-4 py-10">
       <section className="rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm md:px-10">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0b6670]">Privacy at XDCID</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">Public where blockchain requires it. Private where the product can protect it.</h1>
