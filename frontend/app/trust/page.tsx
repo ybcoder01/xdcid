@@ -68,7 +68,7 @@ export default function TrustPage() {
           ))}
         </div>
         <p className="mt-5 text-sm leading-6 text-slate-600">
-          The published Registry and active Registrar owner is <code className="break-all rounded bg-slate-100 px-1.5 py-1 text-xs text-slate-900">{XDC_MAINNET_DEPLOYMENT.protocolOwner}</code>. Resolver contracts authorize individual name owners through the Registry and do not have a protocol-owner transfer role.
+          Registry and Registrar administrative ownership is checked during deployment preflight. Resolver contracts authorize individual name owners through the Registry and do not have a protocol-owner transfer role.
         </p>
       </section>
 
