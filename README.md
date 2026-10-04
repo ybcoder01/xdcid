@@ -31,25 +31,20 @@ The frontend displays the suffix as `.XDC`, but canonicalizes registrations to l
 | Contract | Address |
 | --- | --- |
 | XNSRegistry | [`0x05fa64a05bc205DeDF47e023d2D90c2d119cd097`](https://xdcscan.com/address/0x05fa64a05bc205DeDF47e023d2D90c2d119cd097) |
-| XNSRegistrar V2 (active) | [`0xdEaf1742614908a8d170f4c9520c3cd1e967ef36`](https://xdcscan.com/address/0xdEaf1742614908a8d170f4c9520c3cd1e967ef36) |
+| XNSRegistrar V2 (active) | [`0x3D87B064a06f62cc4a24EAff13A591C9Ba791135`](https://xdcscan.com/address/0x3D87B064a06f62cc4a24EAff13A591C9Ba791135) |
 | XNSPricingPolicy V2 | [`0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94`](https://xdcscan.com/address/0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94) |
 | XNSDiscountAuthorization | [`0x9EE907230d351264403555fA6967EA44Ba31A5d1`](https://xdcscan.com/address/0x9EE907230d351264403555fA6967EA44Ba31A5d1) |
 | XNSSubdomainRegistrar | [`0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7`](https://xdcscan.com/address/0x27b6Ef20912B50F7b86f6C0Aed75d0ddFD7DA1C7) |
-| XNSResolver | [`0x52bfa70B30190050F77033Fe427De8B3d4A8F453`](https://xdcscan.com/address/0x52bfa70B30190050F77033Fe427De8B3d4A8F453) |
-| XNSReverseResolver | [`0x8b1a236845b0CC84094578cEd97844b8dC5f139f`](https://xdcscan.com/address/0x8b1a236845b0CC84094578cEd97844b8dC5f139f) |
-| XNSMultichainResolver | [`0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240`](https://xdcscan.com/address/0x978d46Ba080Ae71b5cB39691106A1cCf6C6c7240) |
-
-The Registry and active Registrar protocol owner is `0xe82a4267CC310FC6Db334601671A043DFc8Ce06A`.
+| XNSResolver V2 | [`0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661`](https://xdcscan.com/address/0x9d3CcAF4Db85F845B1B72972211356C6C4BB8661) |
+| XNSReverseResolver V2 | [`0x2E17282219BB55359f5D07fAFfc406eE4EC97440`](https://xdcscan.com/address/0x2E17282219BB55359f5D07fAFfc406eE4EC97440) |
+| XNSMultichainResolver V2 | [`0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232`](https://xdcscan.com/address/0xf4B040A2519E8BFdA62eDC3FDd1b6F9867F97232) |
 
 The typed [mainnet deployment manifest](docs/mainnet-deployment-manifest.md) is
 the source of truth for application, SDK, release-preflight, and operator-tool
 defaults. Production candidate addresses stay unset until independently
 verified and approved.
 
-- The [Registry ownership transfer](https://xdcscan.com/tx/0x90049270910803f91186caf7ea04d6e7b261f92a1aaa56f37329c73de2657ef1) moved Registry control to this owner.
-- The active Registrar v2 was deployed with this address as its initial owner, so it did not require a separate ownership-transfer transaction.
-
-Only the Registry and Registrar implement OpenZeppelin `Ownable`. The Resolver contracts authorize individual name owners through the Registry and do not have protocol ownership to transfer.
+The Registry and Registrar expose governed administrative controls. Resolver contracts authorize individual name owners through the Registry and do not expose an administrative transfer role.
 
 ## Setup
 
@@ -125,7 +120,7 @@ pnpm verify:resolvers-v2:xdc
 
 ## Transfer Ownership
 
-The Registry and Registrar use OpenZeppelin `Ownable`. Run the transfer script with the current owner's key supplied securely through `PRIVATE_KEY` and the intended wallet or multisig in `NEW_OWNER`:
+The Registry and Registrar use OpenZeppelin `Ownable`. Run the transfer script with the current administrative key supplied securely through `PRIVATE_KEY` and the intended successor account in `NEW_OWNER`:
 
 ```bash
 NEW_OWNER=0x... pnpm transfer-ownership:xdc

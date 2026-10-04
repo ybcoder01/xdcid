@@ -281,7 +281,6 @@ export default function MainnetPricingDeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-7 shadow-sm">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Allowed deployment and contract-owner wallet" value={OWNER} />
             <Detail label="Existing registry" value={REGISTRY} />
             <Detail label="Legacy collision registry" value={LEGACY_REGISTRY} />
             <Detail label="XDC USDC (6 decimals)" value={USDC} />

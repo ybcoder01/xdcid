@@ -279,7 +279,6 @@ export default function ApothemPrimaryResolutionDeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated owner wallet" value={OWNER} />
             <Detail label="Existing Registry" value={REGISTRY} />
             <Detail label="Existing Pricing Policy" value={POLICY} />
             <Detail label="Existing Discount Authorization" value={AUTHORIZATION} />

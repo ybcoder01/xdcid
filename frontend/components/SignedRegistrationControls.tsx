@@ -76,6 +76,7 @@ type QuoteResponse = {
 export function SignedRegistrationControls(props: {
   name: string;
   enabled: boolean;
+  initialTermYears?: Term;
   expectedChainId?: number;
   registrarAddress?: Address;
   pricingPolicyAddress?: Address;
@@ -86,7 +87,7 @@ export function SignedRegistrationControls(props: {
   const client = usePublicClient({ chainId: props.expectedChainId ?? 50 });
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
-  const [termYears, setTermYears] = useState<Term>(1);
+  const [termYears, setTermYears] = useState<Term>(props.initialTermYears ?? 1);
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [status, setStatus] = useState("");
   const [registrationHash, setRegistrationHash] = useState<Hex | "">("");

@@ -126,7 +126,7 @@ const sdkExample = 'import { createXdcidClient } from "@xdcid/sdk";\n\nconst xdc
 
 export default function DocsPage() {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-6xl px-4 py-10">
       <section className="rounded-md border border-black/10 bg-slate-950 p-6 text-white shadow-sm md:p-10">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-300">Developer documentation</p>
         <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">

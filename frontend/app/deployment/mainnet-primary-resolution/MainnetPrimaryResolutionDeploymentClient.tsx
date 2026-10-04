@@ -14,9 +14,10 @@ import {
   type Hex,
   type PublicClient,
 } from "viem";
+import { XDC_MAINNET_DEPLOYMENT } from "../../../../sdk/src/deployment/deployments";
 import { mainnetPrimaryResolutionDeploymentArtifacts as artifacts } from "../../../generated/mainnetPrimaryResolutionDeployment";
 
-const OWNER = getAddress("0xe82a4267CC310FC6Db334601671A043DFc8Ce06A");
+const OWNER = getAddress(XDC_MAINNET_DEPLOYMENT.protocolOwner);
 const REGISTRY = getAddress("0x05fa64a05bc205DeDF47e023d2D90c2d119cd097");
 const LEGACY = getAddress("0x295a7aB79368187a6CD03c464cfaAb04d799784E");
 const POLICY = getAddress("0x8aE4b7E57b6693c70FD40F5De17974CA5AB6DB94");
@@ -220,7 +221,6 @@ export default function MainnetPrimaryResolutionDeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated owner wallet" value={OWNER} />
             <Detail label="Existing Registry" value={REGISTRY} />
             <Detail label="Existing Pricing Policy" value={POLICY} />
             <Detail label="Existing Discount Authorization" value={AUTHORIZATION} />

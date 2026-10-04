@@ -154,7 +154,7 @@ export default function PaymentHistoryPage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16">
+    <main className="xdc-product-page mx-auto max-w-5xl px-6 py-12 md:py-16">
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">
         Private payment records
       </p>
