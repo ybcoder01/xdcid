@@ -194,7 +194,7 @@ export default function AddressBookPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-6xl px-4 py-10">
       <section className="rounded-3xl border border-teal-100 bg-gradient-to-br from-white via-white to-teal-50 p-6 shadow-sm md:p-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Send · Private destination vault</p>

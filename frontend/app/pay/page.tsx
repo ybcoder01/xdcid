@@ -375,7 +375,7 @@ export default function PayLinksPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16">
+    <main className="xdc-product-page mx-auto max-w-4xl px-6 py-12 md:py-16">
       <p className="text-sm font-semibold uppercase tracking-[0.3em] text-teal-700">XDCID Payment Requests</p>
       <h1 className="mt-4 text-5xl font-bold tracking-tight text-slate-950">Create a verifiable payment request</h1>
       <p className="mt-4 max-w-2xl text-lg text-slate-600">

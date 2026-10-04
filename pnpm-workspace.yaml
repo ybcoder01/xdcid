@@ -18,7 +18,7 @@ minimumReleaseAgeExclude:
   - '@next/swc-win32-x64-msvc@16.3.7'
   - next@16.3.7
 overrides:
-  axios: 1.18.0
+  axios: 1.20.0
   baseline-browser-mapping: 2.11.0
   decode-uri-component: 0.5.0
   hono: 4.13.5

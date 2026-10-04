@@ -266,7 +266,7 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="xdc-product-page mx-auto max-w-5xl px-4 py-10">
       <section className="rounded-md border border-black/10 bg-white/90 p-6 shadow-sm md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
           Wallet inventory

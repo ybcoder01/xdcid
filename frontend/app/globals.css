@@ -2,14 +2,280 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  color-scheme: dark;
+  --site-bg: #071c1b;
+  --site-ink: #f7faf9;
+  --nav-bg: rgba(7, 28, 27, 0.9);
+  --nav-border: rgba(255, 255, 255, 0.12);
+  --home-bg: #071c1b;
+  --home-ink: #f8fbfa;
+  --home-muted: rgba(232, 241, 239, 0.58);
+  --home-panel: rgba(255, 255, 255, 0.07);
+  --home-panel-muted: rgba(255, 255, 255, 0.035);
+  --home-input: rgba(255, 255, 255, 0.1);
+  --home-border: rgba(255, 255, 255, 0.15);
+  --home-line: rgba(112, 216, 202, 0.13);
+  --home-glow: rgba(20, 111, 104, 0.22);
+  --home-shadow: rgba(0, 0, 0, 0.28);
+  --surface-1: #0b2421;
+  --surface-2: #102e2a;
+  --surface-3: #173934;
+  --field-bg: #0a211f;
+  --field-border: rgba(152, 207, 198, 0.28);
+  --route-accent: #70d8ca;
+  --route-accent-strong: #23a99c;
+  --route-line: rgba(112, 216, 202, 0.16);
+  --route-panel: rgba(13, 45, 41, 0.84);
+  --route-panel-solid: #0d2d29;
+  --route-panel-raised: #123630;
+  --route-muted: rgba(226, 238, 235, 0.64);
+  --route-shadow: rgba(0, 0, 0, 0.24);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --site-bg: #f5f1e8;
+  --site-ink: #151719;
+  --nav-bg: rgba(245, 241, 232, 0.92);
+  --nav-border: rgba(21, 23, 25, 0.12);
+  --home-bg: #f5f1e8;
+  --home-ink: #151719;
+  --home-muted: rgba(21, 23, 25, 0.55);
+  --home-panel: rgba(255, 255, 255, 0.78);
+  --home-panel-muted: rgba(255, 255, 255, 0.5);
+  --home-input: rgba(255, 255, 255, 0.9);
+  --home-border: rgba(21, 23, 25, 0.14);
+  --home-line: rgba(13, 119, 117, 0.13);
+  --home-glow: rgba(112, 216, 202, 0.22);
+  --home-shadow: rgba(30, 54, 51, 0.12);
+  --surface-1: #fffdfa;
+  --surface-2: #ffffff;
+  --surface-3: #edf4f1;
+  --field-bg: #fffefa;
+  --field-border: rgba(20, 77, 70, 0.22);
+  --route-accent: #0d7775;
+  --route-accent-strong: #08625f;
+  --route-line: rgba(13, 119, 117, 0.15);
+  --route-panel: rgba(255, 253, 248, 0.9);
+  --route-panel-solid: #fffdfa;
+  --route-panel-raised: #ffffff;
+  --route-muted: rgba(21, 23, 25, 0.62);
+  --route-shadow: rgba(30, 54, 51, 0.12);
+}
+
 body {
   min-height: 100vh;
+  background: var(--site-bg);
+  color: var(--site-ink);
+  text-rendering: geometricPrecision;
+}
+
+:root:not([data-theme="light"]) body {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(42, 143, 132, 0.13), transparent 30rem),
+    radial-gradient(circle at 86% 82%, rgba(57, 103, 173, 0.08), transparent 34rem),
+    var(--site-bg);
+}
+
+:root[data-theme="light"] body {
   background:
     linear-gradient(135deg, rgba(21, 94, 117, 0.12), transparent 34%),
     linear-gradient(315deg, rgba(22, 163, 74, 0.1), transparent 30%),
-    #f6f8f7;
-  color: #111827;
-  text-rendering: geometricPrecision;
+    var(--site-bg);
+}
+
+header.sticky {
+  border-color: var(--nav-border) !important;
+  background: var(--nav-bg) !important;
+  color: var(--site-ink);
+}
+
+header.sticky nav > a:not(:hover) {
+  color: var(--site-ink) !important;
+}
+
+:root:not([data-theme="light"]) header.sticky nav > a:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+/* Dark-mode adapter for existing product surfaces. The three surface levels
+   preserve card and form hierarchy instead of applying one flat dark fill. */
+:root:not([data-theme="light"]) :is(
+  [class~="bg-white/90"],
+  [class~="bg-white/80"],
+  [class~="bg-white/75"]
+) {
+  background-color: var(--surface-1) !important;
+  background-image: none !important;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.18);
+}
+
+:root:not([data-theme="light"]) [class~="bg-white"] {
+  background-color: var(--surface-2) !important;
+  background-image: none !important;
+}
+
+:root:not([data-theme="light"]) :is(
+  [class~="bg-slate-50"],
+  [class~="bg-slate-50/80"],
+  [class~="bg-slate-50/70"],
+  [class~="bg-neutral-50"],
+  [class~="bg-slate-100"],
+  [class~="bg-neutral-100"],
+  [class~="bg-[#f5f1e8]"],
+  [class~="bg-[#f3f7f6]"],
+  [class~="bg-[#effcf9]"]
+) {
+  background-color: var(--surface-3) !important;
+  background-image: none !important;
+}
+
+:root:not([data-theme="light"]) :is(input, select, textarea) {
+  background-color: var(--field-bg);
+  border-color: var(--field-border) !important;
+  color: #f5fbf9;
+}
+
+:root:not([data-theme="light"]) :is(input, textarea)::placeholder {
+  color: rgba(224, 238, 234, 0.48);
+}
+
+:root:not([data-theme="light"]) .home-name-input {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
+
+:root:not([data-theme="light"]) :is(
+  [class~="bg-amber-50"],
+  [class~="bg-amber-100"]
+) { background-color: rgba(180, 116, 20, 0.2) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="bg-teal-50"],
+  [class~="bg-teal-50/60"],
+  [class~="bg-teal-100"],
+  [class~="bg-emerald-50"],
+  [class~="bg-emerald-100"]
+) { background-color: rgba(22, 132, 121, 0.2) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="bg-red-50"],
+  [class~="bg-red-100"],
+  [class~="bg-rose-50"]
+) { background-color: rgba(180, 50, 55, 0.2) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="bg-blue-50"],
+  [class~="bg-blue-100"],
+  [class~="bg-sky-100"]
+) { background-color: rgba(55, 105, 190, 0.2) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-slate-950"],
+  [class~="text-slate-900"],
+  [class~="text-slate-800"],
+  [class~="text-slate-700"],
+  [class~="text-neutral-950"],
+  [class~="text-neutral-700"],
+  [class~="text-black"],
+  [class~="text-[#151719]"]
+) { color: #f4f8f7 !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-slate-600"],
+  [class~="text-slate-500"],
+  [class~="text-slate-400"],
+  [class~="text-neutral-600"],
+  [class~="text-neutral-500"],
+  [class~="text-neutral-400"],
+  [class~="text-black/55"],
+  [class~="text-black/50"],
+  [class~="text-black/45"],
+  [class~="text-black/40"]
+) { color: rgba(226, 238, 235, 0.64) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-teal-700"],
+  [class~="text-teal-800"],
+  [class~="text-teal-900"],
+  [class~="text-teal-950"]
+) { color: #70d8ca !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-amber-700"],
+  [class~="text-amber-800"],
+  [class~="text-amber-900"],
+  [class~="text-amber-950"]
+) { color: #f6c76b !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-red-600"],
+  [class~="text-red-700"],
+  [class~="text-red-800"],
+  [class~="text-rose-800"]
+) { color: #ff9b91 !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-blue-700"],
+  [class~="text-blue-800"],
+  [class~="text-blue-900"],
+  [class~="text-blue-950"],
+  [class~="text-sky-800"],
+  [class~="text-sky-950"]
+) { color: #9ec5ff !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="text-emerald-700"],
+  [class~="text-emerald-800"],
+  [class~="text-emerald-900"]
+) { color: #78e3b6 !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="border-slate-100"],
+  [class~="border-slate-200"],
+  [class~="border-slate-300"],
+  [class~="border-black/10"],
+  [class~="border-black/15"],
+  [class~="border-black/20"]
+) { border-color: rgba(255, 255, 255, 0.14) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="border-teal-100"],
+  [class~="border-teal-200"],
+  [class~="border-teal-300"],
+  [class~="border-emerald-200"]
+) { border-color: rgba(112, 216, 202, 0.34) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="border-amber-200"],
+  [class~="border-amber-300"]
+) { border-color: rgba(246, 199, 107, 0.34) !important; }
+
+:root:not([data-theme="light"]) :is(
+  [class~="border-red-200"],
+  [class~="border-red-300"],
+  [class~="border-rose-300"]
+) { border-color: rgba(255, 155, 145, 0.34) !important; }
+
+.network-logo-badge {
+  background: #ffffff !important;
+}
+
+.xdc-floating-name {
+  animation: xdc-name-float 10s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes xdc-name-float {
+  0% { transform: translate3d(-5px, -4px, 0) rotate(-2deg); }
+  50% { transform: translate3d(4px, 7px, 0) rotate(1deg); }
+  100% { transform: translate3d(8px, -3px, 0) rotate(3deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xdc-floating-name { animation: none; }
 }
 
 input,
@@ -39,4 +305,268 @@ textarea:focus {
     linear-gradient(140deg, rgba(217, 242, 240, 0.62), transparent 34%),
     linear-gradient(315deg, rgba(101, 212, 225, 0.14), transparent 38%),
     rgba(255, 255, 255, 0.98);
+}
+
+:root:not([data-theme="light"]) .pay-receipt {
+  background:
+    linear-gradient(140deg, rgba(22, 132, 121, 0.18), transparent 34%),
+    linear-gradient(315deg, rgba(101, 212, 225, 0.08), transparent 38%),
+    #102b29;
+}
+
+:root:not([data-theme="light"]) .saved-destination-panel {
+  background-color: #102b27;
+  background-image: none;
+}
+
+/* XDCID product language
+   The public app inherits the homepage's routing canvas rather than relying on
+   the generic dark-class adapter above. Admin and deployment utilities remain
+   visually isolated from this product layer. */
+.xdc-product-page {
+  position: relative;
+  isolation: isolate;
+  min-height: calc(100dvh - 73px);
+  color: var(--site-ink);
+}
+
+.xdc-product-page::before {
+  position: fixed;
+  z-index: -2;
+  top: 7.5rem;
+  left: 50%;
+  width: min(78vw, 70rem);
+  aspect-ratio: 1;
+  content: "";
+  pointer-events: none;
+  transform: translateX(-50%);
+  border: 1px solid var(--route-line);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, transparent 0 22%, var(--route-line) 22.1% 22.25%, transparent 22.35% 42%, var(--route-line) 42.1% 42.25%, transparent 42.35% 61%, var(--route-line) 61.1% 61.25%, transparent 61.35%),
+    radial-gradient(circle, color-mix(in srgb, var(--route-accent) 9%, transparent), transparent 60%);
+  opacity: 0.7;
+}
+
+.xdc-product-page::after {
+  position: fixed;
+  z-index: -1;
+  inset: 4.5rem 0 0;
+  content: "";
+  pointer-events: none;
+  background-image: linear-gradient(90deg, transparent 0 49.96%, var(--route-line) 50%, transparent 50.04%);
+  opacity: 0.25;
+}
+
+.xdc-product-page > :where(section, div) {
+  position: relative;
+}
+
+.xdc-product-page > section[class*="bg-white"],
+.xdc-product-page > div > section[class*="bg-white"] {
+  overflow: hidden;
+}
+
+.xdc-product-page > section[class*="bg-white"]::before,
+.xdc-product-page > div > section[class*="bg-white"]::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5.5rem;
+  height: 3px;
+  content: "";
+  background: linear-gradient(90deg, var(--route-accent), #2f68ed, transparent);
+}
+
+.xdc-product-page :is(
+  [class~="bg-white"],
+  [class~="bg-white/90"],
+  [class~="bg-white/80"],
+  [class~="bg-white/75"]
+) {
+  border-color: var(--route-line) !important;
+  background-color: var(--route-panel) !important;
+  background-image: none !important;
+  box-shadow: 0 20px 60px var(--route-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.xdc-product-page :is(
+  [class~="bg-slate-50"],
+  [class~="bg-slate-50/80"],
+  [class~="bg-slate-50/70"],
+  [class~="bg-neutral-50"],
+  [class~="bg-slate-100"],
+  [class~="bg-neutral-100"],
+  [class~="bg-[#f3f7f6]"],
+  [class~="bg-[#effcf9]"]
+) {
+  border-color: var(--route-line) !important;
+  background-color: color-mix(in srgb, var(--route-panel-raised) 84%, transparent) !important;
+  background-image: none !important;
+}
+
+.xdc-product-page :is(
+  [class~="text-slate-950"],
+  [class~="text-slate-900"],
+  [class~="text-slate-800"],
+  [class~="text-slate-700"],
+  [class~="text-neutral-950"],
+  [class~="text-neutral-700"],
+  [class~="text-black"],
+  [class~="text-[#151719]"]
+) { color: var(--site-ink) !important; }
+
+.xdc-product-page :is(
+  [class~="text-slate-600"],
+  [class~="text-slate-500"],
+  [class~="text-slate-400"],
+  [class~="text-neutral-600"],
+  [class~="text-neutral-500"],
+  [class~="text-neutral-400"],
+  [class~="text-black/55"],
+  [class~="text-black/50"],
+  [class~="text-black/45"],
+  [class~="text-black/40"]
+) { color: var(--route-muted) !important; }
+
+.xdc-product-page :is(
+  [class~="border-slate-100"],
+  [class~="border-slate-200"],
+  [class~="border-slate-300"],
+  [class~="border-black/10"],
+  [class~="border-black/15"],
+  [class~="border-black/20"]
+) { border-color: var(--route-line) !important; }
+
+.xdc-product-page :is(input, select, textarea) {
+  border-color: var(--field-border) !important;
+  background: var(--field-bg) !important;
+  color: var(--site-ink) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--site-ink) 5%, transparent);
+}
+
+.xdc-product-page :is(input, textarea)::placeholder {
+  color: var(--route-muted) !important;
+}
+
+.xdc-product-page :is(input, select, textarea):focus {
+  border-color: var(--route-accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--route-accent) 18%, transparent);
+}
+
+.xdc-product-page :is(button, a)[class*="bg-slate-950"],
+.xdc-product-page :is(button, a)[class*="bg-black"] {
+  border: 1px solid color-mix(in srgb, var(--route-accent) 35%, transparent);
+  background: #050b1e !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.xdc-product-page :is(button, a)[class*="bg-slate-950"]:hover,
+.xdc-product-page :is(button, a)[class*="bg-black"]:hover {
+  background: var(--route-accent-strong) !important;
+  transform: translateY(-1px);
+}
+
+.xdc-product-page :is(h1, h2) {
+  text-wrap: balance;
+}
+
+.xdc-product-page h1 {
+  letter-spacing: -0.045em;
+}
+
+.xdc-product-page :is(p, li) {
+  text-wrap: pretty;
+}
+
+.xdc-site-nav {
+  border-color: var(--nav-border) !important;
+  background: var(--nav-bg) !important;
+  color: var(--site-ink);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+}
+
+.xdc-nav-link {
+  position: relative;
+  color: var(--route-muted);
+}
+
+.xdc-logo-light { display: none; }
+.xdc-logo-dark { display: flex; }
+
+:root[data-theme="light"] .xdc-logo-light { display: block; }
+:root[data-theme="light"] .xdc-logo-dark { display: none; }
+
+.xdc-nav-link:hover,
+.xdc-nav-link[aria-current="page"] {
+  background: color-mix(in srgb, var(--route-accent) 10%, transparent) !important;
+  color: var(--site-ink) !important;
+}
+
+.xdc-nav-link[aria-current="page"]::after {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.15rem;
+  left: 0.7rem;
+  height: 2px;
+  content: "";
+  background: var(--route-accent);
+}
+
+.xdc-icon-button,
+.xdc-mobile-nav {
+  border: 1px solid var(--nav-border);
+  border-radius: 0.9rem;
+  background: var(--route-panel-solid);
+  color: var(--site-ink);
+}
+
+.xdc-theme-toggle {
+  border-color: var(--nav-border);
+  background: var(--route-panel-solid);
+  color: var(--site-ink) !important;
+}
+
+.xdc-theme-toggle:hover {
+  border-color: var(--route-accent);
+  background: color-mix(in srgb, var(--route-accent) 10%, var(--route-panel-solid));
+}
+
+.xdc-mobile-nav {
+  box-shadow: 0 24px 70px var(--route-shadow);
+}
+
+.xdc-site-footer {
+  border-color: var(--route-line) !important;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--route-accent) 8%, transparent), transparent 42%),
+    var(--route-panel-solid);
+  color: var(--site-ink);
+}
+
+.xdc-footer-rule { border-color: var(--route-line) !important; }
+.xdc-muted { color: var(--route-muted); }
+.xdc-footer-link { color: var(--route-muted); }
+.xdc-footer-link:hover,
+.xdc-inline-link { color: var(--route-accent); }
+
+@media (max-width: 767px) {
+  .xdc-product-page::before {
+    top: 10rem;
+    width: 150vw;
+  }
+
+  .xdc-product-page h1 {
+    font-size: clamp(2rem, 10vw, 3.25rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xdc-product-page *,
+  .xdc-site-nav * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
