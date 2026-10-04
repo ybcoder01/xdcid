@@ -36,6 +36,16 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
   return response.json().catch(() => ({}));
 }
 
+function adminLoginErrorMessage(cause: unknown): string {
+  if (!(cause instanceof Error)) return "Admin login failed";
+
+  if (/user rejected (the )?request/i.test(cause.message)) {
+    return "User rejected the request.";
+  }
+
+  return cause.message || "Admin login failed";
+}
+
 export default function AdminPage() {
   const { address: account, isConnected } = useAccount();
   const [session, setSession] = useState<AdminSession>({
@@ -138,9 +148,7 @@ export default function AdminPage() {
       window.dispatchEvent(new Event(ADMIN_SESSION_CHANGED_EVENT));
       return true;
     } catch (cause) {
-      setAuthError(
-        cause instanceof Error ? cause.message : "Admin login failed",
-      );
+      setAuthError(adminLoginErrorMessage(cause));
       return false;
     } finally {
       setLoginPending(false);
