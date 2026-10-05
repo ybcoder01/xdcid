@@ -75,19 +75,19 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
         const displayName = primaryName || account.displayName;
         return (
           <div ref={accountMenuRef} className={width + " relative"}>
-            <div className={(compact ? "h-11 rounded-2xl " : "h-12 rounded-2xl ") + "inline-flex w-full flex-nowrap items-center overflow-hidden border border-slate-200 bg-white shadow-sm"}>
+            <div className={(compact ? "h-11 rounded-2xl " : "h-12 rounded-2xl ") + "xdc-wallet-control inline-flex w-full flex-nowrap items-center overflow-hidden border shadow-sm"}>
               <button
                 type="button"
-                className={(compact ? "h-11 w-11 " : "h-12 w-12 ") + "grid shrink-0 place-items-center hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
+                className={(compact ? "h-11 w-11 " : "h-12 w-12 ") + "xdc-wallet-network grid shrink-0 place-items-center focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
                 onClick={openChainModal}
                 aria-label={"Change network from " + chain.name}
               >
                 <NetworkLogo chainId={chain.id} size={24} />
               </button>
-              <span className="h-5 w-px shrink-0 bg-slate-200" aria-hidden="true" />
+              <span className="xdc-wallet-divider h-5 w-px shrink-0" aria-hidden="true" />
               <button
                 type="button"
-                className={(compact ? "h-11 px-2 text-sm sm:px-3 " : "h-12 px-4 text-base ") + "min-w-0 flex-1 truncate font-semibold text-slate-900 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
+                className={(compact ? "h-11 px-2 text-sm sm:px-3 " : "h-12 px-4 text-base ") + "xdc-wallet-account min-w-0 flex-1 truncate font-semibold focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
                 onClick={() => setAccountMenuOpen((open) => !open)}
                 aria-expanded={accountMenuOpen}
                 aria-haspopup="menu"
