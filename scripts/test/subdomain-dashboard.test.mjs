@@ -22,6 +22,9 @@ test("the dashboard discovers active subdomains and exposes renewal", async () =
   assert.match(route, /getOwnedSubdomainsData/);
   assert.match(dashboard, /\/subdomains\?/);
   assert.match(dashboard, />\s*Renew\s*</);
+  assert.match(dashboard, /subdomainsByParent\.get\(record\.name\)/);
+  assert.match(dashboard, /<NestedSubdomains records=\{subdomains\}/);
+  assert.doesNotMatch(dashboard, /Child identities/);
   assert.match(publicPage, /allowRenewalsWhenDisabled/);
   assert.match(
     registration,

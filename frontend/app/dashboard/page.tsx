@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
 import { RegistryV2MigrationAction } from "../../components/RegistryV2MigrationAction";
@@ -91,12 +91,29 @@ function SubdomainRow({ record }: { record: OwnedSubdomain }) {
   );
 }
 
+function NestedSubdomains({ records }: { records: OwnedSubdomain[] }) {
+  if (records.length === 0) return null;
+
+  return (
+    <div className="ml-4 grid gap-2 border-l-2 border-teal-200 pl-4 sm:ml-7 sm:pl-5">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
+        Subdomains
+      </p>
+      {records.map((record) => (
+        <SubdomainRow key={record.node} record={record} />
+      ))}
+    </div>
+  );
+}
+
 function NameRow({
   record,
+  subdomains,
   onMigrated,
   onRenewed,
 }: {
   record: OwnedName;
+  subdomains: OwnedSubdomain[];
   onMigrated: () => void;
   onRenewed: () => void | Promise<void>;
 }) {
@@ -110,68 +127,89 @@ function NameRow({
   });
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
-      <div>
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              className="text-lg font-semibold text-slate-950 hover:text-teal-700"
+              href={"/name/" + record.name}
+            >
+              {record.name}
+            </Link>
+            {record.primary && (
+              <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
+                Primary ID
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-neutral-600">
+            Expires: {new Date(record.expiry.iso).toLocaleDateString()}
+            {!(isTestnetDashboard || signedRegistrarEnabled) && price.data
+              ? " - renew " + formatEther(price.data) + " XDC/year"
+              : ""}
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            className="text-lg font-semibold text-slate-950 hover:text-teal-700"
+            className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
             href={"/name/" + record.name}
           >
-            {record.name}
+            Manage records
           </Link>
-          {record.primary && (
-            <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
-              Primary ID
-            </span>
+          {isTestnetDashboard || signedRegistrarEnabled ? (
+            <SignedRenewalControls
+              expectedChainId={activeXnsChainId}
+              name={record.name}
+              nativeCurrencyLabel={isTestnetDashboard ? "TXDC" : "XDC"}
+              onRenewed={onRenewed}
+              registrarAddress={activeRegistrarAddress}
+            />
+          ) : (
+            <button
+              className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+              disabled={!price.data || isPending}
+              onClick={() =>
+                price.data &&
+                writeContract({
+                  address: addresses.registrar,
+                  abi: registrarAbi,
+                  functionName: "renew",
+                  args: [record.name, 1n],
+                  value: price.data
+                })
+              }
+            >
+              {isPending ? "Confirm in wallet" : "Renew"}
+            </button>
           )}
         </div>
-        <p className="text-sm text-neutral-600">
-          Expires: {new Date(record.expiry.iso).toLocaleDateString()}
-          {!(isTestnetDashboard || signedRegistrarEnabled) && price.data
-            ? " - renew " + formatEther(price.data) + " XDC/year"
-            : ""}
-        </p>
+        <RegistryV2MigrationAction
+          migrationRequired={record.migrationRequired}
+          name={record.name}
+          node={record.node}
+          onMigrated={onMigrated}
+        />
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Link
-          className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
-          href={"/name/" + record.name}
-        >
-          Manage records
-        </Link>
-        {isTestnetDashboard || signedRegistrarEnabled ? (
-          <SignedRenewalControls
-            expectedChainId={activeXnsChainId}
-            name={record.name}
-            nativeCurrencyLabel={isTestnetDashboard ? "TXDC" : "XDC"}
-            onRenewed={onRenewed}
-            registrarAddress={activeRegistrarAddress}
-          />
-        ) : (
-          <button
-            className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-            disabled={!price.data || isPending}
-            onClick={() =>
-              price.data &&
-              writeContract({
-                address: addresses.registrar,
-                abi: registrarAbi,
-                functionName: "renew",
-                args: [record.name, 1n],
-                value: price.data
-              })
-            }
-          >
-            {isPending ? "Confirm in wallet" : "Renew"}
-          </button>
-        )}
+      <NestedSubdomains records={subdomains} />
+    </div>
+  );
+}
+
+function ParentSubdomainGroup({
+  parentName,
+  records,
+}: {
+  parentName: string;
+  records: OwnedSubdomain[];
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm">
+        <p className="text-lg font-semibold text-slate-950">{parentName}</p>
+        <p className="text-sm text-neutral-600">Parent XDCID</p>
       </div>
-      <RegistryV2MigrationAction
-        migrationRequired={record.migrationRequired}
-        name={record.name}
-        node={record.node}
-        onMigrated={onMigrated}
-      />
+      <NestedSubdomains records={records} />
     </div>
   );
 }
@@ -329,6 +367,23 @@ export default function Dashboard() {
   const selectedRecord = names.find(
     (record) => record.name === selectedPrimary
   );
+  const { subdomainsByParent, externalParentGroups } = useMemo(() => {
+    const grouped = new Map<string, OwnedSubdomain[]>();
+    const ownedParentNames = new Set(names.map((record) => record.name));
+
+    for (const subdomain of subdomains) {
+      const existing = grouped.get(subdomain.parentName);
+      if (existing) existing.push(subdomain);
+      else grouped.set(subdomain.parentName, [subdomain]);
+    }
+
+    return {
+      subdomainsByParent: grouped,
+      externalParentGroups: [...grouped.entries()].filter(
+        ([parentName]) => !ownedParentNames.has(parentName),
+      ),
+    };
+  }, [names, subdomains]);
 
   function savePrimary() {
     if (!selectedRecord) return;
@@ -459,6 +514,11 @@ export default function Dashboard() {
             {lookupError}
           </p>
         )}
+        {isConnected && !isLoading && subdomainLookupError && (
+          <p className="rounded-md border border-red-200 bg-white p-5 text-sm text-red-600 shadow-sm">
+            {subdomainLookupError}
+          </p>
+        )}
         {isConnected && !isLoading && !lookupError && names.length === 0 && (
           <p className="rounded-md border border-black/10 bg-white p-5 text-sm shadow-sm">
             No active XDCID names are owned by this wallet.
@@ -482,45 +542,17 @@ export default function Dashboard() {
             }}
             onRenewed={loadOwnedNames}
             record={record}
+            subdomains={subdomainsByParent.get(record.name) ?? []}
+          />
+        ))}
+        {externalParentGroups.map(([parentName, records]) => (
+          <ParentSubdomainGroup
+            key={parentName}
+            parentName={parentName}
+            records={records}
           />
         ))}
       </div>
-
-      {isConnected && !isLoading && (
-        <section className="mt-8">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
-                Child identities
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
-                Subdomains
-              </h2>
-            </div>
-            <Link
-              className="text-sm font-semibold text-teal-700 hover:text-teal-900"
-              href="/subdomains"
-            >
-              Open subdomains
-            </Link>
-          </div>
-          <div className="grid gap-3">
-            {subdomainLookupError ? (
-              <p className="rounded-md border border-red-200 bg-white p-5 text-sm text-red-600 shadow-sm">
-                {subdomainLookupError}
-              </p>
-            ) : subdomains.length === 0 ? (
-              <p className="rounded-md border border-black/10 bg-white p-5 text-sm shadow-sm">
-                No active XDCID subdomains are owned by this wallet.
-              </p>
-            ) : (
-              subdomains.map((record) => (
-                <SubdomainRow key={record.node} record={record} />
-              ))
-            )}
-          </div>
-        </section>
-      )}
     </main>
   );
 }
