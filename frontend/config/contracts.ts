@@ -173,6 +173,16 @@ export const subdomainRegistrarAbi = [
   },
   {
     type: "function",
+    name: "addressOf",
+    stateMutability: "view",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" }
+    ],
+    outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
     name: "records",
     stateMutability: "view",
     inputs: [{ name: "node", type: "bytes32" }],
@@ -237,6 +247,27 @@ export const subdomainRegistrarAbi = [
         ]
       },
       { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "setAddress",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" },
+      { name: "destination", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "transferSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "newOwner", type: "address" }
     ],
     outputs: []
   }

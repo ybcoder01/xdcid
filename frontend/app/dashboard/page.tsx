@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, type Hex } from "viem";
 import { SignedRenewalControls } from "../../components/SignedRenewalControls";
 import { RegistryV2MigrationAction } from "../../components/RegistryV2MigrationAction";
+import { SubdomainRenewalControls } from "../../components/SubdomainRenewalControls";
 import { loadNames, saveName } from "../../config/localNames";
 import {
   loadSubdomains,
@@ -65,33 +66,56 @@ type OwnedSubdomainsResponse = {
   error?: { message?: string };
 };
 
-function SubdomainRow({ record }: { record: OwnedSubdomain }) {
-  const renewalUrl =
-    "/subdomains?" +
+function SubdomainRow({
+  onRenewed,
+  parentExpiryTimestamp,
+  record,
+}: {
+  onRenewed: () => void | Promise<void>;
+  parentExpiryTimestamp?: string;
+  record: OwnedSubdomain;
+}) {
+  const managementUrl =
+    "/subdomains/manage?" +
     new URLSearchParams({
       parent: record.parentName,
       label: record.label,
     }).toString();
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
-      <div>
+    <div className="grid gap-4 rounded-md border border-black/10 bg-white p-4 shadow-sm lg:grid-cols-[minmax(14rem,1fr)_auto] lg:items-center">
+      <div className="min-w-0">
         <p className="text-lg font-semibold text-slate-950">{record.name}</p>
         <p className="text-sm text-neutral-600">
           Subdomain · Expires: {new Date(record.expiry.iso).toLocaleDateString()}
         </p>
+        <Link
+          className="mt-2 inline-block text-sm font-semibold text-teal-700 hover:text-teal-900"
+          href={managementUrl}
+        >
+          Manage records and ownership
+        </Link>
       </div>
-      <Link
-        className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800"
-        href={renewalUrl}
-      >
-        Renew
-      </Link>
+      <SubdomainRenewalControls
+        expiryTimestamp={record.expiry.timestamp}
+        label={record.label}
+        onRenewed={onRenewed}
+        parentExpiryTimestamp={parentExpiryTimestamp}
+        parentName={record.parentName}
+      />
     </div>
   );
 }
 
-function NestedSubdomains({ records }: { records: OwnedSubdomain[] }) {
+function NestedSubdomains({
+  onRenewed,
+  parentExpiryTimestamp,
+  records,
+}: {
+  onRenewed: () => void | Promise<void>;
+  parentExpiryTimestamp?: string;
+  records: OwnedSubdomain[];
+}) {
   if (records.length === 0) return null;
 
   return (
@@ -100,7 +124,12 @@ function NestedSubdomains({ records }: { records: OwnedSubdomain[] }) {
         Subdomains
       </p>
       {records.map((record) => (
-        <SubdomainRow key={record.node} record={record} />
+        <SubdomainRow
+          key={record.node}
+          onRenewed={onRenewed}
+          parentExpiryTimestamp={parentExpiryTimestamp}
+          record={record}
+        />
       ))}
     </div>
   );
@@ -191,15 +220,21 @@ function NameRow({
           onMigrated={onMigrated}
         />
       </div>
-      <NestedSubdomains records={subdomains} />
+      <NestedSubdomains
+        onRenewed={onRenewed}
+        parentExpiryTimestamp={record.expiry.timestamp}
+        records={subdomains}
+      />
     </div>
   );
 }
 
 function ParentSubdomainGroup({
+  onRenewed,
   parentName,
   records,
 }: {
+  onRenewed: () => void | Promise<void>;
   parentName: string;
   records: OwnedSubdomain[];
 }) {
@@ -209,7 +244,7 @@ function ParentSubdomainGroup({
         <p className="text-lg font-semibold text-slate-950">{parentName}</p>
         <p className="text-sm text-neutral-600">Parent XDCID</p>
       </div>
-      <NestedSubdomains records={records} />
+      <NestedSubdomains onRenewed={onRenewed} records={records} />
     </div>
   );
 }
@@ -548,6 +583,7 @@ export default function Dashboard() {
         {externalParentGroups.map(([parentName, records]) => (
           <ParentSubdomainGroup
             key={parentName}
+            onRenewed={loadOwnedNames}
             parentName={parentName}
             records={records}
           />
