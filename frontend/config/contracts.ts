@@ -173,6 +173,17 @@ export const subdomainRegistrarAbi = [
   },
   {
     type: "function",
+    name: "records",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [
+      { name: "owner", type: "address" },
+      { name: "parentNode", type: "bytes32" },
+      { name: "expiry", type: "uint256" }
+    ]
+  },
+  {
+    type: "function",
     name: "registerWithQuote",
     stateMutability: "payable",
     inputs: [
