@@ -38,6 +38,10 @@ type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
 type Action = "registration" | "renewal";
 
+type SubdomainRegistrationProps = {
+  allowDisabledEnvironment?: boolean;
+};
+
 type SerializedQuote = {
   node: Hex;
   parentNode: Hex;
@@ -65,7 +69,9 @@ type QuoteResponse = {
   error?: { message?: string };
 };
 
-export function SubdomainRegistration() {
+export function SubdomainRegistration({
+  allowDisabledEnvironment = false,
+}: SubdomainRegistrationProps = {}) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
@@ -78,6 +84,8 @@ export function SubdomainRegistration() {
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const registrationEnabled =
+    subdomainRegistrationEnabled || allowDisabledEnvironment;
 
   useEffect(() => {
     if (address && !ownerInput) setOwnerInput(address);
@@ -104,7 +112,7 @@ export function SubdomainRegistration() {
     abi: subdomainRegistrarAbi,
     functionName: "available",
     args: inputValid ? [parent.name, label] : undefined,
-    query: { enabled: subdomainRegistrationEnabled && inputValid },
+    query: { enabled: registrationEnabled && inputValid },
   });
   const owner = useReadContract({
     address: activeSubdomainRegistrarAddress,
@@ -112,7 +120,7 @@ export function SubdomainRegistration() {
     abi: subdomainRegistrarAbi,
     functionName: "ownerOf",
     args: node ? [node] : undefined,
-    query: { enabled: subdomainRegistrationEnabled && !!node },
+    query: { enabled: registrationEnabled && !!node },
   });
   const price = useReadContract({
     address: pricingPolicy,
@@ -120,7 +128,7 @@ export function SubdomainRegistration() {
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
     args: [2, 1n, BigInt(termYears)],
-    query: { enabled: subdomainRegistrationEnabled },
+    query: { enabled: registrationEnabled },
   });
   const hasActiveOwner =
     typeof owner.data === "string" && owner.data !== zeroAddress;
@@ -139,7 +147,7 @@ export function SubdomainRegistration() {
 
   async function submit() {
     if (
-      !subdomainRegistrationEnabled ||
+      !registrationEnabled ||
       !isConnected ||
       !address ||
       !client ||
@@ -246,7 +254,7 @@ export function SubdomainRegistration() {
     }
   }
 
-  if (!subdomainRegistrationEnabled) {
+  if (!registrationEnabled) {
     return (
       <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
         Subdomain registration is not enabled for this environment yet.
