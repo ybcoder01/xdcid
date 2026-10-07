@@ -18,10 +18,12 @@ import {
 import { CrossChainPaymentNotice } from "../../components/CrossChainPaymentNotice";
 import {
   activeRegistryAddress,
+  activeSubdomainRegistrarAddress,
   multichainResolverAvailable,
   addresses,
   multichainResolverAbi,
-  registryAbi
+  registryAbi,
+  subdomainRegistrarAbi
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
@@ -30,7 +32,7 @@ import {
   PAYMENT_NETWORKS,
   USDC_DECIMALS
 } from "../../config/paymentNetworks";
-import { parseXnsName } from "../../lib/names";
+import { parseResolvableXnsName } from "../../lib/names";
 import { selectPaymentDestination } from "../../lib/paymentPreparation";
 import {
   installPaymentCompletionRetry,
@@ -157,10 +159,11 @@ export default function SendPage() {
     return isAddress(value) ? getAddress(value) : null;
   }, [recipient]);
   const parsedName = useMemo(
-    () => parseXnsName(directRecipient ? "" : recipient),
+    () => parseResolvableXnsName(directRecipient ? "" : recipient),
     [directRecipient, recipient]
   );
-  const { label, name, isValid, error: validationError } = parsedName;
+  const { name, isValid, error: validationError } = parsedName;
+  const isSubdomain = parsedName.kind === "subdomain";
   const enabled = !directRecipient && isValid;
   const units = useMemo(() => paymentUnits(amount, token), [amount, token]);
   const sourceNetwork = getPaymentNetwork(sourceChainId);
@@ -280,21 +283,35 @@ export default function SendPage() {
     address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "ownerOf",
-    args: node ? [node] : undefined,
-    query: { enabled: !!node }
+    args: node && !isSubdomain ? [node] : undefined,
+    query: { enabled: !!node && !isSubdomain }
   });
 
   const xdcidRegistered =
     owner.data === undefined ? undefined : owner.data !== zeroAddress;
-  const registry = useRegistryStatus(name, xdcidRegistered, !!node, XDC_CHAIN_ID);
+  const registry = useRegistryStatus(
+    isSubdomain ? undefined : name,
+    isSubdomain ? undefined : xdcidRegistered,
+    !!node && !isSubdomain,
+    XDC_CHAIN_ID
+  );
 
   const expiry = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: activeRegistryAddress,
     abi: registryAbi,
     functionName: "expiryOf",
-    args: node ? [node] : undefined,
-    query: { enabled: !!node }
+    args: node && !isSubdomain ? [node] : undefined,
+    query: { enabled: !!node && !isSubdomain }
+  });
+
+  const subdomainRecord = useReadContract({
+    chainId: XDC_CHAIN_ID,
+    address: activeSubdomainRegistrarAddress,
+    abi: subdomainRegistrarAbi,
+    functionName: "records",
+    args: node && isSubdomain ? [node] : undefined,
+    query: { enabled: !!node && isSubdomain }
   });
 
   const destinationRecordChainId =
@@ -311,21 +328,42 @@ export default function SendPage() {
     query: {
       enabled:
         !!node &&
+        !isSubdomain &&
         multichainResolverAvailable &&
         destinationRecordChainId !== null
     }
   });
 
-  const expired = expiry.data
-    ? expiry.data < BigInt(Math.floor(Date.now() / 1000))
+  const subdomainAddress = useReadContract({
+    chainId: XDC_CHAIN_ID,
+    address: activeSubdomainRegistrarAddress,
+    abi: subdomainRegistrarAbi,
+    functionName: "addressOf",
+    args: node && isSubdomain && destinationRecordChainId
+      ? [node, BigInt(destinationRecordChainId)]
+      : undefined,
+    query: {
+      enabled: !!node && isSubdomain && destinationRecordChainId !== null
+    }
+  });
+
+  const subdomainOwner = subdomainRecord.data?.[0];
+  const subdomainExpiry = subdomainRecord.data?.[2];
+  const activeExpiry = isSubdomain ? subdomainExpiry : expiry.data;
+  const activeOwner = isSubdomain ? subdomainOwner : owner.data;
+  const expired = activeExpiry
+    ? activeExpiry < BigInt(Math.floor(Date.now() / 1000))
     : true;
-  const hasOwner = !!owner.data && owner.data !== zeroAddress && !expired;
-  const registrySafe = registry.status?.state === "xdcid";
+  const hasOwner = !!activeOwner && activeOwner !== zeroAddress && !expired;
+  const registrySafe = isSubdomain || registry.status?.state === "xdcid";
 
   const destination = useMemo(
     () =>
       directRecipient
         ? { address: directRecipient, source: "direct-wallet" as const }
+        : isSubdomain && typeof subdomainAddress.data === "string" &&
+            isAddress(subdomainAddress.data) && subdomainAddress.data !== zeroAddress
+          ? { address: getAddress(subdomainAddress.data), source: "subdomain" as const }
         : selectPaymentDestination({
             destinationChainId,
             multichainAddress:
@@ -338,21 +376,21 @@ export default function SendPage() {
     [
       destinationChainId,
       directRecipient,
+      isSubdomain,
       multichainAddress.data,
-      owner.data
+      owner.data,
+      subdomainAddress.data
     ]
   );
 
   const readsLoading =
-    owner.isLoading ||
-    expiry.isLoading ||
-    multichainAddress.isLoading ||
-    registry.isChecking;
+    (isSubdomain
+      ? subdomainRecord.isLoading || subdomainAddress.isLoading
+      : owner.isLoading || expiry.isLoading || multichainAddress.isLoading || registry.isChecking);
   const readsFailed =
-    owner.isError ||
-    expiry.isError ||
-    multichainAddress.isError ||
-    registry.isError;
+    (isSubdomain
+      ? subdomainRecord.isError || subdomainAddress.isError
+      : owner.isError || expiry.isError || multichainAddress.isError || registry.isError);
 
   const recipientReady = directRecipient
     ? true
@@ -511,9 +549,9 @@ export default function SendPage() {
         ? "Resolving the name and destination-chain address..."
         : readsFailed
           ? "Could not verify the name or destination address"
-          : registry.status?.state === "legacy"
+          : !isSubdomain && registry.status?.state === "legacy"
             ? "Payment blocked: this name requires migration from XDCDomains"
-            : registry.status?.state === "collision"
+            : !isSubdomain && registry.status?.state === "collision"
               ? "Payment blocked: this name exists in both registries and requires review"
               : !hasOwner
                 ? "Name is unregistered or expired"
@@ -807,6 +845,8 @@ export default function SendPage() {
                           ? "Direct wallet address"
                           : destination.source === "multichain"
                             ? routeState.route.destination.name + " address configured for this XDCID"
+                            : destination.source === "subdomain"
+                              ? routeState.route.destination.name + " address resolved from this subdomain"
                             : "Current XDCID owner"}
                       </p>
                       {!directRecipient ? (
