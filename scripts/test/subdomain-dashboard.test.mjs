@@ -31,6 +31,9 @@ test("the dashboard discovers active subdomains and exposes owner controls", asy
   assert.match(renewal, /Parent limit:/);
   assert.match(manager, /functionName: "setAddress"/);
   assert.match(manager, /functionName: "transferSubdomain"/);
+  assert.match(manager, /functionName: "assignSubdomain"/);
+  assert.match(manager, /functionName: "reclaimSubdomain"/);
+  assert.match(manager, /Reclaim to parent owner/);
   assert.match(publicPage, /allowRenewalsWhenDisabled/);
   assert.match(
     registration,

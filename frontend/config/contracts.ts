@@ -270,6 +270,27 @@ export const subdomainRegistrarAbi = [
       { name: "newOwner", type: "address" }
     ],
     outputs: []
+  },
+  {
+    type: "function",
+    name: "assignSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "newOwner", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "reclaimSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
+    ],
+    outputs: []
   }
 ] as const;
 

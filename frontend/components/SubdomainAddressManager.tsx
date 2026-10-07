@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getAddress,
   isAddress,
+  keccak256,
+  stringToHex,
   zeroAddress,
   type Address,
   type Hex,
@@ -19,8 +21,10 @@ import {
 } from "wagmi";
 import {
   activeSubdomainRegistrarAddress,
+  activeRegistryAddress,
   activeXnsChainId,
   isTestnetEnvironment,
+  registryAbi,
   subdomainRegistrarAbi,
   supportedMultichainNetworks,
 } from "../config/contracts";
@@ -34,9 +38,13 @@ function shortAddress(value: string) {
 export function SubdomainAddressManager({
   name,
   node,
+  parentName,
+  label,
 }: {
   name: string;
   node: Hex;
+  parentName: string;
+  label: string;
 }) {
   const { address } = useAccount();
   const chainId = useChainId();
@@ -47,6 +55,10 @@ export function SubdomainAddressManager({
   const [newOwner, setNewOwner] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const parentNode = useMemo(
+    () => keccak256(stringToHex(parentName)),
+    [parentName],
+  );
   const owner = useReadContract({
     address: activeSubdomainRegistrarAddress,
     chainId: activeXnsChainId,
@@ -63,6 +75,13 @@ export function SubdomainAddressManager({
       args: [node, BigInt(network.chainId)],
     })),
   });
+  const parentOwner = useReadContract({
+    address: activeRegistryAddress,
+    chainId: activeXnsChainId,
+    abi: registryAbi,
+    functionName: "ownerOf",
+    args: [parentNode],
+  });
   const currentAddresses = useMemo(
     () =>
       supportedMultichainNetworks.reduce<Record<number, Address | null>>(
@@ -78,10 +97,15 @@ export function SubdomainAddressManager({
       ),
     [addressReads.data],
   );
-  const isOwner =
+  const isSubdomainOwner =
     !!address &&
     typeof owner.data === "string" &&
     owner.data.toLowerCase() === address.toLowerCase();
+  const isParentOwner =
+    !!address &&
+    typeof parentOwner.data === "string" &&
+    parentOwner.data.toLowerCase() === address.toLowerCase();
+  const canManage = isSubdomainOwner || isParentOwner;
 
   useEffect(() => {
     if (!addressReads.data) return;
@@ -165,18 +189,60 @@ export function SubdomainAddressManager({
     }
   }
 
+  async function parentOwnershipAction(action: "reclaim" | "reassign") {
+    if (action === "reassign" && (!isAddress(newOwner) || newOwner === zeroAddress)) return;
+    setBusyKey(action);
+    setStatus("");
+    try {
+      const publicClient = await prepareWrite();
+      const gas = await xdcWriteOverrides(
+        publicClient,
+        activeXnsChainId,
+        XDC_WRITE_GAS_LIMITS.recordUpdate,
+      );
+      const hash = action === "reclaim"
+        ? await writeContractAsync({
+            address: activeSubdomainRegistrarAddress,
+            abi: subdomainRegistrarAbi,
+            functionName: "reclaimSubdomain",
+            args: [parentName, label],
+            ...gas,
+          })
+        : await writeContractAsync({
+            address: activeSubdomainRegistrarAddress,
+            abi: subdomainRegistrarAbi,
+            functionName: "assignSubdomain",
+            args: [parentName, label, getAddress(newOwner)],
+            ...gas,
+          });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error("Ownership update failed");
+      setStatus(
+        action === "reclaim"
+          ? `Subdomain reclaimed to the owner of ${parentName}. Its custom receiving addresses were cleared.`
+          : "Subdomain reassigned. Its custom receiving addresses were cleared.",
+      );
+      setNewOwner("");
+      await Promise.all([owner.refetch(), parentOwner.refetch(), addressReads.refetch()]);
+    } catch (error) {
+      setStatus(walletActionErrorMessage(error, "Ownership update failed"));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   if (!address) {
     return (
       <p className="rounded-md border border-black/10 bg-white p-5 text-sm shadow-sm">
-        Connect the subdomain owner wallet to manage records.
+        Connect the subdomain or parent owner wallet to manage this identity.
       </p>
     );
   }
 
-  if (!owner.isLoading && !isOwner) {
+  if (!owner.isLoading && !parentOwner.isLoading && !canManage) {
     return (
       <p className="rounded-md border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950 shadow-sm">
-        The connected wallet does not own {name}.
+        The connected wallet owns neither {name} nor its parent, {parentName}.
       </p>
     );
   }
@@ -185,7 +251,7 @@ export function SubdomainAddressManager({
     <div className="grid gap-6">
       <section className="rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
-          Owner controls
+          {isParentOwner && !isSubdomainOwner ? "Parent owner controls" : "Owner controls"}
         </p>
         <h2 className="mt-2 text-xl font-semibold text-slate-950">
           Receiving addresses
@@ -227,6 +293,7 @@ export function SubdomainAddressManager({
                     value={draft}
                   />
                   <button
+                    type="button"
                     className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
                     disabled={!valid || busyKey !== null}
                     onClick={() => saveAddress(network.chainId, getAddress(draft))}
@@ -234,6 +301,7 @@ export function SubdomainAddressManager({
                     {busyKey === String(network.chainId) ? "Saving…" : "Save"}
                   </button>
                   <button
+                    type="button"
                     className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
                     disabled={busyKey !== null}
                     onClick={() => saveAddress(network.chainId, zeroAddress)}
@@ -248,27 +316,49 @@ export function SubdomainAddressManager({
       </section>
 
       <section className="rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Transfer subdomain</h2>
+        <h2 className="text-lg font-semibold text-slate-950">
+          {isParentOwner ? "Subdomain assignment" : "Transfer subdomain"}
+        </h2>
         <p className="mt-1 text-sm text-neutral-600">
-          Transfer ownership to another wallet. All custom receiving addresses
-          are cleared by the contract during transfer.
+          {isParentOwner
+            ? `As the owner of ${parentName}, you can reclaim this identity or assign it to a replacement wallet. The contract clears all custom receiving addresses whenever ownership changes.`
+            : "Transfer ownership to another wallet. All custom receiving addresses are cleared by the contract during transfer."}
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <input
+            aria-label="New subdomain owner wallet"
             className="min-w-0 flex-1 rounded-md border border-black/15 bg-white px-3 py-2 font-mono text-sm"
             onChange={(event) => setNewOwner(event.target.value)}
             placeholder="New owner 0x address"
             value={newOwner}
           />
           <button
+            type="button"
             className="rounded-md bg-slate-950 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
             disabled={
               busyKey !== null || !isAddress(newOwner) || newOwner === zeroAddress
             }
-            onClick={transfer}
+            onClick={() => {
+              if (isParentOwner) void parentOwnershipAction("reassign");
+              else void transfer();
+            }}
           >
-            {busyKey === "transfer" ? "Transferring…" : "Transfer"}
+            {busyKey === "transfer" || busyKey === "reassign"
+              ? "Updating…"
+              : isParentOwner
+                ? "Assign to wallet"
+                : "Transfer"}
           </button>
+          {isParentOwner ? (
+            <button
+              type="button"
+              className="rounded-md border border-amber-300 bg-amber-50 px-5 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+              disabled={busyKey !== null || owner.data?.toLowerCase() === parentOwner.data?.toLowerCase()}
+              onClick={() => void parentOwnershipAction("reclaim")}
+            >
+              {busyKey === "reclaim" ? "Reclaiming…" : "Reclaim to parent owner"}
+            </button>
+          ) : null}
         </div>
       </section>
       {status ? (

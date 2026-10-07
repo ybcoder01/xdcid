@@ -53,7 +53,12 @@ function ManageSubdomainContent() {
           Back to dashboard
         </Link>
       </section>
-      <SubdomainAddressManager name={name} node={node} />
+      <SubdomainAddressManager
+        label={label}
+        name={name}
+        node={node}
+        parentName={parent.name}
+      />
     </main>
   );
 }
