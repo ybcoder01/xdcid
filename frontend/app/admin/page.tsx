@@ -1,6 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { AdminArchiveAdministrator } from "../../components/AdminArchiveAdministrator";
@@ -246,6 +247,14 @@ export default function AdminPage() {
             >
               End admin session
             </button>
+            {canManagePlatform ? (
+              <Link
+                className="rounded-md border border-teal-700 bg-teal-50 px-5 py-3 text-sm font-semibold text-teal-950 hover:bg-teal-100"
+                href="/admin/subdomains"
+              >
+                Test subdomain registration
+              </Link>
+            ) : null}
           </div>
         </div>
 
