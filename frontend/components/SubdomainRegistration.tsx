@@ -33,6 +33,7 @@ import {
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 import { parseXnsName } from "../lib/names";
+import { saveSubdomain } from "../config/localSubdomains";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
@@ -40,6 +41,9 @@ type Action = "registration" | "renewal";
 
 type SubdomainRegistrationProps = {
   allowDisabledEnvironment?: boolean;
+  allowRenewalsWhenDisabled?: boolean;
+  initialParentName?: string;
+  initialLabel?: string;
 };
 
 type SerializedQuote = {
@@ -71,14 +75,17 @@ type QuoteResponse = {
 
 export function SubdomainRegistration({
   allowDisabledEnvironment = false,
+  allowRenewalsWhenDisabled = false,
+  initialParentName = "",
+  initialLabel = "",
 }: SubdomainRegistrationProps = {}) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const client = usePublicClient({ chainId: activeXnsChainId });
   const { writeContractAsync } = useWriteContract();
-  const [parentInput, setParentInput] = useState("");
-  const [labelInput, setLabelInput] = useState("");
+  const [parentInput, setParentInput] = useState(initialParentName);
+  const [labelInput, setLabelInput] = useState(initialLabel);
   const [ownerInput, setOwnerInput] = useState("");
   const [termYears, setTermYears] = useState<Term>(1);
   const [currency, setCurrency] = useState<Currency>("XDC");
@@ -86,6 +93,7 @@ export function SubdomainRegistration({
   const [status, setStatus] = useState("");
   const registrationEnabled =
     subdomainRegistrationEnabled || allowDisabledEnvironment;
+  const lookupEnabled = registrationEnabled || allowRenewalsWhenDisabled;
 
   useEffect(() => {
     if (address && !ownerInput) setOwnerInput(address);
@@ -112,7 +120,7 @@ export function SubdomainRegistration({
     abi: subdomainRegistrarAbi,
     functionName: "available",
     args: inputValid ? [parent.name, label] : undefined,
-    query: { enabled: registrationEnabled && inputValid },
+    query: { enabled: lookupEnabled && inputValid },
   });
   const owner = useReadContract({
     address: activeSubdomainRegistrarAddress,
@@ -120,7 +128,7 @@ export function SubdomainRegistration({
     abi: subdomainRegistrarAbi,
     functionName: "ownerOf",
     args: node ? [node] : undefined,
-    query: { enabled: registrationEnabled && !!node },
+    query: { enabled: lookupEnabled && !!node },
   });
   const price = useReadContract({
     address: pricingPolicy,
@@ -128,7 +136,7 @@ export function SubdomainRegistration({
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
     args: [2, 1n, BigInt(termYears)],
-    query: { enabled: registrationEnabled },
+    query: { enabled: lookupEnabled },
   });
   const hasActiveOwner =
     typeof owner.data === "string" && owner.data !== zeroAddress;
@@ -138,6 +146,8 @@ export function SubdomainRegistration({
   const action: Action = available.data === false && hasActiveOwner
     ? "renewal"
     : "registration";
+  const actionEnabled =
+    registrationEnabled || (allowRenewalsWhenDisabled && action === "renewal");
 
   useEffect(() => {
     if (action === "renewal" && owner.data && owner.data !== zeroAddress) {
@@ -147,7 +157,7 @@ export function SubdomainRegistration({
 
   async function submit() {
     if (
-      !registrationEnabled ||
+      !actionEnabled ||
       !isConnected ||
       !address ||
       !client ||
@@ -245,6 +255,7 @@ export function SubdomainRegistration({
       if (receipt.status !== "success") {
         throw new Error(`Subdomain ${action} failed`);
       }
+      saveSubdomain(getAddress(ownerInput), `${label}.${parent.name}`);
       setStatus(`Subdomain ${action} confirmed: ${hash}`);
       await Promise.all([available.refetch(), owner.refetch()]);
     } catch (cause) {
@@ -254,16 +265,14 @@ export function SubdomainRegistration({
     }
   }
 
-  if (!registrationEnabled) {
-    return (
-      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
-        Subdomain registration is not enabled for this environment yet.
-      </div>
-    );
-  }
-
   return (
     <section className="rounded-3xl border bg-white p-7 shadow-sm">
+      {!registrationEnabled ? (
+        <div className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+          New subdomain registration is not public yet. Enter an existing
+          subdomain below to renew it.
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Parent XDCID" value={parentInput} onChange={setParentInput} placeholder="company.xdc" />
         <Field label="Subdomain label" value={labelInput} onChange={setLabelInput} placeholder="alice" />
@@ -311,11 +320,18 @@ export function SubdomainRegistration({
           !isNonZeroAddress(ownerInput) ||
           !availabilityReady ||
           busy ||
+          !actionEnabled ||
           (available.data === false && !hasActiveOwner)
         }
         onClick={submit}
       >
-        {busy ? "Processing…" : action === "registration" ? "Get quote and register subdomain" : "Get quote and renew subdomain"}
+        {busy
+          ? "Processing…"
+          : action === "registration"
+            ? registrationEnabled
+              ? "Get quote and register subdomain"
+              : "New registrations are not public yet"
+            : "Get quote and renew subdomain"}
       </button>
       {status ? <p className="mt-4 break-all text-sm text-slate-600">{status}</p> : null}
       <p className="mt-4 text-xs text-slate-500">

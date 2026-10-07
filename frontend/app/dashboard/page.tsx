@@ -7,6 +7,10 @@ import { SignedRenewalControls } from "../../components/SignedRenewalControls";
 import { RegistryV2MigrationAction } from "../../components/RegistryV2MigrationAction";
 import { loadNames, saveName } from "../../config/localNames";
 import {
+  loadSubdomains,
+  saveSubdomain,
+} from "../../config/localSubdomains";
+import {
   useAccount,
   useReadContract,
   useWaitForTransactionReceipt,
@@ -47,6 +51,45 @@ type OwnedNamesResponse = {
     message?: string;
   };
 };
+
+type OwnedSubdomain = {
+  name: string;
+  parentName: string;
+  label: string;
+  node: Hex;
+  expiry: { timestamp: string; iso: string };
+};
+
+type OwnedSubdomainsResponse = {
+  data?: { subdomains: OwnedSubdomain[] };
+  error?: { message?: string };
+};
+
+function SubdomainRow({ record }: { record: OwnedSubdomain }) {
+  const renewalUrl =
+    "/subdomains?" +
+    new URLSearchParams({
+      parent: record.parentName,
+      label: record.label,
+    }).toString();
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
+      <div>
+        <p className="text-lg font-semibold text-slate-950">{record.name}</p>
+        <p className="text-sm text-neutral-600">
+          Subdomain · Expires: {new Date(record.expiry.iso).toLocaleDateString()}
+        </p>
+      </div>
+      <Link
+        className="rounded-md bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800"
+        href={renewalUrl}
+      >
+        Renew
+      </Link>
+    </div>
+  );
+}
 
 function NameRow({
   record,
@@ -137,12 +180,14 @@ export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const requestController = useRef<AbortController | null>(null);
   const [names, setNames] = useState<OwnedName[]>([]);
+  const [subdomains, setSubdomains] = useState<OwnedSubdomain[]>([]);
   const [primaryName, setPrimaryName] = useState<string | null>(null);
   const [selectedPrimary, setSelectedPrimary] = useState("");
   const [submittedPrimary, setSubmittedPrimary] = useState<string | null>(null);
   const [confirmedPrimary, setConfirmedPrimary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lookupError, setLookupError] = useState("");
+  const [subdomainLookupError, setSubdomainLookupError] = useState("");
   const processedPrimaryHash = useRef<Hex | null>(null);
   const {
     data: primaryHash,
@@ -165,10 +210,12 @@ export default function Dashboard() {
 
     if (!address) {
       setNames([]);
+      setSubdomains([]);
       setPrimaryName(null);
       setSelectedPrimary("");
       setIsLoading(false);
       setLookupError("");
+      setSubdomainLookupError("");
       return;
     }
 
@@ -176,7 +223,9 @@ export default function Dashboard() {
     requestController.current = controller;
     setIsLoading(true);
     setLookupError("");
+    setSubdomainLookupError("");
     setNames([]);
+    setSubdomains([]);
     setPrimaryName(null);
     setSelectedPrimary("");
 
@@ -186,25 +235,54 @@ export default function Dashboard() {
         .slice(0, 50)
         .forEach((name) => params.append("known", name));
       const query = params.size > 0 ? "?" + params.toString() : "";
-      const response = await fetch(
-        "/api/v1/addresses/" + address + "/names" + query,
-        { cache: "no-store", signal: controller.signal }
-      );
+      const subdomainParams = new URLSearchParams();
+      loadSubdomains(address)
+        .slice(0, 50)
+        .forEach((name) => subdomainParams.append("known", name));
+      const subdomainQuery =
+        subdomainParams.size > 0 ? "?" + subdomainParams.toString() : "";
+      const [response, subdomainsResponse] = await Promise.all([
+        fetch("/api/v1/addresses/" + address + "/names" + query, {
+          cache: "no-store",
+          signal: controller.signal,
+        }),
+        fetch(
+          "/api/v1/addresses/" + address + "/subdomains" + subdomainQuery,
+          { cache: "no-store", signal: controller.signal },
+        ),
+      ]);
       const body = (await response.json()) as OwnedNamesResponse;
-      if (!response.ok || !body.data) {
-        throw new Error(body.error?.message || "Unable to load wallet names");
+      const subdomainBody =
+        (await subdomainsResponse.json()) as OwnedSubdomainsResponse;
+      if (response.ok && body.data) {
+        body.data.names.forEach((record) => saveName(address, record.name));
+        setNames(body.data.names);
+        setPrimaryName(body.data.primaryName);
+        setSelectedPrimary(
+          body.data.primaryName || body.data.names[0]?.name || "",
+        );
+      } else {
+        setLookupError(body.error?.message || "Unable to load wallet names");
       }
-
-      body.data.names.forEach((record) => saveName(address, record.name));
-      setNames(body.data.names);
-      setPrimaryName(body.data.primaryName);
-      setSelectedPrimary(
-        body.data.primaryName || body.data.names[0]?.name || ""
-      );
+      if (subdomainsResponse.ok && subdomainBody.data) {
+        subdomainBody.data.subdomains.forEach((record) =>
+          saveSubdomain(address, record.name),
+        );
+        setSubdomains(subdomainBody.data.subdomains);
+      } else {
+        setSubdomainLookupError(
+          subdomainBody.error?.message || "Unable to load wallet subdomains",
+        );
+      }
     } catch (error) {
       if (controller.signal.aborted) return;
       setLookupError(
         error instanceof Error ? error.message : "Unable to load wallet names"
+      );
+      setSubdomainLookupError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load wallet subdomains",
       );
     } finally {
       if (requestController.current === controller) {
@@ -407,6 +485,42 @@ export default function Dashboard() {
           />
         ))}
       </div>
+
+      {isConnected && !isLoading && (
+        <section className="mt-8">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
+                Child identities
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                Subdomains
+              </h2>
+            </div>
+            <Link
+              className="text-sm font-semibold text-teal-700 hover:text-teal-900"
+              href="/subdomains"
+            >
+              Open subdomains
+            </Link>
+          </div>
+          <div className="grid gap-3">
+            {subdomainLookupError ? (
+              <p className="rounded-md border border-red-200 bg-white p-5 text-sm text-red-600 shadow-sm">
+                {subdomainLookupError}
+              </p>
+            ) : subdomains.length === 0 ? (
+              <p className="rounded-md border border-black/10 bg-white p-5 text-sm shadow-sm">
+                No active XDCID subdomains are owned by this wallet.
+              </p>
+            ) : (
+              subdomains.map((record) => (
+                <SubdomainRow key={record.node} record={record} />
+              ))
+            )}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
