@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getAddress, isAddress, zeroAddress, type Address } from "viem";
 import {
   useAccount,
@@ -37,6 +38,15 @@ type PricingConfig = {
   treasury: Address;
   xdcPaymentsEnabled: boolean;
   usdcPaymentsEnabled: boolean;
+};
+
+type QuoteReadiness = {
+  chainId: number;
+  pricingPolicy: Address;
+  configuredSigner: Address;
+  activeSigner: Address;
+  authorized: boolean;
+  ready: boolean;
 };
 
 export function AdminRoleManagement() {
@@ -119,6 +129,23 @@ export function AdminRoleManagement() {
     functionName: "pendingActivationTime",
     query: { enabled: policyConfigured },
   });
+  const pendingConfig = useReadContract({
+    address: adminPricingPolicyAddress,
+    abi: adminPricingPolicyAbi,
+    functionName: "pendingConfig",
+    query: { enabled: policyConfigured && Boolean(pending.data) },
+  });
+  const readiness = useQuery({
+    queryKey: ["admin", "registrar-quote-readiness"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/registrar/quote", { cache: "no-store" });
+      const payload = await response.json() as { data?: QuoteReadiness; error?: { message?: string } };
+      if (!response.ok || !payload.data) throw new Error(payload.error?.message || "Readiness check failed");
+      return payload.data;
+    },
+    refetchInterval: 30_000,
+    enabled: policyConfigured,
+  });
 
   const write = useWriteContract();
   const receipt = useWaitForTransactionReceipt({ hash: write.data });
@@ -134,6 +161,7 @@ export function AdminRoleManagement() {
   const [usdcToken, setUsdcToken] = useState("");
   const [xdcEnabled, setXdcEnabled] = useState(true);
   const [usdcEnabled, setUsdcEnabled] = useState(true);
+  const [nowMs, setNowMs] = useState(0);
 
   const current = config.data as unknown as PricingConfig | undefined;
   useEffect(() => {
@@ -173,7 +201,16 @@ export function AdminRoleManagement() {
     void version.refetch();
     void pending.refetch();
     void activationTime.refetch();
+    void pendingConfig.refetch();
+    void readiness.refetch();
   }, [receipt.isSuccess]);
+  useEffect(() => {
+    if (!pending.data) return;
+    const tick = () => setNowMs(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1_000);
+    return () => window.clearInterval(timer);
+  }, [pending.data]);
 
   const isRegistryOwner =
     !!account &&
@@ -209,6 +246,17 @@ export function AdminRoleManagement() {
       Number(discountActivationTime.data) * 1_000,
     ).toLocaleString();
   }, [discountActivationTime.data]);
+  const nextConfig = pendingConfig.data as unknown as PricingConfig | undefined;
+  const secondsRemaining = activationTime.data && nowMs
+    ? Math.max(0, Number(activationTime.data) - Math.floor(nowMs / 1_000))
+    : undefined;
+  const delayElapsed = secondsRemaining === 0;
+  const serverMatchesPending = Boolean(
+    nextConfig && readiness.data &&
+    getAddress(readiness.data.configuredSigner) === getAddress(nextConfig.quoteSigner) &&
+    getAddress(readiness.data.pricingPolicy) === getAddress(adminPricingPolicyAddress),
+  );
+  const activationSafe = Boolean(pending.data && nextConfig && delayElapsed && serverMatchesPending);
 
   function proposeOperationalConfig() {
     if (!current || !policyFieldsValid || !isPolicyOwner) return;
@@ -477,6 +525,40 @@ export function AdminRoleManagement() {
             Never enter a private key in this page.
           </div>
 
+          {pending.data ? (
+            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4" aria-live="polite">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-amber-950">Activation safety gate</p>
+                  <p className="mt-1 text-xs text-amber-800">
+                    {secondsRemaining === undefined
+                      ? "Loading timelock…"
+                      : delayElapsed
+                        ? "The timelock has elapsed."
+                        : `Eligible in ${formatDuration(secondsRemaining)}.`}
+                  </p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${activationSafe ? "bg-teal-100 text-teal-800" : "bg-amber-100 text-amber-900"}`}>
+                  {activationSafe ? "Ready to activate" : "Activation blocked"}
+                </span>
+              </div>
+              <ul className="mt-3 grid gap-2 text-xs text-slate-800 md:grid-cols-2">
+                <GateItem ok={Boolean(nextConfig)} label="Pending policy configuration is readable" />
+                <GateItem ok={delayElapsed} label="48-hour timelock has elapsed" />
+                <GateItem ok={serverMatchesPending} label="Server signer matches the pending signer" />
+                <GateItem ok={!readiness.isError} label="Quote readiness endpoint is reachable" />
+              </ul>
+              {nextConfig ? (
+                <div className="mt-4 grid gap-2 text-xs md:grid-cols-2">
+                  <ConfigDiff label="Quote signer" active={current.quoteSigner} pending={nextConfig.quoteSigner} />
+                  <ConfigDiff label="Treasury" active={current.treasury} pending={nextConfig.treasury} />
+                  <ConfigDiff label="USDC" active={current.usdcToken} pending={nextConfig.usdcToken} />
+                  <ConfigDiff label="Payment methods" active={`${current.xdcPaymentsEnabled ? "XDC" : "—"} / ${current.usdcPaymentsEnabled ? "USDC" : "—"}`} pending={`${nextConfig.xdcPaymentsEnabled ? "XDC" : "—"} / ${nextConfig.usdcPaymentsEnabled ? "USDC" : "—"}`} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="mt-4 flex flex-wrap gap-3">
             <button
               className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
@@ -500,7 +582,7 @@ export function AdminRoleManagement() {
             </button>
             <button
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
-              disabled={!pending.data || !activationTime.data || BigInt(Math.floor(Date.now() / 1_000)) < activationTime.data || write.isPending}
+              disabled={!activationSafe || write.isPending}
               onClick={() =>
                 write.writeContract({
                   address: adminPricingPolicyAddress,
@@ -553,6 +635,28 @@ function AddressField(props: {
       />
     </label>
   );
+}
+
+function GateItem({ ok, label }: { ok: boolean; label: string }) {
+  return <li className="flex items-center gap-2"><span aria-hidden="true">{ok ? "✓" : "○"}</span>{label}</li>;
+}
+
+function ConfigDiff({ label, active, pending }: { label: string; active: string | Address; pending: string | Address }) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-white p-3">
+      <p className="font-semibold text-slate-900">{label}</p>
+      <p className="mt-1 break-all font-mono text-slate-500">Active: {active}</p>
+      <p className="mt-1 break-all font-mono text-slate-900">Pending: {pending}</p>
+    </div>
+  );
+}
+
+function formatDuration(seconds: number) {
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const remainder = seconds % 60;
+  return [days ? `${days}d` : "", hours ? `${hours}h` : "", minutes ? `${minutes}m` : "", `${remainder}s`].filter(Boolean).join(" ");
 }
 
 function RoleCard(props: {

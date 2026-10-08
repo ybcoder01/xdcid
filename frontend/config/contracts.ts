@@ -873,6 +873,34 @@ export const pricingPolicyV2Abi = [
   },
   {
     type: "function",
+    name: "pendingConfig",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{
+      name: "",
+      type: "tuple",
+      components: [
+        { name: "twoCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "threeCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "fourCharacterAnnualUsdMicros", type: "uint64" },
+        { name: "standardAnnualUsdMicros", type: "uint64" },
+        { name: "subdomainAnnualUsdMicros", type: "uint64" },
+        { name: "premiumSubdomainAnnualUsdMicros", type: "uint64" },
+        { name: "migrationUsdMicros", type: "uint64" },
+        { name: "threeYearDiscountBps", type: "uint16" },
+        { name: "fiveYearDiscountBps", type: "uint16" },
+        { name: "tenYearDiscountBps", type: "uint16" },
+        { name: "xdcQuoteBufferBps", type: "uint16" },
+        { name: "quoteSigner", type: "address" },
+        { name: "usdcToken", type: "address" },
+        { name: "treasury", type: "address" },
+        { name: "xdcPaymentsEnabled", type: "bool" },
+        { name: "usdcPaymentsEnabled", type: "bool" }
+      ]
+    }]
+  },
+  {
+    type: "function",
     name: "pendingActivationTime",
     stateMutability: "view",
     inputs: [],

@@ -15,13 +15,9 @@ import {
 } from "viem";
 import { apothemUnifiedDeploymentArtifacts as artifacts } from "../../../generated/apothemUnifiedDeployment";
 
-const OWNER = getAddress("0x9c67d6cfE6A73497e7348b6b852495CA6236C29a");
 const REGISTRY = getAddress("0xbe394cA8615E5DC0284262aad962Ef72414b0270");
 const RESOLVER = getAddress("0xA31f6c0323e8f5281c228b7fF2527520890D59Ab");
 const REGISTRAR = getAddress("0xd24d4fFF55b5D470d5B60d801ea77b60D39F8838");
-const POLICY = getAddress("0xC760c020d6865cc618B63c91622f88e2075E0513");
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
-const ZERO_HASH = `0x${"0".repeat(64)}` as Hex;
 
 const apothem = {
   id: 51,
@@ -31,24 +27,6 @@ const apothem = {
   blockExplorers: {
     default: { name: "XDCScan Testnet", url: "https://testnet.xdcscan.com" },
   },
-} as const;
-
-const quoteTypes = {
-  Quote: [
-    { name: "node", type: "bytes32" },
-    { name: "parentNode", type: "bytes32" },
-    { name: "payer", type: "address" },
-    { name: "nameOwner", type: "address" },
-    { name: "product", type: "uint8" },
-    { name: "termYears", type: "uint256" },
-    { name: "paymentToken", type: "address" },
-    { name: "paymentAmount", type: "uint256" },
-    { name: "usdMicros", type: "uint256" },
-    { name: "policyVersion", type: "uint256" },
-    { name: "nonce", type: "uint256" },
-    { name: "issuedAt", type: "uint256" },
-    { name: "deadline", type: "uint256" },
-  ],
 } as const;
 
 type MetaMaskProvider = EIP1193Provider & {
@@ -70,7 +48,8 @@ export default function ApothemUnifiedSmokeClient() {
   const [steps, setSteps] = useState(initialSteps);
   const [busy, setBusy] = useState(false);
   const [smokeNames, setSmokeNames] = useState<{ parent: string; child: string }>();
-  const [message, setMessage] = useState("Connect the designated Apothem owner wallet to begin.");
+  const [report, setReport] = useState<Record<string, unknown>>();
+  const [message, setMessage] = useState("Connect an Apothem test wallet to begin.");
 
   function update(index: number, patch: Partial<SmokeStep>) {
     setSteps((current) => current.map((step, position) => position === index ? { ...step, ...patch } : step));
@@ -82,13 +61,12 @@ export default function ApothemUnifiedSmokeClient() {
     try {
       const provider = injectedProvider();
       const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
-      if (!accounts[0] || getAddress(accounts[0]) !== OWNER) {
-        throw new Error("Select the designated Apothem owner wallet");
-      }
+      if (!accounts[0]) throw new Error("Connect an Apothem test wallet");
       await ensureApothem(provider);
       const publicClient = createPublicClient({ chain: apothem, transport: custom(provider) });
       const walletClient = createWalletClient({ chain: apothem, transport: custom(provider) });
-      const account = OWNER;
+      const account = getAddress(accounts[0]);
+      const startedAt = new Date().toISOString();
       const smokeLabel = `smoke-${Date.now().toString(36)}`;
       const parentName = `${smokeLabel}.xdc`;
       const childLabel = "child";
@@ -97,19 +75,16 @@ export default function ApothemUnifiedSmokeClient() {
       const parentNode = keccak256(toBytes(parentName));
       const childNode = keccak256(toBytes(childName));
 
-      for (const address of [REGISTRY, RESOLVER, REGISTRAR, POLICY]) {
+      for (const address of [REGISTRY, RESOLVER, REGISTRAR]) {
         const code = await publicClient.getCode({ address });
         if (!code || code === "0x") throw new Error(`Missing deployed code at ${address}`);
       }
 
       update(0, { state: "wallet" });
-      const registrationQuote = await signedQuote({
-        publicClient, walletClient, account, node: parentNode, parentNode: ZERO_HASH,
-        nameOwner: account, product: 0, termYears: 10n, labelLength: smokeLabel.length,
-      });
+      const registrationQuote = await apiQuote("/api/v1/registrar/quote", { name: parentName, product: "registration", termYears: 10, paymentCurrency: "XDC", payer: account, nameOwner: account });
       const registrationHash = await walletClient.writeContract({
         account, chain: apothem, address: REGISTRAR, abi: artifacts.registrar.abi,
-        functionName: "register", args: [parentName, registrationQuote.quote, registrationQuote.signature], value: 1n,
+        functionName: "register", args: [parentName, registrationQuote.quote, registrationQuote.signature], value: registrationQuote.quote.paymentAmount,
       });
       update(0, { state: "confirming", hash: registrationHash });
       await receipt(publicClient, registrationHash, "Parent registration");
@@ -120,26 +95,20 @@ export default function ApothemUnifiedSmokeClient() {
       });
       if (initialPrimary !== parentName) throw new Error("First registration was not initialized as Primary ID");
       update(1, { state: "wallet" });
-      const renewalQuote = await signedQuote({
-        publicClient, walletClient, account, node: parentNode, parentNode: ZERO_HASH,
-        nameOwner: account, product: 1, termYears: 1n, labelLength: smokeLabel.length,
-      });
+      const renewalQuote = await apiQuote("/api/v1/registrar/quote", { name: parentName, product: "renewal", termYears: 1, paymentCurrency: "XDC", payer: account, nameOwner: account });
       const renewalHash = await walletClient.writeContract({
         account, chain: apothem, address: REGISTRAR, abi: artifacts.registrar.abi,
-        functionName: "renew", args: [parentName, renewalQuote.quote, renewalQuote.signature], value: 1n,
+        functionName: "renew", args: [parentName, renewalQuote.quote, renewalQuote.signature], value: renewalQuote.quote.paymentAmount,
       });
       update(1, { state: "confirming", hash: renewalHash });
       await receipt(publicClient, renewalHash, "Parent renewal");
       update(1, { state: "complete", hash: renewalHash });
 
       update(2, { state: "wallet" });
-      const childQuote = await signedQuote({
-        publicClient, walletClient, account, node: childNode, parentNode,
-        nameOwner: account, product: 2, termYears: 1n, labelLength: childLabel.length,
-      });
+      const childQuote = await apiQuote("/api/v1/subdomain/quote", { parentName, label: childLabel, action: "registration", termYears: 1, paymentCurrency: "XDC", payer: account, subdomainOwner: account });
       const childHash = await walletClient.writeContract({
         account, chain: apothem, address: REGISTRAR, abi: artifacts.registrar.abi,
-        functionName: "registerSubdomain", args: [parentName, childLabel, childQuote.quote, childQuote.signature], value: 1n,
+        functionName: "registerSubdomain", args: [parentName, childLabel, childQuote.quote, childQuote.signature], value: childQuote.quote.paymentAmount,
       });
       update(2, { state: "confirming", hash: childHash });
       await receipt(publicClient, childHash, "Child registration");
@@ -155,13 +124,10 @@ export default function ApothemUnifiedSmokeClient() {
       update(3, { state: "complete", hash: primaryHash });
 
       update(4, { state: "wallet" });
-      const childRenewalQuote = await signedQuote({
-        publicClient, walletClient, account, node: childNode, parentNode,
-        nameOwner: account, product: 3, termYears: 1n, labelLength: childLabel.length,
-      });
+      const childRenewalQuote = await apiQuote("/api/v1/subdomain/quote", { parentName, label: childLabel, action: "renewal", termYears: 1, paymentCurrency: "XDC", payer: account, subdomainOwner: account });
       const childRenewalHash = await walletClient.writeContract({
         account, chain: apothem, address: REGISTRAR, abi: artifacts.registrar.abi,
-        functionName: "renewSubdomain", args: [parentName, childLabel, childRenewalQuote.quote, childRenewalQuote.signature], value: 1n,
+        functionName: "renewSubdomain", args: [parentName, childLabel, childRenewalQuote.quote, childRenewalQuote.signature], value: childRenewalQuote.quote.paymentAmount,
       });
       update(4, { state: "confirming", hash: childRenewalHash });
       await receipt(publicClient, childRenewalHash, "Child renewal");
@@ -175,6 +141,7 @@ export default function ApothemUnifiedSmokeClient() {
         throw new Error("Final child ownership or forward/reverse resolution check failed");
       }
       update(4, { state: "complete", hash: childRenewalHash });
+      setReport({ startedAt, completedAt: new Date().toISOString(), chainId: 51, wallet: account, names: { parent: parentName, child: childName }, contracts: { registry: REGISTRY, resolver: RESOLVER, registrar: REGISTRAR }, transactions: { registrationHash, renewalHash, childHash, primaryHash, childRenewalHash }, checks: { owner, forward, reverse } });
       setMessage(`Wallet-signed smoke test passed for ${parentName} and ${childName}. Dev remains inactive.`);
     } catch (cause) {
       const error = cause instanceof Error ? cause.message.split("\n")[0] : "Smoke test failed";
@@ -196,6 +163,7 @@ export default function ApothemUnifiedSmokeClient() {
           <p className="mt-3 text-slate-300">Creates {smokeNames ? <><span className="font-mono text-white">{smokeNames.parent}</span> and <span className="font-mono text-white">{smokeNames.child}</span></> : "a uniquely named parent and child smoke record"}. Each transaction is shown in MetaMask. No dev configuration is changed.</p>
           <p className="mt-5 rounded-xl bg-slate-800 p-4 text-slate-200">{message}</p>
           <button type="button" className="mt-5 rounded-xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 disabled:opacity-40" onClick={runSmoke} disabled={busy || steps.every((step) => step.state === "complete")}>{busy ? "Smoke test in progress…" : "Connect and run wallet smoke"}</button>
+          {report ? <button type="button" className="ml-3 mt-5 rounded-xl border border-cyan-500 px-5 py-3 font-semibold text-cyan-200" onClick={() => downloadReport(report)}>Download smoke report</button> : null}
         </section>
         <section className="rounded-3xl border border-slate-700 bg-slate-900 p-6 sm:p-7">
           <ol className="space-y-4">
@@ -213,49 +181,18 @@ export default function ApothemUnifiedSmokeClient() {
   );
 }
 
-async function signedQuote(input: {
-  publicClient: PublicClient;
-  walletClient: ReturnType<typeof createWalletClient>;
-  account: Address;
-  node: Hex;
-  parentNode: Hex;
-  nameOwner: Address;
-  product: number;
-  termYears: bigint;
-  labelLength: number;
-}) {
-  const [policyVersion, nonce, block] = await Promise.all([
-    input.publicClient.readContract({ address: POLICY, abi: artifacts.pricingPolicy.abi, functionName: "version" }),
-    input.publicClient.readContract({ address: REGISTRAR, abi: artifacts.registrar.abi, functionName: "nonces", args: [input.account] }),
-    input.publicClient.getBlock(),
-  ]);
-  const usdMicros = await input.publicClient.readContract({
-    address: REGISTRAR, abi: artifacts.registrar.abi, functionName: "priceUsdMicrosForVersion",
-    args: [input.product, BigInt(input.labelLength), input.termYears, policyVersion],
-  });
-  const quote = {
-    node: input.node,
-    parentNode: input.parentNode,
-    payer: input.account,
-    nameOwner: input.nameOwner,
-    product: input.product,
-    termYears: input.termYears,
-    paymentToken: ZERO_ADDRESS,
-    paymentAmount: 1n,
-    usdMicros,
-    policyVersion,
-    nonce,
-    issuedAt: block.timestamp,
-    deadline: block.timestamp + 600n,
-  };
-  const signature = await input.walletClient.signTypedData({
-    account: input.account,
-    domain: { name: "XDCID Unified Registrar", version: "1", chainId: 51, verifyingContract: REGISTRAR },
-    types: quoteTypes,
-    primaryType: "Quote",
-    message: quote,
-  });
-  return { quote, signature };
+async function apiQuote(path: string, body: Record<string, unknown>) {
+  const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const payload = await response.json() as { data?: { authorizedForPayment: boolean; quote: Record<string, string | number>; signature: Hex }; error?: { message?: string } };
+  if (!response.ok || !payload.data?.authorizedForPayment) throw new Error(payload.error?.message || "The quote service is not ready");
+  const quote = payload.data.quote;
+  return { signature: payload.data.signature, quote: { node: String(quote.node) as Hex, parentNode: String(quote.parentNode) as Hex, payer: getAddress(String(quote.payer)), nameOwner: getAddress(String(quote.nameOwner ?? quote.subdomainOwner)), product: Number(quote.product), paymentToken: getAddress(String(quote.paymentToken)), termYears: BigInt(quote.termYears), paymentAmount: BigInt(quote.paymentAmount), usdMicros: BigInt(quote.usdMicros), policyVersion: BigInt(quote.policyVersion), nonce: BigInt(quote.nonce), issuedAt: BigInt(quote.issuedAt), deadline: BigInt(quote.deadline) } };
+}
+
+function downloadReport(report: Record<string, unknown>) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = `xdcid-apothem-smoke-${Date.now()}.json`; link.click(); URL.revokeObjectURL(url);
 }
 
 async function receipt(client: PublicClient, hash: Hex, label: string) {

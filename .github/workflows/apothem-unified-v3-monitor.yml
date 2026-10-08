@@ -1,0 +1,30 @@
+name: Apothem Unified V3 monitor
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify Apothem contracts and dev readiness
+        run: node scripts/monitor-apothem-unified-v3.mjs
+        env:
+          XDCID_DEV_URL: https://dev.xdcid.xyz
+          APOTHEM_RPC_URL: https://rpc.apothem.network
+          EXPECT_UNIFIED_READY: ${{ vars.APOTHEM_UNIFIED_V3_EXPECT_READY || 'false' }}
