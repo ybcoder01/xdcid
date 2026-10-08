@@ -7,6 +7,7 @@ import { useAccount, useChainId, useReadContract, useWriteContract } from "wagmi
 import { SignedRegistrationControls } from "./SignedRegistrationControls";
 import {
   addresses,
+  apothemContractsConfigured,
   apothemRegistration,
   contractsConfigured as mainnetContractsConfigured,
   pricingPolicyAbi,
@@ -43,7 +44,7 @@ export function RegistrationPageClient({
     : addresses.pricingPolicy;
   const registrationSignedEnabled = apothemMode || signedRegistrarEnabled;
   const registrationContractsConfigured = apothemMode
-    ? registrationRegistrar !== zeroAddress && registrationPricingPolicy !== zeroAddress
+    ? apothemContractsConfigured
     : mainnetContractsConfigured;
   const registrarSupportsName = registrationSignedEnabled || parsedName.label.length >= 3;
   const canReadContracts = isValid && registrationContractsConfigured && registrarSupportsName;

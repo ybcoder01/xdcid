@@ -27,4 +27,6 @@ test("unified quotes and writes are generation gated while legacy remains availa
   assert.match(childRenewal, /"renewSubdomain" : "renewWithQuote"/);
   assert.match(config, /NEXT_PUBLIC_XNS_PROTOCOL_GENERATION === "unified-v3"/);
   assert.match(config, /unifiedSubdomainRegistryAddress = activeRegistryAddress/);
+  assert.match(config, /return unifiedProtocolEnabled \? ZERO_ADDRESS : legacyFallback/);
+  assert.match(config, /apothemContractsConfigured/);
 });

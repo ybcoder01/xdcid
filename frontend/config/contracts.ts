@@ -9,6 +9,19 @@ import {
 export { multichainResolverAbi };
 export const supportedMultichainNetworks = SUPPORTED_MULTICHAIN_NETWORKS;
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+export const unifiedProtocolEnabled =
+  process.env.NEXT_PUBLIC_XNS_PROTOCOL_GENERATION === "unified-v3";
+
+function apothemContractAddress(
+  configured: string | undefined,
+  legacyFallback: `0x${string}`,
+): `0x${string}` {
+  if (configured) return configured as `0x${string}`;
+  return unifiedProtocolEnabled ? ZERO_ADDRESS : legacyFallback;
+}
+
 export const xdcMainnet = {
   id: 50,
   name: "XDC Network",
@@ -25,19 +38,24 @@ export const xdcMainnet = {
 
 export const apothemRegistration = {
   chainId: 51,
-  registry: (
-    process.env.NEXT_PUBLIC_XNS_REGISTRY ||
-    "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1"
-  ) as `0x${string}`,
-  registrar: (
-    process.env.NEXT_PUBLIC_XNS_REGISTRAR ||
-    "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
-  ) as `0x${string}`,
-  pricingPolicy: (
-    process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
-    "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81"
-  ) as `0x${string}`,
+  registry: apothemContractAddress(
+    process.env.NEXT_PUBLIC_XNS_REGISTRY,
+    "0x2BeD8EB404e1BD8D690e3dD2Fd06F287e5A92Eb1",
+  ),
+  registrar: apothemContractAddress(
+    process.env.NEXT_PUBLIC_XNS_REGISTRAR,
+    "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d",
+  ),
+  pricingPolicy: apothemContractAddress(
+    process.env.NEXT_PUBLIC_XNS_PRICING_POLICY,
+    "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81",
+  ),
 } as const;
+
+export const apothemContractsConfigured =
+  apothemRegistration.registry !== ZERO_ADDRESS &&
+  apothemRegistration.registrar !== ZERO_ADDRESS &&
+  apothemRegistration.pricingPolicy !== ZERO_ADDRESS;
 
 export const apothemSubdomainRegistrar =
   (process.env.NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR ||
@@ -143,9 +161,6 @@ export const activeResolverSuiteAvailable =
 
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
-
-export const unifiedProtocolEnabled =
-  process.env.NEXT_PUBLIC_XNS_PROTOCOL_GENERATION === "unified-v3";
 
 // The unified registrar is the only paid transaction entry point in V3. The
 // registry remains the read source for both top-level names and subdomains.
@@ -531,7 +546,7 @@ export const erc20ApprovalAbi = [
   }
 ] as const;
 
-export const zeroAddress = "0x0000000000000000000000000000000000000000";
+export const zeroAddress = ZERO_ADDRESS;
 
 export const contractsConfigured =
   addresses.registry !== zeroAddress &&
