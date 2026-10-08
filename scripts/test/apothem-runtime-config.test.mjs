@@ -33,6 +33,16 @@ test("admin health exposes only the quote signer's public address", async () => 
   assert.match(operations, /Server signing account \(public address only\)/);
 });
 
+test("registrar quote health reports signer authorization without exposing secrets", async () => {
+  const route = await source("frontend/app/api/v1/registrar/quote/route.ts");
+
+  assert.match(route, /export async function GET\(\)/);
+  assert.match(route, /configuredSigner: account\.address/);
+  assert.match(route, /activeSigner: getAddress\(config\.quoteSigner\)/);
+  assert.match(route, /ready: authorized/);
+  assert.doesNotMatch(route, /configuredSigner:.*PRIVATE_KEY/);
+});
+
 test("the Apothem subdomain test surface follows the configured registrar", async () => {
   const contents = await source(
     "frontend/app/testing/apothem-subdomains/ApothemSubdomainTestingClient.tsx",

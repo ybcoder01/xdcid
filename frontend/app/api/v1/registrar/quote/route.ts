@@ -224,6 +224,66 @@ const legacyPricingPolicyAbi = [
   },
 ] as const;
 
+export async function GET() {
+  try {
+    const pricingPolicy = requiredAddress(
+      "XNS_PRICING_POLICY",
+      process.env.XNS_PRICING_POLICY,
+    );
+    const account = quoteSignerAccount();
+    const client = quoteClient();
+    const chainId = await client.getChainId();
+    const expectedChainId = boundedInteger(
+      process.env.XNS_QUOTE_CHAIN_ID,
+      50,
+      1,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (chainId !== expectedChainId) {
+      throw new ApiServiceError(
+        "QUOTE_SIGNING_UNAVAILABLE",
+        "Quote RPC is connected to the wrong network",
+        503,
+      );
+    }
+
+    const policyGeneration = configuredPolicyGeneration(expectedChainId);
+    const pricingPolicyAbi = policyGeneration === "v2"
+      ? pricingPolicyV2Abi
+      : legacyPricingPolicyAbi;
+    const [policyVersion, config] = await Promise.all([
+      client.readContract({
+        address: pricingPolicy,
+        abi: pricingPolicyAbi,
+        functionName: "version",
+      }),
+      client.readContract({
+        address: pricingPolicy,
+        abi: pricingPolicyAbi,
+        functionName: "config",
+      }),
+    ]);
+    const authorized = await client.readContract({
+      address: pricingPolicy,
+      abi: pricingPolicyAbi,
+      functionName: "isQuoteAuthorizationValid",
+      args: [account.address, policyVersion],
+    });
+
+    return apiSuccess({
+      chainId,
+      pricingPolicy,
+      policyVersion: policyVersion.toString(),
+      configuredSigner: account.address,
+      activeSigner: getAddress(config.quoteSigner),
+      authorized,
+      ready: authorized,
+    });
+  } catch (error) {
+    return handleApiError(error, "Unable to inspect registrar quote health");
+  }
+}
+
 export async function POST(request: Request) {
   try {
     enforceRateLimit(request);
