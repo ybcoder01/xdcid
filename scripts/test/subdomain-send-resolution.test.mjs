@@ -36,3 +36,9 @@ test("the Send page resolves subdomains through the subdomain registrar", async 
   assert.match(source, /functionName: "addressOf"/);
   assert.match(source, /source: "subdomain"/);
 });
+
+test("the public reverse API accepts a primary subdomain", async () => {
+  const source = await readFile("frontend/lib/xnsApi.ts", "utf8");
+
+  assert.match(source, /parseResolvableXnsName\(storedName\)/);
+});

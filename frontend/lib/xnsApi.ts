@@ -23,7 +23,7 @@ import {
   legacyXdcDomainsAddress
 } from "../config/legacyDomains";
 import { ApiInputError } from "./apiResponse";
-import { parseXnsName } from "./names";
+import { parseResolvableXnsName, parseXnsName } from "./names";
 import { classifyRegistryStatus } from "./registryStatus";
 import { withShortCache } from "./shortCache";
 import { xdcClient } from "./xdcClient";
@@ -309,7 +309,10 @@ export async function getReverseData(input: string) {
       return { address, name: null, verified: false };
     }
 
-    const parsed = parseXnsName(storedName);
+    // A primary identity can be either a top-level XDCID or a unified-registry
+    // subdomain. Registration still uses parseXnsName, but reverse resolution
+    // must accept both forms before verifying current ownership on-chain.
+    const parsed = parseResolvableXnsName(storedName);
     if (!parsed.isValid) {
       return { address, name: null, verified: false };
     }
