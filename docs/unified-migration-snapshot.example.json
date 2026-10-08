@@ -1,0 +1,26 @@
+{
+  "chainId": "51",
+  "snapshotBlockNumber": 0,
+  "snapshotBlockHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "entries": [
+    {
+      "name": "example.xdc",
+      "kind": "top-level",
+      "owner": "0x0000000000000000000000000000000000000001",
+      "expiry": "0",
+      "routes": {
+        "50": "0x0000000000000000000000000000000000000001"
+      }
+    },
+    {
+      "name": "team.example.xdc",
+      "kind": "subdomain",
+      "parentName": "example.xdc",
+      "owner": "0x0000000000000000000000000000000000000002",
+      "expiry": "0",
+      "routes": {
+        "50": "0x0000000000000000000000000000000000000002"
+      }
+    }
+  ]
+}

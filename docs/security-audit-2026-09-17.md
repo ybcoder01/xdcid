@@ -3,7 +3,33 @@
 **Review date:** 17 September 2026  
 **Scope:** XDC mainnet registry, Registrar V2, Pricing Policy V2, Discount Authorization, forward/reverse/multichain resolvers, and the deployed Subdomain Registrar  
 **Review type:** Internal source, test, configuration, bytecode, and live-state review  
-**Status:** High-severity issue remediated in code; Resolver V2 deployment and activation remain pending
+**Status:** Reviewed resolver and registrar remediations deployed and activated on XDC mainnet; multisig ownership and an independent external audit remain pending
+
+> **Next-generation follow-up (8 October 2026):** The local, undeployed
+> Registry V3 design consolidates top-level and subdomain ownership, discount
+> authorization, and all resolver modes while retaining Pricing Policy V2 as
+> a fourth independently administered contract. Its security
+> invariants, migration gates, and finding-by-finding disposition are documented
+> in [`docs/unified-protocol-v3.md`](./unified-protocol-v3.md). This work does not
+> change the reviewed mainnet deployment and must not be represented as an
+> external audit or production remediation until deployed and independently
+> reviewed.
+
+## Post-review activation update
+
+The owner-bound forward resolver, owner-verified reverse resolver,
+primary-aware multichain resolver, and primary-aware signed-quote registrar were
+activated on XDC mainnet on 29 September 2026. The active addresses,
+transaction evidence, preserved rollback registrar, and latest read-only
+preflight procedure are recorded in
+[`mainnet-deployment-manifest.md`](./mainnet-deployment-manifest.md).
+
+The findings below describe the deployment state observed on 17 September 2026
+and preserve the original review evidence. Statements that deployment or
+activation remained pending should be read as historical status at the time of
+the review. The current outstanding governance risk is the temporary single-EOA
+protocol owner; the Trust Center also continues to disclose that no independent
+third-party audit has been completed.
 
 ## Executive summary
 
@@ -154,7 +180,7 @@ The repository's contract and SDK test suites pass, including 243 contract/appli
 
 **Recommendation:** Add Slither to CI, add property/invariant tests for ownership transitions and resolver freshness, and commission an independent external audit before materially increasing protocol value or dependence.
 
-**Remediation implemented:** Slither `0.11.6` now runs in a dedicated CI job on
+**Remediation implemented:** Slither `0.11.4` now runs in a dedicated CI job on
 every pull request and on pushes to `dev` and `main`. CI fails for any new High
 or Medium detector result outside an explicit function-level reviewed baseline.
 The baseline and its operational assumptions are documented in

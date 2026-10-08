@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getAddress, keccak256, toBytes, zeroAddress } from "viem";
+import { getAddress, keccak256, toBytes, zeroAddress, zeroHash } from "viem";
 import {
   SUPPORTED_MULTICHAIN_NETWORKS,
   XDC_MAINNET_DEPLOYMENT,
@@ -393,6 +393,81 @@ test("prepares a gas-only registration with a matching discount grant", () => {
   assert.equal(plan.approval, null);
   assert.equal(plan.transaction.functionName, "registerWithDiscountQuote");
   assert.equal(plan.transaction.value, 0n);
+});
+
+test("prepares a unified top-level registration payment plan", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  const payer = getAddress("0x1111111111111111111111111111111111111111");
+  const plan = sdk.prepareRegistrarPayment({
+    authorizedForPayment: true,
+    chainId: 50,
+    registrar: XDCID_CONTRACTS.registrar,
+    protocolGeneration: "unified-v3",
+    policy: XDCID_CONTRACTS.pricingPolicy,
+    product: "registration",
+    name: "unified.xdc",
+    paymentCurrency: "XDC",
+    quote: {
+      node: nodeForName("unified"),
+      parentNode: zeroHash,
+      payer,
+      nameOwner: payer,
+      product: 0,
+      termYears: "1",
+      paymentToken: zeroAddress,
+      paymentAmount: "1000",
+      usdMicros: "50000000",
+      policyVersion: "2",
+      nonce: "0",
+      issuedAt: "1",
+      deadline: String(Math.floor(Date.now() / 1000) + 600)
+    },
+    signature: "0x1234"
+  });
+
+  assert.equal(plan.transaction.functionName, "register");
+  assert.equal(plan.transaction.args[1].parentNode, zeroHash);
+});
+
+test("prepares a unified subdomain registration payment plan", () => {
+  const sdk = new XdcidClient(mockClient(() => zeroAddress));
+  const payer = getAddress("0x1111111111111111111111111111111111111111");
+  const parentName = "company.xdc";
+  const label = "treasury";
+  const fullName = `${label}.${parentName}`;
+  const plan = sdk.prepareSubdomainPayment({
+    authorizedForPayment: true,
+    chainId: 50,
+    registrar: XDCID_CONTRACTS.registrar,
+    protocolGeneration: "unified-v3",
+    pricingPolicy: XDCID_CONTRACTS.pricingPolicy,
+    action: "registration",
+    parentName,
+    label,
+    fullName,
+    paymentCurrency: "XDC",
+    quote: {
+      node: keccak256(toBytes(fullName)),
+      parentNode: nodeForName(parentName),
+      payer,
+      subdomainOwner: payer,
+      nameOwner: payer,
+      product: 2,
+      termYears: "1",
+      paymentToken: zeroAddress,
+      paymentAmount: "1000",
+      usdMicros: "1000000",
+      policyVersion: "2",
+      nonce: "0",
+      issuedAt: "1",
+      deadline: String(Math.floor(Date.now() / 1000) + 600)
+    },
+    signature: "0x1234"
+  });
+
+  assert.equal(plan.transaction.functionName, "registerSubdomain");
+  assert.equal(plan.transaction.args[2].nameOwner, payer);
+  assert.equal(plan.transaction.args[2].product, 2);
 });
 
 test("rejects clients connected to another chain", async () => {

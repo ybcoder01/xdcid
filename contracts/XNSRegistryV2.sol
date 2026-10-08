@@ -254,7 +254,8 @@ contract XNSRegistryV2 is Ownable2Step {
             Record storage record = _records[node];
             return (record.owner, record.resolver, record.expiry);
         }
-        return legacyRegistry.records(node);
+        (owner, resolver, expiry) = legacyRegistry.records(node);
+        return (owner, resolver, expiry);
     }
 
     function ownershipGenerations(

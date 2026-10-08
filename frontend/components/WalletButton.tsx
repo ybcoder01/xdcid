@@ -13,7 +13,7 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   const { disconnect } = useDisconnect();
   const { canRequestConnection, requestConnection, connectionTimedOut } =
     useRecoverableWalletConnection();
-  const primaryName = usePrimaryXnsName(address);
+  const identity = useWalletXnsIdentity(address);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
 
@@ -72,26 +72,26 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
           );
         }
 
-        const displayName = primaryName || account.displayName;
+        const displayName = identity.name || account.displayName;
         return (
           <div ref={accountMenuRef} className={width + " relative"}>
-            <div className={(compact ? "h-11 rounded-2xl " : "h-12 rounded-2xl ") + "inline-flex w-full flex-nowrap items-center overflow-hidden border border-slate-200 bg-white shadow-sm"}>
+            <div className={(compact ? "h-11 rounded-2xl " : "h-12 rounded-2xl ") + "xdc-wallet-control inline-flex w-full flex-nowrap items-center overflow-hidden border shadow-sm"}>
               <button
                 type="button"
-                className={(compact ? "h-11 w-11 " : "h-12 w-12 ") + "grid shrink-0 place-items-center hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
+                className={(compact ? "h-11 w-11 " : "h-12 w-12 ") + "xdc-wallet-network grid shrink-0 place-items-center focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
                 onClick={openChainModal}
                 aria-label={"Change network from " + chain.name}
               >
                 <NetworkLogo chainId={chain.id} size={24} />
               </button>
-              <span className="h-5 w-px shrink-0 bg-slate-200" aria-hidden="true" />
+              <span className="xdc-wallet-divider h-5 w-px shrink-0" aria-hidden="true" />
               <button
                 type="button"
-                className={(compact ? "h-11 px-2 text-sm sm:px-3 " : "h-12 px-4 text-base ") + "min-w-0 flex-1 truncate font-semibold text-slate-900 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
+                className={(compact ? "h-11 px-2 text-sm sm:px-3 " : "h-12 px-4 text-base ") + "xdc-wallet-account min-w-0 flex-1 truncate font-semibold focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-600"}
                 onClick={() => setAccountMenuOpen((open) => !open)}
                 aria-expanded={accountMenuOpen}
                 aria-haspopup="menu"
-                title={primaryName ? primaryName + " · " + account.address : account.address}
+                title={identity.name ? identity.name + " · " + account.address : account.address}
               >
                 {displayName}
               </button>
@@ -99,7 +99,10 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
             {accountMenuOpen ? (
               <div className="absolute right-0 top-full z-50 mt-2 w-60 rounded-2xl border border-slate-200 bg-white p-2 text-sm shadow-xl" role="menu">
                 <div className="border-b border-slate-100 px-3 py-2">
-                  <p className="truncate font-semibold text-slate-950">{primaryName || "Connected wallet"}</p>
+                  <p className="truncate font-semibold text-slate-950">{identity.name || "Connected wallet"}</p>
+                  {identity.name && !identity.isPrimary ? (
+                    <p className="mt-1 text-xs text-slate-500">Owned subdomain</p>
+                  ) : null}
                   <p className="mt-1 truncate font-mono text-xs text-slate-500">{account.address}</p>
                 </div>
                 <button
@@ -133,34 +136,60 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function usePrimaryXnsName(address?: string): string | null {
-  const [primaryName, setPrimaryName] = useState<string | null>(null);
+type WalletXnsIdentity = {
+  name: string | null;
+  isPrimary: boolean;
+};
+
+const EMPTY_IDENTITY: WalletXnsIdentity = { name: null, isPrimary: false };
+
+function useWalletXnsIdentity(address?: string): WalletXnsIdentity {
+  const [identity, setIdentity] = useState<WalletXnsIdentity>(EMPTY_IDENTITY);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!address) {
-      setPrimaryName(null);
+      setIdentity(EMPTY_IDENTITY);
       return;
     }
     try {
       const response = await fetch("/api/v1/reverse/" + address, { cache: "no-store", signal });
       const body = await response.json() as { data?: { name?: string | null; verified?: boolean } };
-      if (!response.ok || !body.data?.verified || !body.data.name) {
-        setPrimaryName(null);
+      if (response.ok && body.data?.verified && body.data.name) {
+        setIdentity({ name: body.data.name, isPrimary: true });
         return;
       }
-      setPrimaryName(body.data.name);
+
+      const ownedResponse = await fetch(`/api/v1/addresses/${address}/subdomains`, {
+        cache: "no-store",
+        signal,
+      });
+      const ownedBody = await ownedResponse.json() as {
+        data?: { subdomains?: Array<{ name?: string }> };
+      };
+      const names = ownedBody.data?.subdomains
+        ?.map((record) => record.name)
+        .filter((name): name is string => Boolean(name)) || [];
+      setIdentity(
+        ownedResponse.ok && names.length === 1
+          ? { name: names[0], isPrimary: false }
+          : EMPTY_IDENTITY,
+      );
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) setPrimaryName(null);
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setIdentity(EMPTY_IDENTITY);
+      }
     }
   }, [address]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setPrimaryName(null);
+    setIdentity(EMPTY_IDENTITY);
     void refresh(controller.signal);
     function onPrimaryChanged(event: Event) {
       const detail = (event as CustomEvent<{ address?: string; name?: string }>).detail;
-      if (detail?.address?.toLowerCase() === address?.toLowerCase() && detail.name) setPrimaryName(detail.name);
+      if (detail?.address?.toLowerCase() === address?.toLowerCase() && detail.name) {
+        setIdentity({ name: detail.name, isPrimary: true });
+      }
       else void refresh(controller.signal);
     }
     function onFocus() {
@@ -175,5 +204,5 @@ function usePrimaryXnsName(address?: string): string | null {
     };
   }, [address, refresh]);
 
-  return primaryName;
+  return identity;
 }

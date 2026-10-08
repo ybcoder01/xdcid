@@ -26,6 +26,8 @@ import {
   erc20ApprovalAbi,
   pricingPolicyAbi,
   signedRegistrarAbi,
+  unifiedProtocolEnabled,
+  unifiedRegistrarAbi,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 import {
@@ -41,6 +43,7 @@ type Term = 1 | 3 | 5 | 10;
 
 type SerializedQuote = {
   node: Hex;
+  parentNode?: Hex;
   payer: Address;
   nameOwner: Address;
   product: number;
@@ -60,6 +63,7 @@ type QuoteResponse = {
     authorizedForPayment: boolean;
     chainId: number;
     registrar: Address;
+    protocolGeneration?: "legacy" | "unified-v3";
     name: string;
     paymentCurrency: Currency;
     quote: SerializedQuote;
@@ -174,7 +178,8 @@ export function SignedRegistrationControls(props: {
       }
       if (
         payload.data.chainId !== expectedChainId ||
-        getAddress(payload.data.registrar) !== getAddress(registrarAddress)
+        getAddress(payload.data.registrar) !== getAddress(registrarAddress) ||
+        (payload.data.protocolGeneration === "unified-v3") !== unifiedProtocolEnabled
       ) {
         throw new Error("The quote does not match the active XDCID registrar");
       }
@@ -256,7 +261,31 @@ export function SignedRegistrationControls(props: {
         expectedChainId,
         XDC_WRITE_GAS_LIMITS.registration,
       );
-      const transactionHash = discountAuthorization && discount
+      const transactionHash = unifiedProtocolEnabled
+        ? discountAuthorization && discount
+          ? await writeContractAsync({
+              address: registrarAddress,
+              abi: unifiedRegistrarAbi,
+              functionName: "registerWithDiscount",
+              args: [
+                props.name,
+                quote,
+                payload.data.signature,
+                discountAuthorization,
+                discount.signature,
+              ],
+              value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+              ...registrationGas,
+            })
+          : await writeContractAsync({
+              address: registrarAddress,
+              abi: unifiedRegistrarAbi,
+              functionName: "register",
+              args: [props.name, quote, payload.data.signature],
+              value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+              ...registrationGas,
+            })
+        : discountAuthorization && discount
         ? await writeContractAsync({
             address: registrarAddress,
             abi: discountedRegistrarAbi,
@@ -353,7 +382,7 @@ export function SignedRegistrationControls(props: {
       {status && (
         <p className="mt-3 break-all text-xs text-neutral-600">{status}</p>
       )}
-      {registrationHash && expectedChainId === 50 ? (
+      {registrationHash && expectedChainId === 50 && !unifiedProtocolEnabled ? (
         <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50 p-4">
           <p className="text-sm font-semibold text-slate-950">
             One step remaining: set your Primary ID
@@ -379,6 +408,7 @@ export function SignedRegistrationControls(props: {
 function deserializeQuote(value: SerializedQuote) {
   return {
     node: value.node,
+    ...(value.parentNode ? { parentNode: value.parentNode } : {}),
     payer: getAddress(value.payer),
     nameOwner: getAddress(value.nameOwner),
     product: value.product,

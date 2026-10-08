@@ -205,7 +205,6 @@ export default function ApothemSubdomainDeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-7 shadow-sm">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated test wallet and owner" value={OWNER} />
             <Detail label="Existing Apothem registry" value={REGISTRY} />
             <Detail label="Existing Pricing Policy V2" value={PRICING_POLICY} />
             <Detail label="CREATE2 deployment proxy" value={CREATE2_DEPLOYER} />

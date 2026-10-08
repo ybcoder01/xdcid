@@ -38,6 +38,14 @@ import {
   SIGNED_QUOTE_DOMAIN_VERSION,
   signedQuoteTypes,
 } from "../../../../../lib/signedRegistrarQuotes";
+import {
+  UNIFIED_QUOTE_DOMAIN_NAME,
+  UNIFIED_QUOTE_DOMAIN_VERSION,
+  unifiedProtocolRequested,
+  unifiedQuoteTypes,
+  unifiedTopLevelQuote,
+  type UnifiedRegistrarQuote,
+} from "../../../../../lib/unifiedRegistrarQuotes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -246,6 +254,7 @@ export async function POST(request: Request) {
       );
     }
     const policyGeneration = configuredPolicyGeneration(expectedChainId);
+    const unified = unifiedProtocolRequested();
     const pricingPolicyAbi = policyGeneration === "v2"
       ? pricingPolicyV2Abi
       : legacyPricingPolicyAbi;
@@ -393,7 +402,7 @@ export async function POST(request: Request) {
       serverNowSeconds: Math.floor(Date.now() / 1_000),
       latestBlockTimestamp: latestBlock.timestamp,
     });
-    const quote = buildRegistrarQuote({
+    const legacyQuote = buildRegistrarQuote({
       request: quoteRequest,
       paymentToken,
       paymentAmount,
@@ -402,17 +411,21 @@ export async function POST(request: Request) {
       nonce,
       issuedAt,
     });
+    const quote = unified ? unifiedTopLevelQuote(legacyQuote) : legacyQuote;
     const signature = await account.signTypedData({
       domain: {
-        name:
-          policyGeneration === "v2"
+        name: unified
+          ? UNIFIED_QUOTE_DOMAIN_NAME
+          : policyGeneration === "v2"
             ? SIGNED_QUOTE_DOMAIN_NAME
             : LEGACY_SIGNED_QUOTE_DOMAIN_NAME,
-        version: SIGNED_QUOTE_DOMAIN_VERSION,
+        version: unified
+          ? UNIFIED_QUOTE_DOMAIN_VERSION
+          : SIGNED_QUOTE_DOMAIN_VERSION,
         chainId,
         verifyingContract: registrar,
       },
-      types: signedQuoteTypes,
+      types: unified ? unifiedQuoteTypes : signedQuoteTypes,
       primaryType: "Quote",
       message: quote,
     });
@@ -421,6 +434,7 @@ export async function POST(request: Request) {
       authorizedForPayment: true,
       chainId,
       registrar,
+      protocolGeneration: unified ? "unified-v3" : "legacy",
       policy: pricingPolicy,
       product: quoteRequest.product,
       name: quoteRequest.name,
@@ -622,9 +636,12 @@ function requiredAddress(name: string, value: string | undefined): Address {
   return getAddress(value);
 }
 
-function serializeQuote(quote: ReturnType<typeof buildRegistrarQuote>) {
+function serializeQuote(
+  quote: ReturnType<typeof buildRegistrarQuote> | UnifiedRegistrarQuote,
+) {
   return {
     node: quote.node,
+    ...("parentNode" in quote ? { parentNode: quote.parentNode } : {}),
     payer: quote.payer,
     nameOwner: quote.nameOwner,
     product: quote.product,

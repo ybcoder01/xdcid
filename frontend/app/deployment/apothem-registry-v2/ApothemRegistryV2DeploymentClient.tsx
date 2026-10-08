@@ -90,7 +90,7 @@ export default function ApothemRegistryV2DeploymentClient() {
   const [activationHashes, setActivationHashes] = useState<Hex[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(
-    "Connect the designated owner wallet to calculate addresses and run read-only checks.",
+    "Connect the authorized administrative wallet to calculate addresses and run read-only checks.",
   );
 
   function updateStep(index: number, patch: Partial<Step>) {
@@ -438,7 +438,6 @@ export default function ApothemRegistryV2DeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated owner wallet" value={OWNER} />
             <Detail label="Active Registry V2" value={ACTIVE_REGISTRY} />
             <Detail label="Legacy Registry source" value={CURRENT_REGISTRY} />
             <Detail label="Original collision Registry" value={ORIGINAL_LEGACY_REGISTRY} />

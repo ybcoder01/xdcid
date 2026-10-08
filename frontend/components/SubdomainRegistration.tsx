@@ -30,19 +30,33 @@ import {
   pricingPolicyAbi,
   subdomainRegistrarAbi,
   subdomainRegistrationEnabled,
+  unifiedProtocolEnabled,
+  unifiedRegistrarAbi,
+  unifiedRegistryReadAbi,
+  unifiedSubdomainRegistryAddress,
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 import { parseXnsName } from "../lib/names";
+import { saveSubdomain } from "../config/localSubdomains";
 
 type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
 type Action = "registration" | "renewal";
+
+type SubdomainRegistrationProps = {
+  allowDisabledEnvironment?: boolean;
+  allowRenewalsWhenDisabled?: boolean;
+  initialParentName?: string;
+  initialLabel?: string;
+};
 
 type SerializedQuote = {
   node: Hex;
   parentNode: Hex;
   payer: Address;
   subdomainOwner: Address;
+  nameOwner?: Address;
+  product?: number;
   termYears: string;
   paymentToken: Address;
   paymentAmount: string;
@@ -58,6 +72,7 @@ type QuoteResponse = {
     authorizedForPayment: boolean;
     chainId: number;
     registrar: Address;
+    protocolGeneration?: "legacy" | "unified-v3";
     action: Action;
     quote: SerializedQuote;
     signature: Hex;
@@ -65,19 +80,27 @@ type QuoteResponse = {
   error?: { message?: string };
 };
 
-export function SubdomainRegistration() {
+export function SubdomainRegistration({
+  allowDisabledEnvironment = false,
+  allowRenewalsWhenDisabled = false,
+  initialParentName = "",
+  initialLabel = "",
+}: SubdomainRegistrationProps = {}) {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const client = usePublicClient({ chainId: activeXnsChainId });
   const { writeContractAsync } = useWriteContract();
-  const [parentInput, setParentInput] = useState("");
-  const [labelInput, setLabelInput] = useState("");
+  const [parentInput, setParentInput] = useState(initialParentName);
+  const [labelInput, setLabelInput] = useState(initialLabel);
   const [ownerInput, setOwnerInput] = useState("");
   const [termYears, setTermYears] = useState<Term>(1);
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const registrationEnabled =
+    subdomainRegistrationEnabled || allowDisabledEnvironment;
+  const lookupEnabled = registrationEnabled || allowRenewalsWhenDisabled;
 
   useEffect(() => {
     if (address && !ownerInput) setOwnerInput(address);
@@ -104,7 +127,7 @@ export function SubdomainRegistration() {
     abi: subdomainRegistrarAbi,
     functionName: "available",
     args: inputValid ? [parent.name, label] : undefined,
-    query: { enabled: subdomainRegistrationEnabled && inputValid },
+    query: { enabled: !unifiedProtocolEnabled && lookupEnabled && inputValid },
   });
   const owner = useReadContract({
     address: activeSubdomainRegistrarAddress,
@@ -112,34 +135,57 @@ export function SubdomainRegistration() {
     abi: subdomainRegistrarAbi,
     functionName: "ownerOf",
     args: node ? [node] : undefined,
-    query: { enabled: subdomainRegistrationEnabled && !!node },
+    query: { enabled: !unifiedProtocolEnabled && lookupEnabled && !!node },
   });
+  const unifiedRecord = useReadContract({
+    address: unifiedSubdomainRegistryAddress,
+    chainId: activeXnsChainId,
+    abi: unifiedRegistryReadAbi,
+    functionName: "records",
+    args: node ? [node] : undefined,
+    query: { enabled: unifiedProtocolEnabled && lookupEnabled && !!node },
+  });
+  const currentOwner = unifiedProtocolEnabled
+    ? unifiedRecord.data?.owner
+    : owner.data;
+  const isAvailable = unifiedProtocolEnabled
+    ? unifiedRecord.data?.owner === zeroAddress
+    : available.data;
+  const lookupLoading = unifiedProtocolEnabled
+    ? unifiedRecord.isLoading
+    : available.isLoading;
+  const hasActiveOwner =
+    typeof currentOwner === "string" && currentOwner !== zeroAddress;
+  const availabilityReady =
+    isAvailable === true ||
+    (isAvailable === false && typeof currentOwner === "string");
+  const action: Action = isAvailable === false && hasActiveOwner
+    ? "renewal"
+    : "registration";
   const price = useReadContract({
     address: pricingPolicy,
     chainId: activeXnsChainId,
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
-    args: [2, 1n, BigInt(termYears)],
-    query: { enabled: subdomainRegistrationEnabled },
+    args: [
+      action === "registration" ? 2 : 3,
+      BigInt(label.length || 1),
+      BigInt(termYears),
+    ],
+    query: { enabled: lookupEnabled },
   });
-  const hasActiveOwner =
-    typeof owner.data === "string" && owner.data !== zeroAddress;
-  const availabilityReady =
-    available.data === true ||
-    (available.data === false && typeof owner.data === "string");
-  const action: Action = available.data === false && hasActiveOwner
-    ? "renewal"
-    : "registration";
+  const actionEnabled =
+    registrationEnabled || (allowRenewalsWhenDisabled && action === "renewal");
 
   useEffect(() => {
-    if (action === "renewal" && owner.data && owner.data !== zeroAddress) {
-      setOwnerInput(owner.data);
+    if (action === "renewal" && currentOwner && currentOwner !== zeroAddress) {
+      setOwnerInput(currentOwner);
     }
-  }, [action, owner.data]);
+  }, [action, currentOwner]);
 
   async function submit() {
     if (
-      !subdomainRegistrationEnabled ||
+      !actionEnabled ||
       !isConnected ||
       !address ||
       !client ||
@@ -175,7 +221,8 @@ export function SubdomainRegistration() {
         payload.data.chainId !== activeXnsChainId ||
         getAddress(payload.data.registrar) !==
           getAddress(activeSubdomainRegistrarAddress) ||
-        payload.data.action !== action
+        payload.data.action !== action ||
+        (payload.data.protocolGeneration === "unified-v3") !== unifiedProtocolEnabled
       ) {
         throw new Error("The quote does not match the active subdomain registrar");
       }
@@ -226,9 +273,14 @@ export function SubdomainRegistration() {
       );
       const hash = await writeContractAsync({
         address: activeSubdomainRegistrarAddress,
-        abi: subdomainRegistrarAbi,
-        functionName:
-          action === "registration" ? "registerWithQuote" : "renewWithQuote",
+        abi: unifiedProtocolEnabled ? unifiedRegistrarAbi : subdomainRegistrarAbi,
+        functionName: unifiedProtocolEnabled
+          ? action === "registration"
+            ? "registerSubdomain"
+            : "renewSubdomain"
+          : action === "registration"
+            ? "registerWithQuote"
+            : "renewWithQuote",
         args: [parent.name, label, quote, payload.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
         ...gas,
@@ -237,8 +289,13 @@ export function SubdomainRegistration() {
       if (receipt.status !== "success") {
         throw new Error(`Subdomain ${action} failed`);
       }
+      saveSubdomain(getAddress(ownerInput), `${label}.${parent.name}`);
       setStatus(`Subdomain ${action} confirmed: ${hash}`);
-      await Promise.all([available.refetch(), owner.refetch()]);
+      await Promise.all(
+        unifiedProtocolEnabled
+          ? [unifiedRecord.refetch()]
+          : [available.refetch(), owner.refetch()],
+      );
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Subdomain transaction failed");
     } finally {
@@ -246,16 +303,14 @@ export function SubdomainRegistration() {
     }
   }
 
-  if (!subdomainRegistrationEnabled) {
-    return (
-      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
-        Subdomain registration is not enabled for this environment yet.
-      </div>
-    );
-  }
-
   return (
     <section className="rounded-3xl border bg-white p-7 shadow-sm">
+      {!registrationEnabled ? (
+        <div className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-5 text-sm text-amber-950">
+          New subdomain registration is not public yet. Enter an existing
+          subdomain below to renew it.
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Parent XDCID" value={parentInput} onChange={setParentInput} placeholder="company.xdc" />
         <Field label="Subdomain label" value={labelInput} onChange={setLabelInput} placeholder="alice" />
@@ -287,11 +342,11 @@ export function SubdomainRegistration() {
       <div className="mt-5 rounded-xl border bg-slate-50 p-4 text-sm">
         {!inputValid
           ? "Enter a valid parent name and subdomain label."
-          : available.isLoading
-            ? "Checking availability…"
-            : available.data
+            : lookupLoading
+              ? "Checking availability…"
+            : isAvailable
               ? `${label}.${parent.name} is available.`
-              : owner.data && owner.data !== zeroAddress
+              : currentOwner && currentOwner !== zeroAddress
                 ? `${label}.${parent.name} is registered and can be renewed by an authorized controller.`
                 : `${label}.${parent.name} is unavailable.`}
       </div>
@@ -303,11 +358,18 @@ export function SubdomainRegistration() {
           !isNonZeroAddress(ownerInput) ||
           !availabilityReady ||
           busy ||
-          (available.data === false && !hasActiveOwner)
+          !actionEnabled ||
+          (isAvailable === false && !hasActiveOwner)
         }
         onClick={submit}
       >
-        {busy ? "Processing…" : action === "registration" ? "Get quote and register subdomain" : "Get quote and renew subdomain"}
+        {busy
+          ? "Processing…"
+          : action === "registration"
+            ? registrationEnabled
+              ? "Get quote and register subdomain"
+              : "New registrations are not public yet"
+            : "Get quote and renew subdomain"}
       </button>
       {status ? <p className="mt-4 break-all text-sm text-slate-600">{status}</p> : null}
       <p className="mt-4 text-xs text-slate-500">
@@ -323,6 +385,8 @@ function deserializeQuote(value: SerializedQuote) {
     parentNode: value.parentNode,
     payer: getAddress(value.payer),
     subdomainOwner: getAddress(value.subdomainOwner),
+    ...(value.nameOwner ? { nameOwner: getAddress(value.nameOwner) } : {}),
+    ...(typeof value.product === "number" ? { product: value.product } : {}),
     termYears: BigInt(value.termYears),
     paymentToken: getAddress(value.paymentToken),
     paymentAmount: BigInt(value.paymentAmount),
