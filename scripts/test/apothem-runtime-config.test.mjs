@@ -22,6 +22,17 @@ test("owned-name discovery follows the active registry and preserves registrar h
   assert.match(contents, /apothemRegistration\.registrar/);
 });
 
+test("admin health exposes only the quote signer's public address", async () => {
+  const route = await source("frontend/app/api/admin/health/route.ts");
+  const operations = await source("frontend/components/AdminOperations.tsx");
+
+  assert.match(route, /privateKeyToAccount/);
+  assert.match(route, /quoteSigner:\s*\{/);
+  assert.match(route, /address: quoteSignerAddress/);
+  assert.doesNotMatch(route, /address:\s*normalizedQuoteSignerKey/);
+  assert.match(operations, /Server signing account \(public address only\)/);
+});
+
 test("the Apothem subdomain test surface follows the configured registrar", async () => {
   const contents = await source(
     "frontend/app/testing/apothem-subdomains/ApothemSubdomainTestingClient.tsx",
