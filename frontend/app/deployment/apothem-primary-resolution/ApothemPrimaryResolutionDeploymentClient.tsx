@@ -279,7 +279,6 @@ export default function ApothemPrimaryResolutionDeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated owner wallet" value={OWNER} />
             <Detail label="Existing Registry" value={REGISTRY} />
             <Detail label="Existing Pricing Policy" value={POLICY} />
             <Detail label="Existing Discount Authorization" value={AUTHORIZATION} />
@@ -335,84 +334,7 @@ export default function ApothemPrimaryResolutionDeploymentClient() {
               NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER: deployment.multichainResolver
             }, null, 2)}
           </pre>
-          <p className="mt-4 text-sm text-slate-600">
-            Do not apply these values until the delayed consumer configuration
-            and registry activation are complete.
-          </p>
-          {activationTime > 0n ? (
-            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-              Earliest activation: {new Date(Number(activationTime) * 1000).toLocaleString()}
-            </p>
-          ) : null}
-        </section>
-      </div>
-    </main>
-  );
-}
-
-async function deployOne(input: {
-  artifact: Artifact;
-  args: readonly unknown[];
-  saltValue: Hex;
-  stepIndex: number;
-  publicClient: PublicClient;
-  send: (data: Hex) => Promise<Hex>;
-  updateStep: (index: number, patch: Partial<Step>) => void;
-}): Promise<Address> {
-  const data = encodeDeployData({
-    abi: input.artifact.abi as Abi,
-    bytecode: input.artifact.bytecode as Hex,
-    args: input.args
-  });
-  const predicted = getAddress(getContractAddress({
-    bytecode: data,
-    from: CREATE2_DEPLOYER,
-    opcode: "CREATE2",
-    salt: input.saltValue
-  }));
-  input.updateStep(input.stepIndex, { state: "wallet", address: predicted });
-  const existingCode = await input.publicClient.getCode({ address: predicted });
-  if (!existingCode || existingCode === "0x") {
-    const hash = await input.send(
-      `${input.saltValue}${data.slice(2)}` as Hex
-    );
-    input.updateStep(input.stepIndex, {
-      state: "confirming",
-      hash,
-      address: predicted
-    });
-    const receipt = await input.publicClient.waitForTransactionReceipt({
-      hash,
-      confirmations: 2,
-      timeout: 180_000
-    });
-    if (receipt.status !== "success") throw new Error("Contract deployment failed");
-  }
-  await requireCode(input.publicClient, predicted, "deployed contract");
-  input.updateStep(input.stepIndex, { state: "complete", address: predicted });
-  return predicted;
-}
-
-async function validateDependencies(
-  client: PublicClient,
-  account: Address
-): Promise<Address> {
-  for (const [label, address] of [
-    ["registry", REGISTRY],
-    ["legacy registry", LEGACY],
-    ["pricing policy", POLICY],
-    ["discount authorization", AUTHORIZATION],
-    ["current registrar", CURRENT_REGISTRAR],
-    ["deployment proxy", CREATE2_DEPLOYER]
-  ] as const) {
-    await requireCode(client, address, label);
-  }
-
-  const [registryOwner, activeRegistrar, authorizationOwner, signer, consumer] =
-    await Promise.all([
-      client.readContract({ address: REGISTRY, abi: registryAbi, functionName: "owner" }),
-      client.readContract({ address: REGISTRY, abi: registryAbi, functionName: "registrar" }),
-      client.readContract({ address: AUTHORIZATION, abi: artifacts.discountAuthorization.abi, functionName: "owner" }),
+          <p className="mt-4 text"owner" }),
       client.readContract({ address: AUTHORIZATION, abi: artifacts.discountAuthorization.abi, functionName: "authorizationSigner" }),
       client.readContract({ address: AUTHORIZATION, abi: artifacts.discountAuthorization.abi, functionName: "consumer" })
     ]);

@@ -33,7 +33,10 @@ export const apothemRegistration = {
     process.env.NEXT_PUBLIC_XNS_REGISTRAR ||
     "0x506B82DaD0cf55d909D9C6F0edD5A7939339256d"
   ) as `0x${string}`,
-  pricingPolicy: "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81" as `0x${string}`,
+  pricingPolicy: (
+    process.env.NEXT_PUBLIC_XNS_PRICING_POLICY ||
+    "0x90a719bCAD35EB1048b30e43CA3fC804A35e5c81"
+  ) as `0x${string}`,
 } as const;
 
 export const apothemSubdomainRegistrar =
@@ -98,8 +101,12 @@ export const activeRegistrarAddress = isTestnetEnvironment
   ? apothemRegistration.registrar
   : addresses.registrar;
 export const activeSubdomainRegistrarAddress = isTestnetEnvironment
-  ? apothemSubdomainRegistrar
-  : addresses.subdomainRegistrar;
+  ? process.env.NEXT_PUBLIC_XNS_PROTOCOL_GENERATION === "unified-v3"
+    ? activeRegistrarAddress
+    : apothemSubdomainRegistrar
+  : process.env.NEXT_PUBLIC_XNS_PROTOCOL_GENERATION === "unified-v3"
+    ? activeRegistrarAddress
+    : addresses.subdomainRegistrar;
 
 // The original mainnet registrar retained native XDC until its owner withdrew
 // it. Current registrars forward revenue directly to the configured treasury.
@@ -137,6 +144,42 @@ export const activeResolverSuiteAvailable =
 export const signedRegistrarEnabled =
   process.env.NEXT_PUBLIC_SIGNED_REGISTRAR_ENABLED === "true";
 
+export const unifiedProtocolEnabled =
+  process.env.NEXT_PUBLIC_XNS_PROTOCOL_GENERATION === "unified-v3";
+
+// The unified registrar is the only paid transaction entry point in V3. The
+// registry remains the read source for both top-level names and subdomains.
+export const unifiedSubdomainRegistryAddress = activeRegistryAddress;
+
+export const unifiedRegistryReadAbi = [
+  {
+    type: "function",
+    name: "records",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [
+      {
+        name: "record",
+        type: "tuple",
+        components: [
+          { name: "owner", type: "address" },
+          { name: "resolver", type: "address" },
+          { name: "expiry", type: "uint64" },
+          { name: "parentNode", type: "bytes32" },
+          { name: "kind", type: "uint8" }
+        ]
+      }
+    ]
+  },
+  {
+    type: "function",
+    name: "ownerOf",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ name: "", type: "address" }]
+  }
+] as const;
+
 export const subdomainRegistrationEnabled =
   XDC_MAINNET_DEPLOYMENT.products.subdomains === "active" &&
   process.env.NEXT_PUBLIC_SUBDOMAIN_REGISTRATION_ENABLED !== "false" &&
@@ -170,6 +213,27 @@ export const subdomainRegistrarAbi = [
     stateMutability: "view",
     inputs: [{ name: "node", type: "bytes32" }],
     outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
+    name: "addressOf",
+    stateMutability: "view",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" }
+    ],
+    outputs: [{ type: "address" }]
+  },
+  {
+    type: "function",
+    name: "records",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [
+      { name: "owner", type: "address" },
+      { name: "parentNode", type: "bytes32" },
+      { name: "expiry", type: "uint256" }
+    ]
   },
   {
     type: "function",
@@ -226,6 +290,48 @@ export const subdomainRegistrarAbi = [
         ]
       },
       { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "setAddress",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "chainId", type: "uint256" },
+      { name: "destination", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "transferSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "newOwner", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "assignSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "newOwner", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "reclaimSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
     ],
     outputs: []
   }
@@ -288,6 +394,81 @@ export const signedRegistrarAbi = [
     ],
     outputs: []
   }
+] as const;
+
+const unifiedQuoteComponents = [
+  { name: "node", type: "bytes32" },
+  { name: "parentNode", type: "bytes32" },
+  { name: "payer", type: "address" },
+  { name: "nameOwner", type: "address" },
+  { name: "product", type: "uint8" },
+  { name: "termYears", type: "uint256" },
+  { name: "paymentToken", type: "address" },
+  { name: "paymentAmount", type: "uint256" },
+  { name: "usdMicros", type: "uint256" },
+  { name: "policyVersion", type: "uint256" },
+  { name: "nonce", type: "uint256" },
+  { name: "issuedAt", type: "uint256" },
+  { name: "deadline", type: "uint256" }
+] as const;
+
+const unifiedDiscountAuthorizationComponents = [
+  { name: "node", type: "bytes32" },
+  { name: "beneficiary", type: "address" },
+  { name: "product", type: "uint8" },
+  { name: "termYears", type: "uint256" },
+  { name: "discountBps", type: "uint16" },
+  { name: "maxUses", type: "uint32" },
+  { name: "validAfter", type: "uint64" },
+  { name: "deadline", type: "uint64" },
+  { name: "nonce", type: "uint256" }
+] as const;
+
+export const unifiedRegistrarAbi = [
+  ...(["register", "renew", "registerSubdomain", "renewSubdomain"] as const).map(
+    (name) => ({
+      type: "function" as const,
+      name,
+      stateMutability: "payable" as const,
+      inputs: name.includes("Subdomain")
+        ? [
+            { name: "parentName", type: "string" },
+            { name: "label", type: "string" },
+            { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+            { name: "quoteSignature", type: "bytes" }
+          ]
+        : [
+            { name: "name", type: "string" },
+            { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+            { name: "quoteSignature", type: "bytes" }
+          ],
+      outputs: []
+    }),
+  ),
+  ...(["registerWithDiscount", "renewWithDiscount", "registerSubdomainWithDiscount", "renewSubdomainWithDiscount"] as const).map(
+    (name) => ({
+      type: "function" as const,
+      name,
+      stateMutability: "payable" as const,
+      inputs: name.includes("Subdomain")
+        ? [
+            { name: "parentName", type: "string" },
+            { name: "label", type: "string" },
+            { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+            { name: "quoteSignature", type: "bytes" },
+            { name: "authorization", type: "tuple", components: unifiedDiscountAuthorizationComponents },
+            { name: "authorizationSignature", type: "bytes" }
+          ]
+        : [
+            { name: "name", type: "string" },
+            { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+            { name: "quoteSignature", type: "bytes" },
+            { name: "authorization", type: "tuple", components: unifiedDiscountAuthorizationComponents },
+            { name: "authorizationSignature", type: "bytes" }
+          ],
+      outputs: []
+    }),
+  )
 ] as const;
 
 export const discountedRegistrarAbi = [
@@ -542,6 +723,80 @@ export const ownableAbi = [
     name: "transferOwnership",
     stateMutability: "nonpayable",
     inputs: [{ name: "newOwner", type: "address" }],
+    outputs: []
+  }
+] as const;
+
+export const ownable2StepAbi = [
+  ...ownableAbi,
+  {
+    type: "function",
+    name: "pendingOwner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "acceptOwnership",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  }
+] as const;
+
+export const unifiedDiscountAdminAbi = [
+  ...ownable2StepAbi,
+  {
+    type: "function",
+    name: "authorizationSigner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "pendingAuthorizationSigner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "pendingActivationTime",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "hasPendingConfiguration",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "proposeConfiguration",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "nextAuthorizationSigner", type: "address" },
+      { name: "nextConsumer", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "cancelPendingConfiguration",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "activatePendingConfiguration",
+    stateMutability: "nonpayable",
+    inputs: [],
     outputs: []
   }
 ] as const;

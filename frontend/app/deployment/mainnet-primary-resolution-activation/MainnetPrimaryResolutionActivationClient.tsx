@@ -151,7 +151,7 @@ export default function MainnetPrimaryResolutionActivationClient() {
       const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
       if (!accounts[0]) throw new Error("The wallet returned no account.");
       const selected = getAddress(accounts[0]);
-      if (selected !== OWNER) throw new Error(`Select the protocol-owner wallet ${OWNER}.`);
+      if (selected !== OWNER) throw new Error("Select the authorized administrative wallet.");
       await ensureMainnet(provider);
       const next = await refresh();
       if (next.stage === "invalid") throw new Error("The activation state does not match the reviewed rollout.");
@@ -256,45 +256,9 @@ export default function MainnetPrimaryResolutionActivationClient() {
               <Step number="1" title="Timelock proposal" state={stage === "waiting" ? "current" : "done"} detail="Already submitted and recorded in the deployment manifest." />
               <Step number="2" title="Activate discount consumer" state={stage === "discount-ready" ? "current" : stage === "registry-ready" || stage === "active" ? "done" : "locked"} detail="Moves authorization consumption from the current registrar to the reviewed candidate." />
               <Step number="3" title="Activate Registry registrar" state={stage === "registry-ready" ? "current" : stage === "active" ? "done" : "locked"} detail="Authorizes the primary-aware registrar for new registrations and renewals." />
-              <Step number="4" title="Production release" state={stage === "active" ? "current" : "locked"} detail="Apply the prepared variables only after on-chain activation and smoke tests pass." />
-            </div>
-            <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-700">{message}</div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Action label={account ? `Owner ${shortAddress(account)}` : "Connect owner wallet"} onClick={connectOwner} disabled={busy} />
-              <Action label="Activate discount configuration" onClick={activateDiscount} disabled={busy || !account || stage !== "discount-ready"} warning />
-              <Action label="Activate new registrar" onClick={activateRegistry} disabled={busy || !account || stage !== "registry-ready"} />
-            </div>
-          </div>
-
-          <aside className="space-y-6">
-            <section className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-sm">
-              <p className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Reviewed addresses</p>
-              <div className="mt-5 space-y-4">
-                <AddressRow label="Current registrar" value={CURRENT_REGISTRAR} />
-                <AddressRow label="Candidate registrar" value={CANDIDATE_REGISTRAR} accent />
-                <AddressRow label="Protocol owner" value={OWNER} />
-              </div>
-              <a className="mt-5 inline-flex text-sm font-semibold text-[#087d78] underline underline-offset-4" href={`https://xdcscan.com/tx/${rollout.proposalTransaction}`} target="_blank" rel="noreferrer">View timelock proposal on XDCScan ↗</a>
-            </section>
-            <section className="rounded-[2rem] border border-amber-300 bg-amber-50 p-7">
-              <p className="text-sm font-bold uppercase tracking-[0.2em] text-amber-800">Operational warning</p>
-              <h2 className="mt-3 text-xl font-semibold">Complete step 3 immediately after step 2</h2>
-              <p className="mt-3 text-sm leading-6 text-amber-950">After the discount consumer changes, the previous registrar cannot consume new discounts. Do not leave the rollout between those two transactions.</p>
-            </section>
-          </aside>
-        </section>
-
-        <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Prepared production configuration</p>
-            <h2 className="mt-2 text-2xl font-semibold">Do not apply yet</h2>
-            <pre className="mt-5 overflow-x-auto rounded-2xl bg-[#071022] p-5 text-xs leading-6 text-teal-100">{productionVariables()}</pre>
-          </div>
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Rollback reality</p>
+              <Step number="4" title="Production release" state={stage === "active" ? "current" : "locked"} detail="Apply the prepared variabassName="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Rollback reality</p>
             <h2 className="mt-2 text-2xl font-semibold">Registry rollback is immediate; discount rollback is timelocked</h2>
             <p className="mt-4 text-sm leading-6 text-slate-600">The previous registrar is preserved as <span className="font-mono">{shortAddress(rollout.previousRegistrar)}</span>. Restoring it in the Registry alone does not restore discounted registrations after the consumer changes; returning the discount consumer requires a new 48-hour proposal.</p>
-            <p className="mt-4 rounded-2xl bg-slate-100 p-4 text-sm text-slate-700">Temporary single-wallet ownership is explicitly recorded for this rollout. Move ownership to multisig in a separate, reviewed operation.</p>
           </div>
         </section>
 
@@ -341,7 +305,7 @@ async function readSnapshot(): Promise<Snapshot> {
     readAddress(SUBDOMAIN_REGISTRAR, ownedAbi, "owner"),
   ]);
   for (const [label, owner] of [["Registry", registryOwner], ["current Registrar", currentOwner], ["candidate Registrar", candidateOwner], ["Pricing Policy", policyOwner], ["Discount Authorization", discountOwner], ["Subdomain Registrar", subdomainOwner]] as const) {
-    if (owner !== OWNER) throw new Error(`${label} owner does not match the reviewed protocol owner.`);
+    if (owner !== OWNER) throw new Error(`${label} administrative authority does not match the reviewed deployment.`);
   }
 
   const [registrarRegistry, registrarLegacy, registrarPolicy, registrarDiscount, primaryResolver, forwardRegistry, reverseRegistry, multichainRegistry, linkedReverse] = await Promise.all([
@@ -421,7 +385,7 @@ async function validateSelectedOwner(provider: EIP1193Provider, expectedOwner: A
   await ensureMainnet(provider);
   const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
   if (!accounts[0] || getAddress(accounts[0]) !== expectedOwner || expectedOwner !== OWNER) {
-    throw new Error("The selected wallet is no longer the reviewed protocol owner.");
+    throw new Error("The selected wallet is no longer authorized for this operation.");
   }
 }
 

@@ -33,7 +33,7 @@ jobs:
       - name: Install pinned Slither
         run: |
           python3 -m venv .slither-venv
-          .slither-venv/bin/pip install slither-analyzer==0.11.6
+          .slither-venv/bin/pip install slither-analyzer==0.11.4
       - name: Run Slither
         run: |
           set +e

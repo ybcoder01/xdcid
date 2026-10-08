@@ -30,6 +30,14 @@ import {
   SUBDOMAIN_QUOTE_DOMAIN_VERSION,
   subdomainQuoteTypes,
 } from "../../../../../lib/subdomainQuotes";
+import {
+  UNIFIED_QUOTE_DOMAIN_NAME,
+  UNIFIED_QUOTE_DOMAIN_VERSION,
+  unifiedProtocolRequested,
+  unifiedQuoteTypes,
+  unifiedSubdomainQuote,
+  type UnifiedRegistrarQuote,
+} from "../../../../../lib/unifiedRegistrarQuotes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -61,6 +69,12 @@ const registryAbi = parseAbi([
   "function expiryOf(bytes32 node) view returns (uint256)",
 ]);
 
+const unifiedRegistryAbi = parseAbi([
+  "function ownerOf(bytes32 node) view returns (address)",
+  "function expiryOf(bytes32 node) view returns (uint256)",
+  "function records(bytes32 node) view returns ((address owner,address resolver,uint64 expiry,bytes32 parentNode,uint8 kind))",
+]);
+
 const policyAbi = parseAbi([
   "function version() view returns (uint256)",
   "function priceUsdMicros(uint8 product,uint256 labelLength,uint256 termYears) view returns (uint256)",
@@ -72,9 +86,12 @@ export async function POST(request: Request) {
   try {
     enforceRateLimit(request);
     const input = normalizeSubdomainQuoteRequest(await readBody(request));
+    const unified = unifiedProtocolRequested();
     const registrar = requiredAddress(
-      "XNS_SUBDOMAIN_REGISTRAR",
-      process.env.XNS_SUBDOMAIN_REGISTRAR,
+      unified ? "XNS_SIGNED_QUOTE_REGISTRAR" : "XNS_SUBDOMAIN_REGISTRAR",
+      unified
+        ? process.env.XNS_SIGNED_QUOTE_REGISTRAR
+        : process.env.XNS_SUBDOMAIN_REGISTRAR,
     );
     const pricingPolicy = requiredAddress(
       "XNS_PRICING_POLICY",
@@ -149,13 +166,13 @@ export async function POST(request: Request) {
     const [parentOwner, parentExpiry] = await Promise.all([
       client.readContract({
         address: registry,
-        abi: registryAbi,
+        abi: unified ? unifiedRegistryAbi : registryAbi,
         functionName: "ownerOf",
         args: [provisional.parentNode],
       }),
       client.readContract({
         address: registry,
-        abi: registryAbi,
+        abi: unified ? unifiedRegistryAbi : registryAbi,
         functionName: "expiryOf",
         args: [provisional.parentNode],
       }),
@@ -169,7 +186,7 @@ export async function POST(request: Request) {
     }
     const payerIsParentOwner = getAddress(parentOwner) === input.payer;
     let payerIsOperator = false;
-    if (!payerIsParentOwner) {
+    if (!unified && !payerIsParentOwner) {
       payerIsOperator = await client.readContract({
         address: registrar,
         abi: subdomainRegistrarAbi,
@@ -187,12 +204,19 @@ export async function POST(request: Request) {
           403,
         );
       }
-      const available = await client.readContract({
-        address: registrar,
-        abi: subdomainRegistrarAbi,
-        functionName: "available",
-        args: [input.parentName, input.label],
-      });
+      const available = unified
+        ? (await client.readContract({
+            address: registry,
+            abi: unifiedRegistryAbi,
+            functionName: "records",
+            args: [provisional.node],
+          })).owner === zeroAddress
+        : await client.readContract({
+            address: registrar,
+            abi: subdomainRegistrarAbi,
+            functionName: "available",
+            args: [input.parentName, input.label],
+          });
       if (!available) {
         throw new ApiServiceError(
           "SUBDOMAIN_UNAVAILABLE",
@@ -208,42 +232,54 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      const [currentOwner, record] = await Promise.all([
-        client.readContract({
-          address: registrar,
-          abi: subdomainRegistrarAbi,
-          functionName: "ownerOf",
-          args: [provisional.node],
-        }),
-        client.readContract({
-          address: registrar,
-          abi: subdomainRegistrarAbi,
-          functionName: "records",
-          args: [provisional.node],
-        }),
-      ]);
-      if (
-        currentOwner === zeroAddress ||
-        getAddress(currentOwner) !== input.subdomainOwner
-      ) {
+      let currentOwner: Address;
+      let childExpiry: bigint;
+      if (unified) {
+        const record = await client.readContract({
+            address: registry,
+            abi: unifiedRegistryAbi,
+            functionName: "records",
+            args: [provisional.node],
+          });
+        currentOwner = getAddress(record.owner);
+        childExpiry = record.expiry;
+      } else {
+        const [record, owner] = await Promise.all([
+          client.readContract({
+            address: registrar,
+            abi: subdomainRegistrarAbi,
+            functionName: "records",
+            args: [provisional.node],
+          }),
+          client.readContract({
+            address: registrar,
+            abi: subdomainRegistrarAbi,
+            functionName: "ownerOf",
+            args: [provisional.node],
+          }),
+        ]);
+        currentOwner = getAddress(owner);
+        childExpiry = record[2];
+      }
+      if (currentOwner !== input.subdomainOwner) {
         throw new ApiServiceError(
           "NOT_SUBDOMAIN_OWNER",
           "The selected owner does not own this active subdomain",
           403,
         );
       }
-      if (
+      if (unified ? !payerIsParentOwner : (
         input.payer !== input.subdomainOwner &&
         !payerIsParentOwner &&
         !payerIsOperator
-      ) {
+      )) {
         throw new ApiServiceError(
           "NOT_SUBDOMAIN_CONTROLLER",
           "Only the subdomain owner or a parent controller can renew it",
           403,
         );
       }
-      if (record[2] + BigInt(input.termYears) * YEAR_SECONDS > parentExpiry) {
+      if (childExpiry + BigInt(input.termYears) * YEAR_SECONDS > parentExpiry) {
         throw new ApiServiceError(
           "TERM_EXCEEDS_PARENT",
           "The renewal cannot extend beyond the parent name expiry",
@@ -256,7 +292,7 @@ export async function POST(request: Request) {
       address: pricingPolicy,
       abi: policyAbi,
       functionName: "priceUsdMicros",
-      args: [2, 1n, BigInt(input.termYears)],
+      args: [input.action === "registration" ? 2 : 3, BigInt(input.label.length), BigInt(input.termYears)],
     });
     let paymentToken: Address;
     let paymentAmount: bigint;
@@ -300,7 +336,7 @@ export async function POST(request: Request) {
       serverNowSeconds: Math.floor(Date.now() / 1_000),
       latestBlockTimestamp: latestBlock.timestamp,
     });
-    const quote = buildSubdomainQuote({
+    const legacyQuote = buildSubdomainQuote({
       request: input,
       paymentToken,
       paymentAmount,
@@ -309,111 +345,37 @@ export async function POST(request: Request) {
       nonce,
       issuedAt,
     });
-    const signature = await account.signTypedData({
-      domain: {
-        name: SUBDOMAIN_QUOTE_DOMAIN_NAME,
-        version: SUBDOMAIN_QUOTE_DOMAIN_VERSION,
-        chainId,
-        verifyingContract: registrar,
-      },
-      types: subdomainQuoteTypes,
-      primaryType: "SubdomainQuote",
-      message: quote,
-    });
-
-    return apiSuccess({
-      authorizedForPayment: true,
-      chainId,
-      registrar,
-      pricingPolicy,
-      action: input.action,
-      parentName: input.parentName,
-      label: input.label,
-      fullName: input.fullName,
-      paymentCurrency: input.paymentCurrency,
-      quote: serializeQuote(quote),
-      signature,
-      market,
-    });
-  } catch (error) {
-    return handleApiError(error, "Subdomain quote failed");
-  }
-}
-
-function unavailable(message: string) {
-  return new ApiServiceError("QUOTE_SIGNING_UNAVAILABLE", message, 503);
-}
-
-async function readBody(request: Request): Promise<unknown> {
-  const contentLength = Number(request.headers.get("content-length") || "0");
-  if (contentLength > MAX_BODY_BYTES) {
-    throw new ApiInputError("INVALID_REQUEST", "Request body is too large");
-  }
-  const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) {
-    throw new ApiInputError("INVALID_REQUEST", "Request body is too large");
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new ApiInputError("INVALID_REQUEST", "Request body must be valid JSON");
-  }
-}
-
-function quoteSignerAccount() {
-  const configuredKey = process.env.XNS_QUOTE_SIGNER_PRIVATE_KEY?.trim();
-  const key = configuredKey && /^[0-9a-fA-F]{64}$/.test(configuredKey)
-    ? `0x${configuredKey}`
-    : configuredKey;
-  if (!key || !isHex(key) || key.length !== 66) {
-    throw unavailable("Quote signer private key is missing or malformed");
-  }
-  return privateKeyToAccount(key as Hex);
-}
-
-function quoteClient() {
-  const urls = (
-    process.env.XNS_QUOTE_RPC_URLS ||
-    process.env.XDC_RPC_URLS ||
-    DEFAULT_XDC_RPC_URLS.join(",")
-  )
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => /^https?:\/\//.test(value));
-  if (urls.length === 0) throw unavailable("Quote RPC is not configured");
-  const timeout = boundedInteger(
-    process.env.XNS_QUOTE_RPC_TIMEOUT_MS,
-    DEFAULT_RPC_TIMEOUT_MS,
-    1_000,
-    10_000,
-  );
-  return createPublicClient({
-    transport: fallback(
-      urls.map((url) => http(url, {
-        fetchOptions: {
-          headers: { "user-agent": "XDCID/1.0 (+https://xdcid.xyz)" },
-        },
-        timeout,
-        retryCount: 0,
-      })),
-      { rank: false, retryCount: 0 },
-    ),
-  });
-}
-
-function requiredAddress(name: string, value: string | undefined): Address {
-  if (!value || !isAddress(value)) {
-    throw unavailable(`${name} is not configured`);
-  }
-  return getAddress(value);
-}
-
-function serializeQuote(quote: ReturnType<typeof buildSubdomainQuote>) {
-  return {
-    node: quote.node,
-    parentNode: quote.parentNode,
-    payer: quote.payer,
-    subdomainOwner: quote.subdomainOwner,
+    const quote = unified
+      ? unifiedSubdomainQuote(legacyQuote, input)
+      : legacyQuote;
+    const signature = unified
+      ? await account.signTypedData({
+          domain: {
+            name: UNIFIED_QUOTE_DOMAIN_NAME,
+            version: UNIFIED_QUOTE_DOMAIN_VERSION,
+            chainId,
+            verifyingContract: registrar,
+          },
+          types: unifiedQuoteTypes,
+          primaryType: "Quote",
+          message: quote as UnifiedRegistrarQuote,
+        })
+      : await account.signTypedData({
+          domain: {
+            name: SUBDOMAIN_QUOTE_DOMAIN_NAME,
+            version: SUBDOMAIN_QUOTE_DOMAIN_VERSION,
+            chainId,
+            verifyingContract: registrar,
+          },
+          types: subdomainQuoteTypes,
+          primaryType: "SubdomainQuote",
+          message: legacyQuote,
+       payer: quote.payer,
+    subdomainOwner: "subdomainOwner" in quote
+      ? quote.subdomainOwner
+      : quote.nameOwner,
+    ...("nameOwner" in quote ? { nameOwner: quote.nameOwner } : {}),
+    ...("product" in quote ? { product: quote.product } : {}),
     termYears: quote.termYears.toString(),
     paymentToken: quote.paymentToken,
     paymentAmount: quote.paymentAmount.toString(),

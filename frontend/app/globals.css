@@ -534,6 +534,29 @@ textarea:focus {
   background: color-mix(in srgb, var(--route-accent) 10%, var(--route-panel-solid));
 }
 
+.xdc-wallet-control {
+  border-color: var(--nav-border) !important;
+  background: var(--route-panel-solid) !important;
+  color: var(--site-ink);
+}
+
+.xdc-wallet-network,
+.xdc-wallet-account {
+  background: transparent !important;
+  color: var(--site-ink) !important;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.xdc-wallet-network:hover,
+.xdc-wallet-account:hover {
+  background: color-mix(in srgb, var(--route-accent) 14%, transparent) !important;
+  color: var(--site-ink) !important;
+}
+
+.xdc-wallet-divider {
+  background: var(--nav-border) !important;
+}
+
 .xdc-mobile-nav {
   box-shadow: 0 24px 70px var(--route-shadow);
 }

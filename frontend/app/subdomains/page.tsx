@@ -14,7 +14,12 @@ const capabilities = [
   "Keep subdomain expiry within the parent term",
 ];
 
-export default function SubdomainsPage() {
+type SubdomainsPageProps = {
+  searchParams: Promise<{ parent?: string; label?: string }>;
+};
+
+export default async function SubdomainsPage({ searchParams }: SubdomainsPageProps) {
+  const { parent = "", label = "" } = await searchParams;
   return (
     <main className="xdc-product-page mx-auto max-w-5xl px-4 py-10">
       <section className="overflow-hidden rounded-[2rem] border border-teal-200 bg-white shadow-sm">
@@ -55,7 +60,11 @@ export default function SubdomainsPage() {
         </div>
       </section>
       <div className="mt-8">
-        <SubdomainRegistration />
+        <SubdomainRegistration
+          allowRenewalsWhenDisabled
+          initialLabel={label}
+          initialParentName={parent}
+        />
       </div>
     </main>
   );

@@ -20,6 +20,8 @@ import {
   addresses,
   erc20ApprovalAbi,
   signedRegistrarAbi,
+  unifiedProtocolEnabled,
+  unifiedRegistrarAbi,
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 import { walletActionErrorMessage } from "../lib/walletErrors";
@@ -28,6 +30,7 @@ type Currency = "XDC" | "USDC";
 type Term = 1 | 3 | 5 | 10;
 type Quote = {
   node: Hex;
+  parentNode?: Hex;
   payer: Address;
   nameOwner: Address;
   product: number;
@@ -45,6 +48,7 @@ type ResponseBody = {
     authorizedForPayment: boolean;
     chainId: number;
     registrar: Address;
+    protocolGeneration?: "legacy" | "unified-v3";
     quote: Quote;
     signature: Hex;
   };
@@ -107,12 +111,16 @@ export function SignedRenewalControls(props: {
       }
       if (
         body.data.chainId !== expectedChainId ||
-        getAddress(body.data.registrar) !== getAddress(registrarAddress)
+        getAddress(body.data.registrar) !== getAddress(registrarAddress) ||
+        (body.data.protocolGeneration === "unified-v3") !== unifiedProtocolEnabled
       ) {
         throw new Error("The quote does not match the active XDCID registrar");
       }
       const quote = {
         ...body.data.quote,
+        ...(body.data.quote.parentNode
+          ? { parentNode: body.data.quote.parentNode }
+          : {}),
         payer: getAddress(body.data.quote.payer),
         nameOwner: getAddress(body.data.quote.nameOwner),
         paymentToken: getAddress(body.data.quote.paymentToken),
@@ -158,8 +166,8 @@ export function SignedRenewalControls(props: {
       );
       const hash = await writeContractAsync({
         address: registrarAddress,
-        abi: signedRegistrarAbi,
-        functionName: "renewWithQuote",
+        abi: unifiedProtocolEnabled ? unifiedRegistrarAbi : signedRegistrarAbi,
+        functionName: unifiedProtocolEnabled ? "renew" : "renewWithQuote",
         args: [props.name, quote, body.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
         ...renewalGas,

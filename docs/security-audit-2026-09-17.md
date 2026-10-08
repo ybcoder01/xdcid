@@ -3,7 +3,33 @@
 **Review date:** 17 September 2026  
 **Scope:** XDC mainnet registry, Registrar V2, Pricing Policy V2, Discount Authorization, forward/reverse/multichain resolvers, and the deployed Subdomain Registrar  
 **Review type:** Internal source, test, configuration, bytecode, and live-state review  
-**Status:** High-severity issue remediated in code; Resolver V2 deployment and activation remain pending
+**Status:** Reviewed resolver and registrar remediations deployed and activated on XDC mainnet; multisig ownership and an independent external audit remain pending
+
+> **Next-generation follow-up (8 October 2026):** The local, undeployed
+> Registry V3 design consolidates top-level and subdomain ownership, discount
+> authorization, and all resolver modes while retaining Pricing Policy V2 as
+> a fourth independently administered contract. Its security
+> invariants, migration gates, and finding-by-finding disposition are documented
+> in [`docs/unified-protocol-v3.md`](./unified-protocol-v3.md). This work does not
+> change the reviewed mainnet deployment and must not be represented as an
+> external audit or production remediation until deployed and independently
+> reviewed.
+
+## Post-review activation update
+
+The owner-bound forward resolver, owner-verified reverse resolver,
+primary-aware multichain resolver, and primary-aware signed-quote registrar were
+activated on XDC mainnet on 29 September 2026. The active addresses,
+transaction evidence, preserved rollback registrar, and latest read-only
+preflight procedure are recorded in
+[`mainnet-deployment-manifest.md`](./mainnet-deployment-manifest.md).
+
+The findings below describe the deployment state observed on 17 September 2026
+and preserve the original review evidence. Statements that deployment or
+activation remained pending should be read as historical status at the time of
+the review. The current outstanding governance risk is the temporary single-EOA
+protocol owner; the Trust Center also continues to disclose that no independent
+third-party audit has been completed.
 
 ## Executive summary
 
@@ -121,42 +147,7 @@ events, and `resolverOf` returns the zero address for inactive names. The
 Registry also clears its stored resolver pointer when ownership changes and
 when an expired name is re-registered, preventing the former resolver from
 becoming active for the new lifecycle. An active same-owner renewal preserves
-the resolver. Transferring to the zero address is not treated as an implicit
-release. This hardening requires a future Registry deployment and migration;
-currently deployed bytecode is unchanged.
-
-### L-03 — Previous-version quote grace is ineffective when prices change
-
-**Impact:** Quotes signed under the prior policy version can fail immediately after configuration activation even though the policy advertises a five-minute previous-signer grace period.
-
-Registrar V2 accepts a previous signer/version during the grace period but recalculates the expected USD amount using the new current configuration. A prior quote based on an old price therefore fails `quote.usdMicros` validation.
-
-**Recommendation:** Either remove the advertised grace behavior and let clients request a new quote, or retain the previous pricing configuration for the grace interval and validate previous-version quotes against that configuration.
-
-**Remediation implemented:** Both pricing-policy variants retain the immediately
-previous configuration and expose version-aware pricing for the five-minute
-authorization window. Registrar V2, the signed-quote registrar, and the
-Subdomain Registrar now validate `usdMicros` against the quote's policy version.
-Tests change the active price after a quote is signed and confirm the original
-price remains valid during grace and becomes invalid when grace expires. This
-is source-level hardening for future deployments; existing deployed bytecode is
-unchanged.
-
-### I-01 — The deployed subdomain contract is usable independently of its UI flag
-
-The Subdomain Registrar is deployed and unpaused even though the product is labelled upcoming in the UI. The signed-quote and parent-controller requirements limit abuse, but a UI feature flag is not an on-chain launch control.
-
-**Recommendation:** Pause the contract until launch if direct use is not intended, or document that the contract is live while the first-party interface remains unreleased.
-
-### I-02 — Automated analysis coverage should be expanded
-
-The repository's contract and SDK test suites pass, including 243 contract/application tests and 27 SDK tests during this review. Slither, Aderyn, Mythril, and Foundry were not configured in this workspace, so this review did not include their automated detectors or invariant fuzzing.
-
-**Recommendation:** Add Slither to CI, add property/invariant tests for ownership transitions and resolver freshness, and commission an independent external audit before materially increasing protocol value or dependence.
-
-**Remediation implemented:** Slither `0.11.6` now runs in a dedicated CI job on
-every pull request and on pushes to `dev` and `main`. CI fails for any new High
-or Medium detector result outside an explicit function-level reviewed baseline.
+the resolver. Transferring tan explicit function-level reviewed baseline.
 The baseline and its operational assumptions are documented in
 `docs/security-static-analysis.md`. Existing resolver ownership-lifecycle tests
 remain part of the blocking contract suite; broader stateful fuzzing and an

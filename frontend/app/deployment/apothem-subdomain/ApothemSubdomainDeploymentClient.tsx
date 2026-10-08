@@ -205,7 +205,6 @@ export default function ApothemSubdomainDeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-7 shadow-sm">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated test wallet and owner" value={OWNER} />
             <Detail label="Existing Apothem registry" value={REGISTRY} />
             <Detail label="Existing Pricing Policy V2" value={PRICING_POLICY} />
             <Detail label="CREATE2 deployment proxy" value={CREATE2_DEPLOYER} />
@@ -365,85 +364,4 @@ async function validateDeployment(
 ) {
   await requireCode(publicClient, address, "Subdomain Registrar");
   const [owner, registry, policy] = await Promise.all([
-    publicClient.readContract({
-      address,
-      abi: artifact.abi,
-      functionName: "owner",
-    }),
-    publicClient.readContract({
-      address,
-      abi: artifact.abi,
-      functionName: "registry",
-    }),
-    publicClient.readContract({
-      address,
-      abi: artifact.abi,
-      functionName: "pricingPolicy",
-    }),
-  ]);
-
-  if (
-    getAddress(owner as Address) !== account ||
-    getAddress(registry as Address) !== REGISTRY ||
-    getAddress(policy as Address) !== PRICING_POLICY
-  ) {
-    throw new Error("Subdomain Registrar deployment validation failed");
-  }
-}
-
-async function requireCode(
-  publicClient: PublicClient,
-  address: Address,
-  label: string,
-) {
-  const code = await publicClient.getCode({ address });
-  if (!code || code === "0x") throw new Error(label + " has no contract code");
-}
-
-function injectedProvider(): EIP1193Provider {
-  const injected = (
-    window as Window & { ethereum?: MetaMaskProvider }
-  ).ethereum;
-  if (!injected) throw new Error("MetaMask was not detected");
-
-  const providers = injected.providers ?? [injected];
-  const metamask = providers.find(
-    (provider: MetaMaskProvider) =>
-      provider.isMetaMask === true && provider.isRabby !== true,
-  );
-  if (!metamask) {
-    throw new Error("Enable the MetaMask extension to continue on Apothem");
-  }
-  return metamask;
-}
-
-async function ensureApothem(provider: EIP1193Provider) {
-  const chainId = (await provider.request({ method: "eth_chainId" })) as string;
-  if (Number.parseInt(chainId, 16) === CHAIN_ID) return;
-
-  try {
-    await provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: "0x33" }],
-    });
-  } catch {
-    await provider.request({
-      method: "wallet_addEthereumChain",
-      params: [{
-        chainId: "0x33",
-        chainName: apothem.name,
-        nativeCurrency: apothem.nativeCurrency,
-        rpcUrls: apothem.rpcUrls.default.http,
-        blockExplorerUrls: [apothem.blockExplorers.default.url],
-      }],
-    });
-  }
-}
-
-function errorMessage(cause: unknown): string {
-  if (cause instanceof Error) {
-    const text = cause.message.split("\n")[0];
-    return text.length > 280 ? text.slice(0, 277) + "..." : text;
-  }
-  return "The wallet operation failed";
-}
+    publicC

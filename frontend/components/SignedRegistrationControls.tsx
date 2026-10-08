@@ -26,6 +26,8 @@ import {
   erc20ApprovalAbi,
   pricingPolicyAbi,
   signedRegistrarAbi,
+  unifiedProtocolEnabled,
+  unifiedRegistrarAbi,
 } from "../config/contracts";
 import { saveName } from "../config/localNames";
 import {
@@ -41,6 +43,7 @@ type Term = 1 | 3 | 5 | 10;
 
 type SerializedQuote = {
   node: Hex;
+  parentNode?: Hex;
   payer: Address;
   nameOwner: Address;
   product: number;
@@ -60,6 +63,7 @@ type QuoteResponse = {
     authorizedForPayment: boolean;
     chainId: number;
     registrar: Address;
+    protocolGeneration?: "legacy" | "unified-v3";
     name: string;
     paymentCurrency: Currency;
     quote: SerializedQuote;
@@ -174,7 +178,8 @@ export function SignedRegistrationControls(props: {
       }
       if (
         payload.data.chainId !== expectedChainId ||
-        getAddress(payload.data.registrar) !== getAddress(registrarAddress)
+        getAddress(payload.data.registrar) !== getAddress(registrarAddress) ||
+        (payload.data.protocolGeneration === "unified-v3") !== unifiedProtocolEnabled
       ) {
         throw new Error("The quote does not match the active XDCID registrar");
       }
@@ -256,7 +261,31 @@ export function SignedRegistrationControls(props: {
         expectedChainId,
         XDC_WRITE_GAS_LIMITS.registration,
       );
-      const transactionHash = discountAuthorization && discount
+      const transactionHash = unifiedProtocolEnabled
+        ? discountAuthorization && discount
+          ? await writeContractAsync({
+              address: registrarAddress,
+              abi: unifiedRegistrarAbi,
+              functionName: "registerWithDiscount",
+              args: [
+                props.name,
+                quote,
+                payload.data.signature,
+                discountAuthorization,
+                discount.signature,
+              ],
+              value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+              ...registrationGas,
+            })
+          : await writeContractAsync({
+              address: registrarAddress,
+              abi: unifiedRegistrarAbi,
+              functionName: "register",
+              args: [props.name, quote, payload.data.signature],
+              value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
+              ...registrationGas,
+            })
+        : discountAuthorization && discount
         ? await writeContractAsync({
             address: registrarAddress,
             abi: discountedRegistrarAbi,
@@ -330,65 +359,7 @@ export function SignedRegistrationControls(props: {
       </div>
       {pricingEnabled ? (
         <div className="mt-4 rounded-lg border border-black/10 bg-white p-3 text-sm text-slate-700">
-          {annualPrice.isLoading || discountedPrice.isLoading ? (
-            <p>Reading the live on-chain price…</p>
-          ) : annualPrice.isError || discountedPrice.isError ? (
-            <p className="text-red-600">Unable to read the live pricing policy.</p>
-          ) : grossUsdMicros !== undefined && finalUsdMicros !== undefined ? (
-            <div className="grid gap-1 sm:grid-cols-3">
-              <p><span className="block text-xs text-slate-500">Regular cost</span>{formatUsdMicros(grossUsdMicros)}</p>
-              <p><span className="block text-xs text-slate-500">Discount</span>{formatDiscount(discountBps)}</p>
-              <p><span className="block text-xs text-slate-500">You pay</span><strong>{formatUsdMicros(finalUsdMicros)}</strong></p>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      <button
-        className="mt-4 w-full rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-[#0b6670] disabled:opacity-50"
-        disabled={!props.enabled || !isConnected || busy}
-        onClick={register}
-      >
-        {busy ? "Processing…" : "Get quote and register"}
-      </button>
-      {status && (
-        <p className="mt-3 break-all text-xs text-neutral-600">{status}</p>
-      )}
-      {registrationHash && expectedChainId === 50 ? (
-        <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50 p-4">
-          <p className="text-sm font-semibold text-slate-950">
-            One step remaining: set your Primary ID
-          </p>
-          <p className="mt-1 text-xs leading-5 text-neutral-700">
-            Set {props.name} as your Primary ID so supported wallets and apps
-            can identify this address by name. Primary selection enables
-            address-to-name reverse resolution; your name-to-address resolution
-            works independently.
-          </p>
-          <Link
-            className="mt-3 inline-flex rounded-lg bg-teal-700 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-800"
-            href="/dashboard"
-          >
-            Go to Dashboard
-          </Link>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function deserializeQuote(value: SerializedQuote) {
-  return {
-    node: value.node,
-    payer: getAddress(value.payer),
-    nameOwner: getAddress(value.nameOwner),
-    product: value.product,
-    termYears: BigInt(value.termYears),
-    paymentToken: getAddress(value.paymentToken),
-    paymentAmount: BigInt(value.paymentAmount),
-    usdMicros: BigInt(value.usdMicros),
-    policyVersion: BigInt(value.policyVersion),
-    nonce: BigInt(value.nonce),
-    issuedAt: BigInt(value.issuedAt),
+  igInt(value.issuedAt),
     deadline: BigInt(value.deadline),
   };
 }

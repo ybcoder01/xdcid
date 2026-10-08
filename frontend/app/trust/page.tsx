@@ -11,7 +11,7 @@ const contracts = [
   {
     name: "Registry",
     address: XDC_MAINNET_DEPLOYMENT.active.registry,
-    control: "The protocol owner can change the authorized registrar. Name owners control transfers and resolver selection for their active names.",
+    control: "Registrar changes use the Registry's governed activation process. Name owners control transfers and resolver selection for their active names.",
   },
   {
     name: "Active Registrar V2",
@@ -68,7 +68,7 @@ export default function TrustPage() {
           ))}
         </div>
         <p className="mt-5 text-sm leading-6 text-slate-600">
-          Registry and Registrar administrative ownership is checked during deployment preflight. Resolver contracts authorize individual name owners through the Registry and do not have a protocol-owner transfer role.
+          Administrative contract state is checked during deployment preflight. Resolver contracts authorize individual name owners through the Registry and do not expose an administrative transfer role.
         </p>
       </section>
 
@@ -83,7 +83,7 @@ export default function TrustPage() {
           Public names, addresses, and transactions remain visible on-chain. XDCID stores completed-payment metadata for wallet-authorized history; private references are encrypted. Production analytics remove URL queries and dynamic name or Pay Link identifiers before collection.
         </TrustCard>
         <TrustCard title="Security evidence you can inspect" eyebrow="Independent assurance">
-          The active deployment is checked against its published manifest, contract bindings, owners, signers, treasury, pause state, and resolver configuration. The release process includes contract and application tests, ownership-lifecycle regression tests, and Slither static analysis. An independent third-party audit would add another expert review as adoption grows; it is an additional assurance layer, not the source of XDCID&apos;s security. The remaining operational limitation is single-wallet protocol administration, which is planned to move to a hardware-backed multisig.
+          The active deployment is checked against its published manifest, contract bindings, administrative state, signers, treasury, pause state, and resolver configuration. The release process includes contract and application tests, ownership-lifecycle regression tests, and Slither static analysis. An independent third-party audit would add another expert review as adoption grows; it is an additional assurance layer, not the source of XDCID&apos;s security.
         </TrustCard>
       </section>
 

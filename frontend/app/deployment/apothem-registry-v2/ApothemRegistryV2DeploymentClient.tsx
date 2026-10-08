@@ -90,7 +90,7 @@ export default function ApothemRegistryV2DeploymentClient() {
   const [activationHashes, setActivationHashes] = useState<Hex[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(
-    "Connect the designated owner wallet to calculate addresses and run read-only checks.",
+    "Connect the authorized administrative wallet to calculate addresses and run read-only checks.",
   );
 
   function updateStep(index: number, patch: Partial<Step>) {
@@ -438,7 +438,6 @@ export default function ApothemRegistryV2DeploymentClient() {
 
         <section className="rounded-3xl border bg-white p-6 shadow-sm sm:p-7">
           <dl className="grid gap-4 text-sm md:grid-cols-2">
-            <Detail label="Designated owner wallet" value={OWNER} />
             <Detail label="Active Registry V2" value={ACTIVE_REGISTRY} />
             <Detail label="Legacy Registry source" value={CURRENT_REGISTRY} />
             <Detail label="Original collision Registry" value={ORIGINAL_LEGACY_REGISTRY} />
@@ -921,23 +920,7 @@ async function successfulReceipt(
     confirmations: 2,
     timeout: 180_000,
   });
-  if (receipt.status !== "success") throw new Error(`${label} failed`);
-}
-
-function environmentValues(deployment?: Deployment) {
-  return {
-    NEXT_PUBLIC_XNS_REGISTRY: deployment?.registry,
-    NEXT_PUBLIC_XNS_REGISTRAR: deployment?.registrar,
-    XNS_SIGNED_QUOTE_REGISTRAR: deployment?.registrar,
-    NEXT_PUBLIC_XNS_RESOLVER_V2: deployment?.forwardResolver,
-    NEXT_PUBLIC_XNS_REVERSE_RESOLVER_V2: deployment?.reverseResolver,
-    NEXT_PUBLIC_XNS_MULTICHAIN_RESOLVER: deployment?.multichainResolver,
-    NEXT_PUBLIC_XNS_SUBDOMAIN_REGISTRAR: deployment?.subdomainRegistrar,
-    XNS_SUBDOMAIN_REGISTRAR: deployment?.subdomainRegistrar,
-  };
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
+  if (receipt.status !== "suc label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-slate-500">{label}</dt>

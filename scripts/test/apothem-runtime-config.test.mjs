@@ -61,6 +61,21 @@ test("retired Apothem deployment consoles lead to the guarded activation page", 
   );
 });
 
+test("the unified Apothem deployment console is preview-gated and never activates the app", async () => {
+  const page = await source("frontend/app/deployment/apothem-unified-v3/page.tsx");
+  const client = await source(
+    "frontend/app/deployment/apothem-unified-v3/ApothemUnifiedDeploymentClient.tsx",
+  );
+  assert.match(page, /ENABLE_APOTHEM_UNIFIED_V3_DEPLOYMENT/);
+  assert.match(client, /Deploy clean V3 stack/);
+  assert.match(client, /Deploy Pricing Policy V2/);
+  assert.match(client, /args: \[OWNER, ZERO_ADDRESS\]/);
+  assert.match(client, /ZERO_ADDRESS,\s+deployment\.pricingPolicy/s);
+  assert.match(client, /setRegistrar/);
+  assert.doesNotMatch(client, /NEXT_PUBLIC_XNS_PROTOCOL_GENERATION.*writeContract/s);
+  assert.match(client, /Do not apply these values/);
+});
+
 test("the pricing compatibility recovery is preview-only and proposes both delays", async () => {
   const page = await source(
     "frontend/app/deployment/apothem-pricing-compatibility/page.tsx",

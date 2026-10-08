@@ -1,6 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { AdminArchiveAdministrator } from "../../components/AdminArchiveAdministrator";
@@ -34,6 +35,16 @@ type AdminSession = {
 
 async function responseJson(response: Response): Promise<Record<string, unknown>> {
   return response.json().catch(() => ({}));
+}
+
+function adminLoginErrorMessage(cause: unknown): string {
+  if (!(cause instanceof Error)) return "Admin login failed";
+
+  if (/user rejected (the )?request/i.test(cause.message)) {
+    return "User rejected the request.";
+  }
+
+  return cause.message || "Admin login failed";
 }
 
 export default function AdminPage() {
@@ -138,9 +149,7 @@ export default function AdminPage() {
       window.dispatchEvent(new Event(ADMIN_SESSION_CHANGED_EVENT));
       return true;
     } catch (cause) {
-      setAuthError(
-        cause instanceof Error ? cause.message : "Admin login failed",
-      );
+      setAuthError(adminLoginErrorMessage(cause));
       return false;
     } finally {
       setLoginPending(false);
@@ -238,6 +247,14 @@ export default function AdminPage() {
             >
               End admin session
             </button>
+            {canManagePlatform ? (
+              <Link
+                className="rounded-md border border-teal-700 bg-teal-50 px-5 py-3 text-sm font-semibold text-teal-950 hover:bg-teal-100"
+                href="/admin/subdomains"
+              >
+                Test subdomain registration
+              </Link>
+            ) : null}
           </div>
         </div>
 

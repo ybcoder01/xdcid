@@ -166,7 +166,7 @@ export default function ApothemRegistryV2ActivationClient() {
       return;
     }
     if (!ownerConnected) {
-      setMessage(`The connected account is not the protocol owner. Select ${OWNER} in your wallet.`);
+      setMessage("The connected account is not authorized for this operation.");
       return;
     }
     if (chainId !== chain.id) await switchChainAsync({ chainId: chain.id });
@@ -258,7 +258,6 @@ export default function ApothemRegistryV2ActivationClient() {
                 <AddressRow label="Registry V2" value={REGISTRY} accent />
                 <AddressRow label="Primary registrar" value={REGISTRAR} accent />
                 <AddressRow label="Discount authorization" value={DISCOUNT_AUTHORIZATION} />
-                <AddressRow label="Protocol owner" value={OWNER} />
               </div>
               <a className="mt-5 inline-flex text-sm font-semibold text-[#087d78] underline underline-offset-4" href={`https://testnet.xdcscan.com/tx/${PROPOSAL_TRANSACTION}`} target="_blank" rel="noreferrer">View timelock proposal on XDCScan ↗</a>
             </section>
@@ -323,7 +322,7 @@ async function readSnapshot(): Promise<Snapshot> {
     readAddress(SUBDOMAIN_REGISTRAR, subdomainAbi, "owner"),
   ]);
   for (const [label, owner] of [["Registry V2", registryOwner], ["primary registrar", registrarOwner], ["Pricing Policy", policyOwner], ["Discount Authorization", discountOwner], ["subdomain registrar", subdomainOwner]] as const) {
-    if (owner !== OWNER) throw new Error(`${label} owner does not match the reviewed protocol owner.`);
+    if (owner !== OWNER) throw new Error(`${label} administrative authority does not match the reviewed deployment.`);
   }
   if (registryLegacy !== PREVIOUS_REGISTRY) throw new Error("Registry V2 legacy source does not match the reviewed previous Registry.");
 

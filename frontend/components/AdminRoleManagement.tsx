@@ -9,10 +9,14 @@ import {
   useWriteContract,
 } from "wagmi";
 import {
+  activeRegistrarAddress,
   adminPricingPolicyAbi,
   adminPricingPolicyAddress,
   addresses,
   ownableAbi,
+  ownable2StepAbi,
+  unifiedDiscountAdminAbi,
+  unifiedProtocolEnabled,
   zeroAddress as configuredZeroAddress,
 } from "../config/contracts";
 
@@ -42,6 +46,48 @@ export function AdminRoleManagement() {
     address: addresses.registry,
     abi: ownableAbi,
     functionName: "owner",
+  });
+  const registryPendingOwner = useReadContract({
+    address: addresses.registry,
+    abi: ownable2StepAbi,
+    functionName: "pendingOwner",
+    query: { enabled: unifiedProtocolEnabled },
+  });
+  const registrarOwner = useReadContract({
+    address: activeRegistrarAddress,
+    abi: ownable2StepAbi,
+    functionName: "owner",
+    query: { enabled: unifiedProtocolEnabled },
+  });
+  const registrarPendingOwner = useReadContract({
+    address: activeRegistrarAddress,
+    abi: ownable2StepAbi,
+    functionName: "pendingOwner",
+    query: { enabled: unifiedProtocolEnabled },
+  });
+  const discountSignerState = useReadContract({
+    address: activeRegistrarAddress,
+    abi: unifiedDiscountAdminAbi,
+    functionName: "authorizationSigner",
+    query: { enabled: unifiedProtocolEnabled },
+  });
+  const pendingDiscountSigner = useReadContract({
+    address: activeRegistrarAddress,
+    abi: unifiedDiscountAdminAbi,
+    functionName: "pendingAuthorizationSigner",
+    query: { enabled: unifiedProtocolEnabled },
+  });
+  const discountConfigurationPending = useReadContract({
+    address: activeRegistrarAddress,
+    abi: unifiedDiscountAdminAbi,
+    functionName: "hasPendingConfiguration",
+    query: { enabled: unifiedProtocolEnabled },
+  });
+  const discountActivationTime = useReadContract({
+    address: activeRegistrarAddress,
+    abi: unifiedDiscountAdminAbi,
+    functionName: "pendingActivationTime",
+    query: { enabled: unifiedProtocolEnabled },
   });
   const policyOwner = useReadContract({
     address: adminPricingPolicyAddress,
@@ -78,6 +124,9 @@ export function AdminRoleManagement() {
   const receipt = useWaitForTransactionReceipt({ hash: write.data });
   const [newRegistryOwner, setNewRegistryOwner] = useState("");
   const [confirmRegistryOwner, setConfirmRegistryOwner] = useState("");
+  const [newRegistrarOwner, setNewRegistrarOwner] = useState("");
+  const [confirmRegistrarOwner, setConfirmRegistrarOwner] = useState("");
+  const [discountSigner, setDiscountSigner] = useState("");
   const [newPolicyOwner, setNewPolicyOwner] = useState("");
   const [confirmPolicyOwner, setConfirmPolicyOwner] = useState("");
   const [treasury, setTreasury] = useState("");
@@ -87,6 +136,11 @@ export function AdminRoleManagement() {
   const [usdcEnabled, setUsdcEnabled] = useState(true);
 
   const current = config.data as unknown as PricingConfig | undefined;
+  useEffect(() => {
+    if (discountSignerState.data) {
+      setDiscountSigner(discountSignerState.data);
+    }
+  }, [discountSignerState.data]);
   useEffect(() => {
     if (!current) return;
     setTreasury(current.treasury);
@@ -105,6 +159,15 @@ export function AdminRoleManagement() {
   useEffect(() => {
     if (!receipt.isSuccess) return;
     void registryOwner.refetch();
+    if (unifiedProtocolEnabled) {
+      void registryPendingOwner.refetch();
+      void registrarOwner.refetch();
+      void registrarPendingOwner.refetch();
+      void discountSignerState.refetch();
+      void pendingDiscountSigner.refetch();
+      void discountConfigurationPending.refetch();
+      void discountActivationTime.refetch();
+    }
     void policyOwner.refetch();
     void config.refetch();
     void version.refetch();
@@ -120,6 +183,10 @@ export function AdminRoleManagement() {
     !!account &&
     !!policyOwner.data &&
     getAddress(account) === getAddress(policyOwner.data);
+  const isRegistrarOwner =
+    !!account &&
+    !!registrarOwner.data &&
+    getAddress(account) === getAddress(registrarOwner.data);
 
   const policyFieldsValid =
     !!current &&
@@ -134,6 +201,14 @@ export function AdminRoleManagement() {
     if (!activationTime.data || activationTime.data === 0n) return "";
     return new Date(Number(activationTime.data) * 1_000).toLocaleString();
   }, [activationTime.data]);
+  const discountActivationDate = useMemo(() => {
+    if (!discountActivationTime.data || discountActivationTime.data === 0n) {
+      return "";
+    }
+    return new Date(
+      Number(discountActivationTime.data) * 1_000,
+    ).toLocaleString();
+  }, [discountActivationTime.data]);
 
   function proposeOperationalConfig() {
     if (!current || !policyFieldsValid || !isPolicyOwner) return;
@@ -152,20 +227,53 @@ export function AdminRoleManagement() {
     });
   }
 
-  function transferOwnership(target: "registry" | "policy") {
+  function transferOwnership(target: "registry" | "registrar" | "policy") {
     const isRegistry = target === "registry";
-    const next = isRegistry ? newRegistryOwner : newPolicyOwner;
-    const confirmation = isRegistry ? confirmRegistryOwner : confirmPolicyOwner;
+    const isRegistrar = target === "registrar";
+    const next = isRegistry
+      ? newRegistryOwner
+      : isRegistrar
+        ? newRegistrarOwner
+        : newPolicyOwner;
+    const confirmation = isRegistry
+      ? confirmRegistryOwner
+      : isRegistrar
+        ? confirmRegistrarOwner
+        : confirmPolicyOwner;
     if (
       !isAddress(next) ||
       next === zeroAddress ||
       confirmation.trim().toLowerCase() !== next.trim().toLowerCase()
     ) return;
     write.writeContract({
-      address: isRegistry ? addresses.registry : adminPricingPolicyAddress,
-      abi: ownableAbi,
+      address: isRegistry
+        ? addresses.registry
+        : isRegistrar
+          ? activeRegistrarAddress
+          : adminPricingPolicyAddress,
+      abi: isRegistry || isRegistrar ? ownable2StepAbi : ownableAbi,
       functionName: "transferOwnership",
       args: [getAddress(next)],
+    });
+  }
+
+  function acceptOwnership(target: "registry" | "registrar") {
+    write.writeContract({
+      address: target === "registry" ? addresses.registry : activeRegistrarAddress,
+      abi: ownable2StepAbi,
+      functionName: "acceptOwnership",
+    });
+  }
+
+  function proposeDiscountSigner() {
+    if (!isRegistrarOwner || !isAddress(discountSigner) || discountSigner === zeroAddress) {
+      return;
+    }
+    write.writeContract({
+      address: activeRegistrarAddress,
+      abi: unifiedDiscountAdminAbi,
+      functionName: "proposeConfiguration",
+      args: [getAddress(discountSigner), activeRegistrarAddress],
     });
   }
 
@@ -194,8 +302,39 @@ export function AdminRoleManagement() {
           onNextValue={setNewRegistryOwner}
           onConfirmation={setConfirmRegistryOwner}
           onTransfer={() => transferOwnership("registry")}
+          twoStep={unifiedProtocolEnabled}
+          pendingOwner={registryPendingOwner.data}
+          canAccept={
+            !!account &&
+            !!registryPendingOwner.data &&
+            registryPendingOwner.data !== zeroAddress &&
+            getAddress(account) === getAddress(registryPendingOwner.data)
+          }
+          onAccept={() => acceptOwnership("registry")}
           pending={write.isPending || receipt.isLoading}
         />
+        {unifiedProtocolEnabled ? (
+          <RoleCard
+            title="Unified-registrar owner"
+            value={registrarOwner.data}
+            canManage={isRegistrarOwner}
+            nextValue={newRegistrarOwner}
+            confirmation={confirmRegistrarOwner}
+            onNextValue={setNewRegistrarOwner}
+            onConfirmation={setConfirmRegistrarOwner}
+            onTransfer={() => transferOwnership("registrar")}
+            twoStep
+            pendingOwner={registrarPendingOwner.data}
+            canAccept={
+              !!account &&
+              !!registrarPendingOwner.data &&
+              registrarPendingOwner.data !== zeroAddress &&
+              getAddress(account) === getAddress(registrarPendingOwner.data)
+            }
+            onAccept={() => acceptOwnership("registrar")}
+            pending={write.isPending || receipt.isLoading}
+          />
+        ) : null}
         {policyConfigured ? (
           <RoleCard
             title="Pricing-policy owner"
@@ -218,6 +357,87 @@ export function AdminRoleManagement() {
           </div>
         )}
       </div>
+
+      {unifiedProtocolEnabled ? (
+        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="font-semibold text-slate-950">Discount authorization</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Rotate the wallet permitted to issue exact-name discount grants. The
+            new signer becomes active only after the 48-hour delay.
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <AddressField
+              label="Authorization signer"
+              value={discountSigner}
+              onChange={setDiscountSigner}
+            />
+            <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">
+              <p className="font-semibold text-slate-900">Pending signer</p>
+              <p className="mt-1 break-all font-mono">
+                {discountConfigurationPending.data
+                  ? pendingDiscountSigner.data || "Loading…"
+                  : "No pending rotation"}
+              </p>
+              {discountConfigurationPending.data ? (
+                <p className="mt-2 text-amber-700">
+                  Earliest activation: {discountActivationDate || "loading…"}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={
+                !isRegistrarOwner ||
+                !isAddress(discountSigner) ||
+                discountSigner === zeroAddress ||
+                Boolean(discountConfigurationPending.data) ||
+                write.isPending
+              }
+              onClick={proposeDiscountSigner}
+            >
+              Propose signer rotation
+            </button>
+            <button
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              disabled={
+                !isRegistrarOwner ||
+                !discountConfigurationPending.data ||
+                write.isPending
+              }
+              onClick={() =>
+                write.writeContract({
+                  address: activeRegistrarAddress,
+                  abi: unifiedDiscountAdminAbi,
+                  functionName: "cancelPendingConfiguration",
+                })
+              }
+            >
+              Cancel signer rotation
+            </button>
+            <button
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              disabled={
+                !discountConfigurationPending.data ||
+                !discountActivationTime.data ||
+                BigInt(Math.floor(Date.now() / 1_000)) <
+                  discountActivationTime.data ||
+                write.isPending
+              }
+              onClick={() =>
+                write.writeContract({
+                  address: activeRegistrarAddress,
+                  abi: unifiedDiscountAdminAbi,
+                  functionName: "activatePendingConfiguration",
+                })
+              }
+            >
+              Activate signer rotation
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {policyConfigured && current ? (
         <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -344,6 +564,10 @@ function RoleCard(props: {
   onNextValue: (value: string) => void;
   onConfirmation: (value: string) => void;
   onTransfer: () => void;
+  twoStep?: boolean;
+  pendingOwner?: Address;
+  canAccept?: boolean;
+  onAccept?: () => void;
   pending: boolean;
 }) {
   const valid =
@@ -358,8 +582,25 @@ function RoleCard(props: {
         {props.value || "Loading…"}
       </p>
       <p className="mt-3 text-xs text-red-700">
-        Ownership transfer is immediate. Enter the new address twice and verify it carefully.
+        {props.twoStep
+          ? "The destination wallet must accept before ownership changes. Enter the address twice and verify it carefully."
+          : "Ownership transfer is immediate. Enter the new address twice and verify it carefully."}
       </p>
+      {props.twoStep && props.pendingOwner && props.pendingOwner !== zeroAddress ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <p className="font-semibold">Pending owner</p>
+          <p className="mt-1 break-all font-mono">{props.pendingOwner}</p>
+          {props.canAccept && props.onAccept ? (
+            <button
+              className="mt-3 rounded-lg border border-amber-400 bg-white px-4 py-2 font-semibold disabled:opacity-50"
+              disabled={props.pending}
+              onClick={props.onAccept}
+            >
+              Accept ownership
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="mt-3 grid gap-2">
         <input
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs"
