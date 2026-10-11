@@ -724,6 +724,18 @@ export const reverseResolverAbi = [
   }
 ] as const;
 
+// Unified V3 derives the node from the selected name inside the universal
+// resolver. Legacy reverse resolvers still require callers to provide both.
+export const unifiedPrimaryNameWriteAbi = [
+  {
+    type: "function",
+    name: "setPrimaryName",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "name", type: "string" }],
+    outputs: []
+  }
+] as const;
+
 
 export const ownableAbi = [
   {

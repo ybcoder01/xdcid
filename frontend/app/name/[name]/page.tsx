@@ -7,7 +7,7 @@ import { useAccount, useReadContract, useReadContracts, useWriteContract } from 
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
 import { RegistryV2MigrationAction } from "../../../components/RegistryV2MigrationAction";
 import { SignedRenewalControls } from "../../../components/SignedRenewalControls";
-import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
+import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, unifiedPrimaryNameWriteAbi, unifiedProtocolEnabled, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
 import { isNonZeroAddress } from "../../../lib/addressValidation";
 import { parseXnsName } from "../../../lib/names";
 
@@ -113,6 +113,15 @@ export default function NamePage() {
 
   function setPrimaryName() {
     if (!node) return;
+    if (unifiedProtocolEnabled) {
+      writeContract({
+        address: addresses.verifiedReverseResolver,
+        abi: unifiedPrimaryNameWriteAbi,
+        functionName: "setPrimaryName",
+        args: [name]
+      });
+      return;
+    }
     writeContract({
       address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,

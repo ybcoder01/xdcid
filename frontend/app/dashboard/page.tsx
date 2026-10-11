@@ -24,6 +24,8 @@ import {
   registrarAbi,
   reverseResolverAbi,
   signedRegistrarEnabled,
+  unifiedPrimaryNameWriteAbi,
+  unifiedProtocolEnabled,
   verifiedReverseResolverAvailable
 } from "../../config/contracts";
 import { PRIMARY_NAME_CHANGED_EVENT } from "../../components/WalletButton";
@@ -64,6 +66,12 @@ type OwnedSubdomain = {
 type OwnedSubdomainsResponse = {
   data?: { subdomains: OwnedSubdomain[] };
   error?: { message?: string };
+};
+
+type PrimaryCandidate = {
+  name: string;
+  node: Hex;
+  migrationRequired: boolean;
 };
 
 function SubdomainRow({
@@ -327,26 +335,38 @@ export default function Dashboard() {
       const body = (await response.json()) as OwnedNamesResponse;
       const subdomainBody =
         (await subdomainsResponse.json()) as OwnedSubdomainsResponse;
+      const fetchedNames = response.ok && body.data ? body.data.names : [];
+      const fetchedSubdomains =
+        subdomainsResponse.ok && subdomainBody.data
+          ? subdomainBody.data.subdomains
+          : [];
       if (response.ok && body.data) {
-        body.data.names.forEach((record) => saveName(address, record.name));
-        setNames(body.data.names);
+        fetchedNames.forEach((record) => saveName(address, record.name));
+        setNames(fetchedNames);
         setPrimaryName(body.data.primaryName);
-        setSelectedPrimary(
-          body.data.primaryName || body.data.names[0]?.name || "",
-        );
       } else {
         setLookupError(body.error?.message || "Unable to load wallet names");
       }
       if (subdomainsResponse.ok && subdomainBody.data) {
-        subdomainBody.data.subdomains.forEach((record) =>
+        fetchedSubdomains.forEach((record) =>
           saveSubdomain(address, record.name),
         );
-        setSubdomains(subdomainBody.data.subdomains);
+        setSubdomains(fetchedSubdomains);
       } else {
         setSubdomainLookupError(
           subdomainBody.error?.message || "Unable to load wallet subdomains",
         );
       }
+      const candidateNames = new Set([
+        ...fetchedNames.map((record) => record.name),
+        ...fetchedSubdomains.map((record) => record.name),
+      ]);
+      const preferredPrimary = body.data?.primaryName;
+      setSelectedPrimary(
+        preferredPrimary && candidateNames.has(preferredPrimary)
+          ? preferredPrimary
+          : fetchedNames[0]?.name || fetchedSubdomains[0]?.name || "",
+      );
     } catch (error) {
       if (controller.signal.aborted) return;
       setLookupError(
@@ -399,7 +419,23 @@ export default function Dashboard() {
     }
   }, [address, primaryHash, primaryReceipt.isSuccess, submittedPrimary]);
 
-  const selectedRecord = names.find(
+  const primaryCandidates = useMemo<PrimaryCandidate[]>(() => {
+    const candidates = new Map<string, PrimaryCandidate>();
+    names.forEach((record) => candidates.set(record.node.toLowerCase(), {
+      name: record.name,
+      node: record.node,
+      migrationRequired: record.migrationRequired,
+    }));
+    subdomains.forEach((record) => candidates.set(record.node.toLowerCase(), {
+      name: record.name,
+      node: record.node,
+      migrationRequired: false,
+    }));
+    return [...candidates.values()].sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+  }, [names, subdomains]);
+  const selectedRecord = primaryCandidates.find(
     (record) => record.name === selectedPrimary
   );
   const { subdomainsByParent, externalParentGroups } = useMemo(() => {
@@ -425,6 +461,15 @@ export default function Dashboard() {
 
     setConfirmedPrimary(null);
     setSubmittedPrimary(selectedRecord.name);
+    if (unifiedProtocolEnabled) {
+      writeContract({
+        address: addresses.verifiedReverseResolver,
+        abi: unifiedPrimaryNameWriteAbi,
+        functionName: "setPrimaryName",
+        args: [selectedRecord.name]
+      });
+      return;
+    }
     writeContract({
       address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
@@ -458,7 +503,7 @@ export default function Dashboard() {
         )}
       </section>
 
-      {isConnected && names.length > 0 && (
+      {isConnected && primaryCandidates.length > 0 && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
             Primary XDCID
@@ -489,7 +534,7 @@ export default function Dashboard() {
                 resetPrimaryWrite();
               }}
             >
-              {names.map((record) => (
+              {primaryCandidates.map((record) => (
                 <option key={record.node} value={record.name}>
                   {record.name}
                 </option>
