@@ -47,6 +47,10 @@ const APOTHEM_REGISTRAR_HISTORY = [
 // 86,906,032. Starting just before that deployment keeps Apothem discovery
 // deterministic without relying on browser-local registration history.
 const APOTHEM_REGISTRAR_V2_START_BLOCK = 86_900_000n;
+// Unified V3 was redeployed after the Apothem rollback, below the legacy V2
+// index floor. Keeping a distinct floor prevents a rollback from silently
+// making every new Unified registration undiscoverable.
+const APOTHEM_UNIFIED_V3_START_BLOCK = 83_840_000n;
 const APOTHEM_LOG_BLOCK_RANGE = 1_000_000n;
 const DEFAULT_XDCSCAN_API_URL = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
@@ -403,7 +407,7 @@ async function loadApothemCatalog() {
   if (unifiedProtocolEnabled) {
     const registrar = getAddress(activeRegistrarAddress);
     for (
-      let fromBlock = APOTHEM_REGISTRAR_V2_START_BLOCK;
+      let fromBlock = APOTHEM_UNIFIED_V3_START_BLOCK;
       fromBlock <= latestBlock;
       fromBlock += APOTHEM_LOG_BLOCK_RANGE
     ) {

@@ -29,6 +29,7 @@ import { xdcClient } from "./xdcClient";
 
 const MAINNET_START_BLOCK = 107_000_000n;
 const APOTHEM_START_BLOCK = 86_900_000n;
+const APOTHEM_UNIFIED_V3_START_BLOCK = 83_840_000n;
 // Public XDC RPC providers cap eth_getLogs ranges at 30,000 blocks. Staying
 // below that limit keeps the index portable across the configured fallbacks.
 const LOG_BLOCK_RANGE = 25_000n;
@@ -131,8 +132,11 @@ async function loadCatalog() {
       }
 
       if (unifiedProtocolEnabled) {
+        const unifiedStartBlock = isTestnetEnvironment
+          ? APOTHEM_UNIFIED_V3_START_BLOCK
+          : MAINNET_START_BLOCK;
         for (
-          let fromBlock = startBlock;
+          let fromBlock = unifiedStartBlock;
           fromBlock <= latestBlock;
           fromBlock += LOG_BLOCK_RANGE
         ) {
