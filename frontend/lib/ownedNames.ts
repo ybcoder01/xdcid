@@ -15,16 +15,22 @@ import {
 import { XDC_MAINNET_DEPLOYMENT } from "../../sdk/src/deployment/deployments";
 import {
   activeRegistryAddress,
+  activeRegistrarAddress,
   addresses,
   apothemRegistration,
   registryAbi,
   reverseResolverAbi,
+  unifiedProtocolEnabled,
   verifiedReverseResolverAvailable,
   xdcMainnet
 } from "../config/contracts";
 import { ApiInputError, ApiServiceError } from "./apiResponse";
-import { parseXnsName } from "./names";
+import { parseResolvableXnsName, parseXnsName } from "./names";
 import { withShortCache } from "./shortCache";
+import {
+  decodeUnifiedRegisteredName,
+  unifiedRegistrationPaidEvent,
+} from "./unifiedRegistrationIndex";
 import { xdcClient } from "./xdcClient";
 
 // The registry is intentionally non-enumerable, so owned-name discovery must
@@ -337,10 +343,35 @@ function registeredName(
   }
 }
 
+function unifiedTopLevelName(
+  transaction: ExplorerTransaction,
+  registrar: Address,
+): string | null {
+  if (
+    transaction.to?.toLowerCase() !== registrar.toLowerCase() ||
+    transaction.isError === "1" ||
+    transaction.txreceipt_status === "0" ||
+    !transaction.input
+  ) {
+    return null;
+  }
+
+  const input = (
+    transaction.input.startsWith("0x")
+      ? transaction.input
+      : "0x" + transaction.input
+  ) as Hex;
+  const decoded = decodeUnifiedRegisteredName(input);
+  return decoded?.kind === "top-level" ? decoded.name : null;
+}
+
 async function loadApothemCatalog() {
   const registrars = registrarHistory();
   const latestBlock = await apothemClient.getBlockNumber();
-  const transactionRegistrars = new Map<Hex, Address>();
+  const transactionSources = new Map<
+    Hex,
+    { registrar: Address; generation: "legacy" | "unified" }
+  >();
 
   for (const registrar of registrars) {
     for (
@@ -360,28 +391,64 @@ async function loadApothemCatalog() {
       });
       logs.forEach((log) => {
         if (log.transactionHash) {
-          transactionRegistrars.set(log.transactionHash, registrar);
+          transactionSources.set(log.transactionHash, {
+            registrar,
+            generation: "legacy",
+          });
+        }
+      });
+    }
+  }
+
+  if (unifiedProtocolEnabled) {
+    const registrar = getAddress(activeRegistrarAddress);
+    for (
+      let fromBlock = APOTHEM_REGISTRAR_V2_START_BLOCK;
+      fromBlock <= latestBlock;
+      fromBlock += APOTHEM_LOG_BLOCK_RANGE
+    ) {
+      const toBlock =
+        fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n > latestBlock
+          ? latestBlock
+          : fromBlock + APOTHEM_LOG_BLOCK_RANGE - 1n;
+      const logs = await apothemClient.getLogs({
+        address: registrar,
+        event: unifiedRegistrationPaidEvent,
+        fromBlock,
+        toBlock,
+      });
+      logs.forEach((log) => {
+        if (log.transactionHash) {
+          transactionSources.set(log.transactionHash, {
+            registrar,
+            generation: "unified",
+          });
         }
       });
     }
   }
 
   const names = new Set<string>();
-  const hashes = Array.from(transactionRegistrars.keys());
+  const hashes = Array.from(transactionSources.keys());
   for (let start = 0; start < hashes.length; start += READ_BATCH_SIZE) {
-    const transactions = await Promise.all(
+    const fetchedTransactions = await Promise.all(
       hashes.slice(start, start + READ_BATCH_SIZE).map((hash) =>
         apothemClient.getTransaction({ hash })
       )
     );
-    transactions.forEach((transaction, index) => {
+    fetchedTransactions.forEach((transaction, index) => {
       const hash = hashes[start + index];
-      const registrar = transactionRegistrars.get(hash);
-      if (!registrar) return;
-      const name = registeredName(
-        { to: transaction.to ?? undefined, input: transaction.input },
-        registrar
-      );
+      const source = transactionSources.get(hash);
+      if (!source || transaction.to?.toLowerCase() !== source.registrar.toLowerCase()) return;
+      const name = source.generation === "unified"
+        ? unifiedTopLevelName(
+          { to: transaction.to ?? undefined, input: transaction.input },
+          source.registrar,
+        )
+        : registeredName(
+          { to: transaction.to ?? undefined, input: transaction.input },
+          source.registrar,
+        );
       if (name) names.add(name);
     });
   }
@@ -433,7 +500,12 @@ async function loadCatalog() {
 
         successfulLookups += 1;
         result.value.forEach((transaction) => {
-          const name = registeredName(transaction, registrars[index]);
+          const registrar = registrars[index];
+          const name =
+            unifiedProtocolEnabled &&
+            registrar.toLowerCase() === activeRegistrarAddress.toLowerCase()
+              ? unifiedTopLevelName(transaction, registrar)
+              : registeredName(transaction, registrar);
           if (name) names.add(name);
         });
       });
@@ -569,12 +641,30 @@ export async function getOwnedNamesData(
           functionName: "primaryNames",
           args: [address]
         });
-        const parsedPrimary = parseXnsName(storedPrimary);
-        primaryName =
-          parsedPrimary.isValid &&
-          owned.some((record) => record.name === parsedPrimary.name)
-            ? parsedPrimary.name
-            : null;
+        const parsedPrimary = parseResolvableXnsName(storedPrimary);
+        if (parsedPrimary.isValid) {
+          const primaryNode = keccak256(stringToHex(parsedPrimary.name));
+          const [primaryOwner, primaryExpiry] = await Promise.all([
+            activeClient.readContract({
+              address: registryAddress,
+              abi: registryAbi,
+              functionName: "ownerOf",
+              args: [primaryNode],
+            }),
+            activeClient.readContract({
+              address: registryAddress,
+              abi: registryAbi,
+              functionName: "expiryOf",
+              args: [primaryNode],
+            }),
+          ]);
+          if (
+            primaryOwner.toLowerCase() === address.toLowerCase() &&
+            primaryExpiry > now
+          ) {
+            primaryName = parsedPrimary.name;
+          }
+        }
       }
 
       return {

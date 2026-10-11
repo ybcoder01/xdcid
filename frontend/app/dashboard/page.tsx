@@ -554,7 +554,11 @@ export default function Dashboard() {
             {subdomainLookupError}
           </p>
         )}
-        {isConnected && !isLoading && !lookupError && names.length === 0 && (
+        {isConnected &&
+          !isLoading &&
+          !lookupError &&
+          names.length === 0 &&
+          subdomains.length === 0 && (
           <p className="rounded-md border border-black/10 bg-white p-5 text-sm shadow-sm">
             No active XDCID names are owned by this wallet.
           </p>
