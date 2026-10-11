@@ -21,9 +21,12 @@ const [chainId, policy, registry, config, response] = await Promise.all([
 if (chainId !== manifest.chainId) failures.push(`RPC chain is ${chainId}, expected ${manifest.chainId}`);
 if (getAddress(policy) !== getAddress(manifest.pricingPolicy)) failures.push("Registrar pricing policy binding drifted");
 if (getAddress(registry) !== getAddress(manifest.registry)) failures.push("Registrar registry binding drifted");
-if (expectReady && getAddress(config.quoteSigner) !== getAddress(manifest.quoteSigner)) failures.push("Active quote signer drifted");
-if (expectReady && getAddress(config.treasury) !== getAddress(manifest.treasury)) failures.push("Active treasury drifted");
-if (expectReady && getAddress(config.usdcToken) !== getAddress(manifest.usdc)) failures.push("Active USDC token drifted");
+const activeQuoteSigner = config.quoteSigner ?? config[11];
+const activeUsdc = config.usdcToken ?? config[12];
+const activeTreasury = config.treasury ?? config[13];
+if (expectReady && getAddress(activeQuoteSigner) !== getAddress(manifest.quoteSigner)) failures.push("Active quote signer drifted");
+if (expectReady && getAddress(activeTreasury) !== getAddress(manifest.treasury)) failures.push("Active treasury drifted");
+if (expectReady && getAddress(activeUsdc) !== getAddress(manifest.usdc)) failures.push("Active USDC token drifted");
 const payload = await response.json();
 if (!response.ok) failures.push(`Readiness endpoint returned HTTP ${response.status}`);
 if (payload?.data?.chainId !== manifest.chainId) failures.push("Readiness endpoint chain ID drifted");
