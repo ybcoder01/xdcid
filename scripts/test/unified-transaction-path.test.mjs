@@ -16,6 +16,12 @@ test("unified quotes and writes are generation gated while legacy remains availa
 
   assert.match(topQuote, /unifiedTopLevelQuote/);
   assert.match(childQuote, /unifiedSubdomainQuote/);
+  assert.match(childQuote, /const subdomainPricingProduct = 2/);
+  assert.match(childQuote, /args: \[subdomainPricingProduct,/);
+  assert.doesNotMatch(
+    childQuote,
+    /args: \[input\.action === "registration" \? 2 : 3,/,
+  );
   assert.match(topQuote, /protocolGeneration: unified \? "unified-v3" : "legacy"/);
   assert.match(childQuote, /protocolGeneration: unified \? "unified-v3" : "legacy"/);
   assert.match(registration, /functionName: "registerWithDiscount"/);
