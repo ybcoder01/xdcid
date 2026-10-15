@@ -162,6 +162,8 @@ function NameRow({
     args: [record.name],
     query: { enabled: !(isTestnetDashboard || signedRegistrarEnabled) }
   });
+  const createSubdomainUrl =
+    "/subdomains?" + new URLSearchParams({ parent: record.name }).toString();
 
   return (
     <div className="grid gap-2">
@@ -193,6 +195,12 @@ function NameRow({
             href={"/name/" + record.name}
           >
             Manage records
+          </Link>
+          <Link
+            className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+            href={createSubdomainUrl}
+          >
+            Create subdomain
           </Link>
           {isTestnetDashboard || signedRegistrarEnabled ? (
             <SignedRenewalControls
@@ -237,22 +245,49 @@ function NameRow({
   );
 }
 
-function ParentSubdomainGroup({
-  onRenewed,
-  parentName,
-  records,
+function AssignedSubdomainRow({
+  primary,
+  record,
 }: {
-  onRenewed: () => void | Promise<void>;
-  parentName: string;
-  records: OwnedSubdomain[];
+  primary: boolean;
+  record: OwnedSubdomain;
 }) {
+  const managementUrl =
+    "/subdomains/manage?" +
+    new URLSearchParams({
+      parent: record.parentName,
+      label: record.label,
+    }).toString();
+
   return (
-    <div className="grid gap-2">
-      <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm">
-        <p className="text-lg font-semibold text-slate-950">{parentName}</p>
-        <p className="text-sm text-neutral-600">Parent XDCID</p>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            className="text-lg font-semibold text-slate-950 hover:text-teal-700"
+            href={managementUrl}
+          >
+            {record.name}
+          </Link>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+            Subdomain of {record.parentName}
+          </span>
+          {primary ? (
+            <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
+              Primary ID
+            </span>
+          ) : null}
+        </div>
+        <p className="text-sm text-neutral-600">
+          Expires: {new Date(record.expiry.iso).toLocaleDateString()}
+        </p>
       </div>
-      <NestedSubdomains onRenewed={onRenewed} records={records} />
+      <Link
+        className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+        href={managementUrl}
+      >
+        Manage records
+      </Link>
     </div>
   );
 }
@@ -438,7 +473,7 @@ export default function Dashboard() {
   const selectedRecord = primaryCandidates.find(
     (record) => record.name === selectedPrimary
   );
-  const { subdomainsByParent, externalParentGroups } = useMemo(() => {
+  const { subdomainsByParent, assignedSubdomains } = useMemo(() => {
     const grouped = new Map<string, OwnedSubdomain[]>();
     const ownedParentNames = new Set(names.map((record) => record.name));
 
@@ -450,8 +485,8 @@ export default function Dashboard() {
 
     return {
       subdomainsByParent: grouped,
-      externalParentGroups: [...grouped.entries()].filter(
-        ([parentName]) => !ownedParentNames.has(parentName),
+      assignedSubdomains: subdomains.filter(
+        (record) => !ownedParentNames.has(record.parentName),
       ),
     };
   }, [names, subdomains]);
@@ -629,12 +664,11 @@ export default function Dashboard() {
             subdomains={subdomainsByParent.get(record.name) ?? []}
           />
         ))}
-        {externalParentGroups.map(([parentName, records]) => (
-          <ParentSubdomainGroup
-            key={parentName}
-            onRenewed={loadOwnedNames}
-            parentName={parentName}
-            records={records}
+        {assignedSubdomains.map((record) => (
+          <AssignedSubdomainRow
+            key={record.node}
+            primary={record.name === primaryName}
+            record={record}
           />
         ))}
       </div>

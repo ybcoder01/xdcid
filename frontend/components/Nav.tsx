@@ -23,7 +23,6 @@ const navigationItems = [
   { href: "/send", label: "Send" },
   { href: "/pay", label: "Pay Links" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/subdomains", label: "Subdomains" },
   { href: "/history", label: "History" },
   { href: "/archive", label: "Archive" },
   { href: "/developers", label: "Developers" },
