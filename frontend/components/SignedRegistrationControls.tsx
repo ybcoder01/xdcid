@@ -385,13 +385,13 @@ export function SignedRegistrationControls(props: {
       {registrationHash && expectedChainId === 50 && !unifiedProtocolEnabled ? (
         <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50 p-4">
           <p className="text-sm font-semibold text-slate-950">
-            One step remaining: set your Primary ID
+            Optional: choose your primary display name
           </p>
           <p className="mt-1 text-xs leading-5 text-neutral-700">
-            Set {props.name} as your Primary ID so supported wallets and apps
-            can identify this address by name. Primary selection enables
-            address-to-name reverse resolution; your name-to-address resolution
-            works independently.
+            {props.name} already resolves to its owner wallet. Set it as your
+            primary display name only if you want supported wallets and apps to
+            show it when they look up this address. Your other names will
+            continue working.
           </p>
           <Link
             className="mt-3 inline-flex rounded-lg bg-teal-700 px-4 py-2 text-xs font-semibold text-white hover:bg-teal-800"

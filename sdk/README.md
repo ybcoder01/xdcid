@@ -17,7 +17,7 @@ until the next owner-bound mainnet stack is verified and approved.
 
 ## Requirements
 
-- Node.js 18+ or a modern browser with `fetch`
+- Node.js 22.23.4+ on release line 22, Node.js 24.22.1+ on release line 24 (recommended), or a modern browser with `fetch`
 - `viem` 2.55.1 or newer
 - XDC mainnet, chain ID `50`, for direct contract reads and writes
 

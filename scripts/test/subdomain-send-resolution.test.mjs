@@ -27,13 +27,20 @@ test("payment names accept top-level names and one subdomain level", () => {
   assert.equal(parseResolvableXnsName("-bad.xdcid").isValid, false);
 });
 
-test("the Send page resolves subdomains through the subdomain registrar", async () => {
+test("the Send page routes subdomain reads through the active protocol generation", async () => {
   const source = await readFile("frontend/app/send/page.tsx", "utf8");
 
   assert.match(source, /parseResolvableXnsName/);
   assert.match(source, /address: activeSubdomainRegistrarAddress/);
+  assert.match(source, /address: unifiedSubdomainRegistryAddress/);
+  assert.match(source, /address: addresses\.multichainResolver/);
   assert.match(source, /functionName: "records"/);
+  assert.match(source, /functionName: "ownerOf"/);
   assert.match(source, /functionName: "addressOf"/);
+  assert.match(source, /functionName: "addressFor"/);
+  assert.match(source, /!unifiedProtocolEnabled/);
+  assert.match(source, /unifiedProtocolEnabled/);
+  assert.match(source, /resolvedSubdomainAddress/);
   assert.match(source, /source: "subdomain"/);
 });
 

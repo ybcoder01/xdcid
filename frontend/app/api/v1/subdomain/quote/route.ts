@@ -19,6 +19,7 @@ import {
   ApiServiceError,
 } from "../../../../../lib/apiResponse";
 import { getCoinGeckoXdcPrice } from "../../../../../lib/coingeckoXdcPrice";
+import { SUBDOMAIN_PRICING_PRODUCT } from "../../../../../lib/pricingProducts";
 import {
   calculateBufferedXdcWeiForPolicy,
   safeQuoteIssuedAt,
@@ -288,15 +289,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // PricingPolicyV2 has one Subdomain price for both registration and
-    // renewal. The unified registrar still uses distinct signed product IDs
-    // (2 and 3), but product 3 in the pricing policy means PremiumSubdomain.
-    const subdomainPricingProduct = 2;
     const usdMicros = await client.readContract({
       address: pricingPolicy,
       abi: policyAbi,
       functionName: "priceUsdMicros",
-      args: [subdomainPricingProduct, BigInt(input.label.length), BigInt(input.termYears)],
+      args: [SUBDOMAIN_PRICING_PRODUCT, BigInt(input.label.length), BigInt(input.termYears)],
     });
     let paymentToken: Address;
     let paymentAmount: bigint;

@@ -23,7 +23,10 @@ import {
   addresses,
   multichainResolverAbi,
   registryAbi,
-  subdomainRegistrarAbi
+  subdomainRegistrarAbi,
+  unifiedProtocolEnabled,
+  unifiedRegistryReadAbi,
+  unifiedSubdomainRegistryAddress
 } from "../../config/contracts";
 import {
   getPaymentNetwork,
@@ -305,13 +308,31 @@ export default function SendPage() {
     query: { enabled: !!node && !isSubdomain }
   });
 
-  const subdomainRecord = useReadContract({
+  const legacySubdomainRecord = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: activeSubdomainRegistrarAddress,
     abi: subdomainRegistrarAbi,
     functionName: "records",
     args: node && isSubdomain ? [node] : undefined,
-    query: { enabled: !!node && isSubdomain }
+    query: { enabled: !!node && isSubdomain && !unifiedProtocolEnabled }
+  });
+
+  const unifiedSubdomainRecord = useReadContract({
+    chainId: XDC_CHAIN_ID,
+    address: unifiedSubdomainRegistryAddress,
+    abi: unifiedRegistryReadAbi,
+    functionName: "records",
+    args: node && isSubdomain ? [node] : undefined,
+    query: { enabled: !!node && isSubdomain && unifiedProtocolEnabled }
+  });
+
+  const unifiedSubdomainOwner = useReadContract({
+    chainId: XDC_CHAIN_ID,
+    address: unifiedSubdomainRegistryAddress,
+    abi: unifiedRegistryReadAbi,
+    functionName: "ownerOf",
+    args: node && isSubdomain ? [node] : undefined,
+    query: { enabled: !!node && isSubdomain && unifiedProtocolEnabled }
   });
 
   const destinationRecordChainId =
@@ -334,7 +355,7 @@ export default function SendPage() {
     }
   });
 
-  const subdomainAddress = useReadContract({
+  const legacySubdomainAddress = useReadContract({
     chainId: XDC_CHAIN_ID,
     address: activeSubdomainRegistrarAddress,
     abi: subdomainRegistrarAbi,
@@ -343,12 +364,41 @@ export default function SendPage() {
       ? [node, BigInt(destinationRecordChainId)]
       : undefined,
     query: {
-      enabled: !!node && isSubdomain && destinationRecordChainId !== null
+      enabled:
+        !!node &&
+        isSubdomain &&
+        !unifiedProtocolEnabled &&
+        destinationRecordChainId !== null
     }
   });
 
-  const subdomainOwner = subdomainRecord.data?.[0];
-  const subdomainExpiry = subdomainRecord.data?.[2];
+  const unifiedSubdomainAddress = useReadContract({
+    chainId: XDC_CHAIN_ID,
+    address: addresses.multichainResolver,
+    abi: multichainResolverAbi,
+    functionName: "addressFor",
+    args: node && isSubdomain && destinationRecordChainId
+      ? [node, BigInt(destinationRecordChainId)]
+      : undefined,
+    query: {
+      enabled:
+        !!node &&
+        isSubdomain &&
+        unifiedProtocolEnabled &&
+        multichainResolverAvailable &&
+        destinationRecordChainId !== null
+    }
+  });
+
+  const subdomainOwner = unifiedProtocolEnabled
+    ? unifiedSubdomainOwner.data
+    : legacySubdomainRecord.data?.[0];
+  const subdomainExpiry = unifiedProtocolEnabled
+    ? unifiedSubdomainRecord.data?.expiry
+    : legacySubdomainRecord.data?.[2];
+  const resolvedSubdomainAddress = unifiedProtocolEnabled
+    ? unifiedSubdomainAddress.data
+    : legacySubdomainAddress.data;
   const activeExpiry = isSubdomain ? subdomainExpiry : expiry.data;
   const activeOwner = isSubdomain ? subdomainOwner : owner.data;
   const expired = activeExpiry
@@ -361,9 +411,11 @@ export default function SendPage() {
     () =>
       directRecipient
         ? { address: directRecipient, source: "direct-wallet" as const }
-        : isSubdomain && typeof subdomainAddress.data === "string" &&
-            isAddress(subdomainAddress.data) && subdomainAddress.data !== zeroAddress
-          ? { address: getAddress(subdomainAddress.data), source: "subdomain" as const }
+        : isSubdomain &&
+            typeof resolvedSubdomainAddress === "string" &&
+            isAddress(resolvedSubdomainAddress) &&
+            resolvedSubdomainAddress !== zeroAddress
+          ? { address: getAddress(resolvedSubdomainAddress), source: "subdomain" as const }
         : selectPaymentDestination({
             destinationChainId,
             multichainAddress:
@@ -379,18 +431,32 @@ export default function SendPage() {
       isSubdomain,
       multichainAddress.data,
       owner.data,
-      subdomainAddress.data
+      resolvedSubdomainAddress
     ]
   );
 
   const readsLoading =
     (isSubdomain
-      ? subdomainRecord.isLoading || subdomainAddress.isLoading
-      : owner.isLoading || expiry.isLoading || multichainAddress.isLoading || registry.isChecking);
+      ? unifiedProtocolEnabled
+        ? unifiedSubdomainRecord.isLoading ||
+          unifiedSubdomainOwner.isLoading ||
+          unifiedSubdomainAddress.isLoading
+        : legacySubdomainRecord.isLoading || legacySubdomainAddress.isLoading
+      : owner.isLoading ||
+        expiry.isLoading ||
+        multichainAddress.isLoading ||
+        registry.isChecking);
   const readsFailed =
     (isSubdomain
-      ? subdomainRecord.isError || subdomainAddress.isError
-      : owner.isError || expiry.isError || multichainAddress.isError || registry.isError);
+      ? unifiedProtocolEnabled
+        ? unifiedSubdomainRecord.isError ||
+          unifiedSubdomainOwner.isError ||
+          unifiedSubdomainAddress.isError
+        : legacySubdomainRecord.isError || legacySubdomainAddress.isError
+      : owner.isError ||
+        expiry.isError ||
+        multichainAddress.isError ||
+        registry.isError);
 
   const recipientReady = directRecipient
     ? true

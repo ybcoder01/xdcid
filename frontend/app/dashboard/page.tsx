@@ -178,7 +178,7 @@ function NameRow({
             </Link>
             {record.primary && (
               <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
-                Primary ID
+                Primary display name
               </span>
             )}
           </div>
@@ -274,7 +274,7 @@ function AssignedSubdomainRow({
           </span>
           {primary ? (
             <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
-              Primary ID
+              Primary display name
             </span>
           ) : null}
         </div>
@@ -541,20 +541,20 @@ export default function Dashboard() {
       {isConnected && primaryCandidates.length > 0 && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
-            Primary XDCID
+            Primary display name
           </h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Choose the name that supported wallets and apps should display when
-            they look up this address. This controls address-to-name reverse
-            resolution; name-to-address resolution works independently.
+            Every active name below continues to receive at its configured
+            address, or at its owner wallet by default. Choose the one supported
+            wallets and apps should display when they look up this address.
             Current: {verifiedReverseResolverAvailable ? primaryName || "not selected" : "available after Resolver V2 activation"}.
           </p>
           {!primaryName ? (
             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
               <p className="font-semibold">Finish setting up your XDCID</p>
               <p className="mt-1 text-xs leading-5">
-                Select one of your names below and set it as your Primary ID to
-                enable verified reverse lookup for this wallet.
+                Select one name as your primary display name to enable verified
+                reverse lookup. Your other names will continue working.
               </p>
             </div>
           ) : null}
@@ -591,7 +591,7 @@ export default function Dashboard() {
                 ? "Confirm in wallet"
                 : primaryReceipt.isLoading
                   ? "Saving..."
-                  : "Set primary ID"}
+                  : "Set display name"}
             </button>
           </div>
           {selectedRecord?.migrationRequired ? (
@@ -602,7 +602,7 @@ export default function Dashboard() {
           ) : null}
           {confirmedPrimary && (
             <p className="mt-3 text-sm text-teal-700">
-              {confirmedPrimary} is now the Primary ID on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
+              {confirmedPrimary} is now the primary display name on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
             </p>
           )}
           {primaryWriteError && (
