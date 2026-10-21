@@ -37,6 +37,7 @@ import {
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
 import { parseXnsName } from "../lib/names";
+import { SUBDOMAIN_PRICING_PRODUCT } from "../lib/pricingProducts";
 import { saveSubdomain } from "../config/localSubdomains";
 
 type Currency = "XDC" | "USDC";
@@ -168,7 +169,7 @@ export function SubdomainRegistration({
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
     args: [
-      action === "registration" ? 2 : 3,
+      SUBDOMAIN_PRICING_PRODUCT,
       BigInt(label.length || 1),
       BigInt(termYears),
     ],

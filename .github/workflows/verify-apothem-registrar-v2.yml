@@ -35,6 +35,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Verify secure Node.js runtime
+        run: node scripts/check-node-security-version.mjs
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Select synchronized Apothem RPC

@@ -34,6 +34,7 @@ import {
   unifiedSubdomainRegistryAddress,
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
+import { SUBDOMAIN_PRICING_PRODUCT } from "../lib/pricingProducts";
 import { walletActionErrorMessage } from "../lib/walletErrors";
 
 type Currency = "XDC" | "USDC";
@@ -109,7 +110,7 @@ export function SubdomainRenewalControls({
     chainId: activeXnsChainId,
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
-    args: [unifiedProtocolEnabled ? 3 : 2, BigInt(label.length), BigInt(termYears)],
+    args: [SUBDOMAIN_PRICING_PRODUCT, BigInt(label.length), BigInt(termYears)],
   });
   const allowedTerms = useMemo(() => {
     if (!parentExpiryTimestamp) return TERMS;

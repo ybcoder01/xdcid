@@ -172,9 +172,9 @@ export function MultichainAddressManager({
             Multichain addresses
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-neutral-600">
-            Your primary XDCID uses the owner wallet on all five supported
-            networks by default. Add an override only where you want {name} to
-            resolve somewhere else.
+            {name} uses its current owner wallet on all five supported networks
+            by default. Add an override only where you want this name to resolve
+            somewhere else.
           </p>
         </div>
         <button
@@ -191,10 +191,10 @@ export function MultichainAddressManager({
           One ID, different receiving addresses
         </p>
         <p className="mt-1 leading-6">
-          Payments use a custom destination when one is saved. Otherwise, your
-          verified primary ID resolves to its current owner wallet. Changing the
-          primary ID moves this default; custom records stay attached to their
-          individual names.
+          Payments use a custom destination when one is saved. Otherwise, this
+          name resolves to its current owner wallet. Selecting a different
+          primary display name does not disable or reroute this name; custom
+          records stay attached to the name where they were saved.
         </p>
       </div>
 
