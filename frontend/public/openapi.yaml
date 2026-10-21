@@ -92,7 +92,7 @@ paths:
       operationId: getReverseName
       summary: Reverse-resolve an XDC address
       description: |
-        Returns the verified primary name for an address. The name is null when
+        Returns the verified primary display name for an address. The name is null when
         no record exists or the stored reverse record no longer matches the
         current name owner.
       tags:
@@ -139,7 +139,7 @@ paths:
       description: |
         Discovers registrations through XDCScan, then verifies current
         ownership and expiry directly against the XDCID registry. The response
-        includes the address's verified primary ID and every active owned name.
+        includes the address's primary display name and every active owned name.
       tags:
         - Wallet names
       parameters:
@@ -151,7 +151,7 @@ paths:
             $ref: "#/components/schemas/Address"
       responses:
         "200":
-          description: Verified primary ID and owned names returned.
+          description: Primary display name and owned names returned.
           content:
             application/json:
               schema:
@@ -235,7 +235,7 @@ paths:
             $ref: "#/components/schemas/Address"
       responses:
         "200":
-          description: Verified primary ID and owned names returned.
+          description: Primary display name and owned names returned.
           content:
             application/json:
               schema:

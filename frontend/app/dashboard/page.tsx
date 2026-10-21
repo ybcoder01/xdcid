@@ -24,6 +24,8 @@ import {
   registrarAbi,
   reverseResolverAbi,
   signedRegistrarEnabled,
+  unifiedPrimaryNameWriteAbi,
+  unifiedProtocolEnabled,
   verifiedReverseResolverAvailable
 } from "../../config/contracts";
 import { PRIMARY_NAME_CHANGED_EVENT } from "../../components/WalletButton";
@@ -64,6 +66,12 @@ type OwnedSubdomain = {
 type OwnedSubdomainsResponse = {
   data?: { subdomains: OwnedSubdomain[] };
   error?: { message?: string };
+};
+
+type PrimaryCandidate = {
+  name: string;
+  node: Hex;
+  migrationRequired: boolean;
 };
 
 function SubdomainRow({
@@ -154,6 +162,8 @@ function NameRow({
     args: [record.name],
     query: { enabled: !(isTestnetDashboard || signedRegistrarEnabled) }
   });
+  const createSubdomainUrl =
+    "/subdomains?" + new URLSearchParams({ parent: record.name }).toString();
 
   return (
     <div className="grid gap-2">
@@ -168,7 +178,7 @@ function NameRow({
             </Link>
             {record.primary && (
               <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
-                Primary ID
+                Primary display name
               </span>
             )}
           </div>
@@ -185,6 +195,12 @@ function NameRow({
             href={"/name/" + record.name}
           >
             Manage records
+          </Link>
+          <Link
+            className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+            href={createSubdomainUrl}
+          >
+            Create subdomain
           </Link>
           {isTestnetDashboard || signedRegistrarEnabled ? (
             <SignedRenewalControls
@@ -229,22 +245,49 @@ function NameRow({
   );
 }
 
-function ParentSubdomainGroup({
-  onRenewed,
-  parentName,
-  records,
+function AssignedSubdomainRow({
+  primary,
+  record,
 }: {
-  onRenewed: () => void | Promise<void>;
-  parentName: string;
-  records: OwnedSubdomain[];
+  primary: boolean;
+  record: OwnedSubdomain;
 }) {
+  const managementUrl =
+    "/subdomains/manage?" +
+    new URLSearchParams({
+      parent: record.parentName,
+      label: record.label,
+    }).toString();
+
   return (
-    <div className="grid gap-2">
-      <div className="rounded-md border border-black/10 bg-white p-4 shadow-sm">
-        <p className="text-lg font-semibold text-slate-950">{parentName}</p>
-        <p className="text-sm text-neutral-600">Parent XDCID</p>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-black/10 bg-white p-4 shadow-sm">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            className="text-lg font-semibold text-slate-950 hover:text-teal-700"
+            href={managementUrl}
+          >
+            {record.name}
+          </Link>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+            Subdomain of {record.parentName}
+          </span>
+          {primary ? (
+            <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
+              Primary display name
+            </span>
+          ) : null}
+        </div>
+        <p className="text-sm text-neutral-600">
+          Expires: {new Date(record.expiry.iso).toLocaleDateString()}
+        </p>
       </div>
-      <NestedSubdomains onRenewed={onRenewed} records={records} />
+      <Link
+        className="rounded-md border border-teal-700 bg-white px-5 py-3 text-sm font-semibold text-teal-800 hover:bg-teal-50"
+        href={managementUrl}
+      >
+        Manage records
+      </Link>
     </div>
   );
 }
@@ -327,26 +370,38 @@ export default function Dashboard() {
       const body = (await response.json()) as OwnedNamesResponse;
       const subdomainBody =
         (await subdomainsResponse.json()) as OwnedSubdomainsResponse;
+      const fetchedNames = response.ok && body.data ? body.data.names : [];
+      const fetchedSubdomains =
+        subdomainsResponse.ok && subdomainBody.data
+          ? subdomainBody.data.subdomains
+          : [];
       if (response.ok && body.data) {
-        body.data.names.forEach((record) => saveName(address, record.name));
-        setNames(body.data.names);
+        fetchedNames.forEach((record) => saveName(address, record.name));
+        setNames(fetchedNames);
         setPrimaryName(body.data.primaryName);
-        setSelectedPrimary(
-          body.data.primaryName || body.data.names[0]?.name || "",
-        );
       } else {
         setLookupError(body.error?.message || "Unable to load wallet names");
       }
       if (subdomainsResponse.ok && subdomainBody.data) {
-        subdomainBody.data.subdomains.forEach((record) =>
+        fetchedSubdomains.forEach((record) =>
           saveSubdomain(address, record.name),
         );
-        setSubdomains(subdomainBody.data.subdomains);
+        setSubdomains(fetchedSubdomains);
       } else {
         setSubdomainLookupError(
           subdomainBody.error?.message || "Unable to load wallet subdomains",
         );
       }
+      const candidateNames = new Set([
+        ...fetchedNames.map((record) => record.name),
+        ...fetchedSubdomains.map((record) => record.name),
+      ]);
+      const preferredPrimary = body.data?.primaryName;
+      setSelectedPrimary(
+        preferredPrimary && candidateNames.has(preferredPrimary)
+          ? preferredPrimary
+          : fetchedNames[0]?.name || fetchedSubdomains[0]?.name || "",
+      );
     } catch (error) {
       if (controller.signal.aborted) return;
       setLookupError(
@@ -399,10 +454,26 @@ export default function Dashboard() {
     }
   }, [address, primaryHash, primaryReceipt.isSuccess, submittedPrimary]);
 
-  const selectedRecord = names.find(
+  const primaryCandidates = useMemo<PrimaryCandidate[]>(() => {
+    const candidates = new Map<string, PrimaryCandidate>();
+    names.forEach((record) => candidates.set(record.node.toLowerCase(), {
+      name: record.name,
+      node: record.node,
+      migrationRequired: record.migrationRequired,
+    }));
+    subdomains.forEach((record) => candidates.set(record.node.toLowerCase(), {
+      name: record.name,
+      node: record.node,
+      migrationRequired: false,
+    }));
+    return [...candidates.values()].sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+  }, [names, subdomains]);
+  const selectedRecord = primaryCandidates.find(
     (record) => record.name === selectedPrimary
   );
-  const { subdomainsByParent, externalParentGroups } = useMemo(() => {
+  const { subdomainsByParent, assignedSubdomains } = useMemo(() => {
     const grouped = new Map<string, OwnedSubdomain[]>();
     const ownedParentNames = new Set(names.map((record) => record.name));
 
@@ -414,8 +485,8 @@ export default function Dashboard() {
 
     return {
       subdomainsByParent: grouped,
-      externalParentGroups: [...grouped.entries()].filter(
-        ([parentName]) => !ownedParentNames.has(parentName),
+      assignedSubdomains: subdomains.filter(
+        (record) => !ownedParentNames.has(record.parentName),
       ),
     };
   }, [names, subdomains]);
@@ -425,6 +496,15 @@ export default function Dashboard() {
 
     setConfirmedPrimary(null);
     setSubmittedPrimary(selectedRecord.name);
+    if (unifiedProtocolEnabled) {
+      writeContract({
+        address: addresses.verifiedReverseResolver,
+        abi: unifiedPrimaryNameWriteAbi,
+        functionName: "setPrimaryName",
+        args: [selectedRecord.name]
+      });
+      return;
+    }
     writeContract({
       address: addresses.verifiedReverseResolver,
       abi: reverseResolverAbi,
@@ -458,23 +538,23 @@ export default function Dashboard() {
         )}
       </section>
 
-      {isConnected && names.length > 0 && (
+      {isConnected && primaryCandidates.length > 0 && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
-            Primary XDCID
+            Primary display name
           </h2>
           <p className="mt-1 text-sm text-neutral-600">
-            Choose the name that supported wallets and apps should display when
-            they look up this address. This controls address-to-name reverse
-            resolution; name-to-address resolution works independently.
+            Every active name below continues to receive at its configured
+            address, or at its owner wallet by default. Choose the one supported
+            wallets and apps should display when they look up this address.
             Current: {verifiedReverseResolverAvailable ? primaryName || "not selected" : "available after Resolver V2 activation"}.
           </p>
           {!primaryName ? (
             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
               <p className="font-semibold">Finish setting up your XDCID</p>
               <p className="mt-1 text-xs leading-5">
-                Select one of your names below and set it as your Primary ID to
-                enable verified reverse lookup for this wallet.
+                Select one name as your primary display name to enable verified
+                reverse lookup. Your other names will continue working.
               </p>
             </div>
           ) : null}
@@ -489,7 +569,7 @@ export default function Dashboard() {
                 resetPrimaryWrite();
               }}
             >
-              {names.map((record) => (
+              {primaryCandidates.map((record) => (
                 <option key={record.node} value={record.name}>
                   {record.name}
                 </option>
@@ -511,7 +591,7 @@ export default function Dashboard() {
                 ? "Confirm in wallet"
                 : primaryReceipt.isLoading
                   ? "Saving..."
-                  : "Set primary ID"}
+                  : "Set display name"}
             </button>
           </div>
           {selectedRecord?.migrationRequired ? (
@@ -522,7 +602,7 @@ export default function Dashboard() {
           ) : null}
           {confirmedPrimary && (
             <p className="mt-3 text-sm text-teal-700">
-              {confirmedPrimary} is now the Primary ID on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
+              {confirmedPrimary} is now the primary display name on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
             </p>
           )}
           {primaryWriteError && (
@@ -554,7 +634,11 @@ export default function Dashboard() {
             {subdomainLookupError}
           </p>
         )}
-        {isConnected && !isLoading && !lookupError && names.length === 0 && (
+        {isConnected &&
+          !isLoading &&
+          !lookupError &&
+          names.length === 0 &&
+          subdomains.length === 0 && (
           <p className="rounded-md border border-black/10 bg-white p-5 text-sm shadow-sm">
             No active XDCID names are owned by this wallet.
           </p>
@@ -580,12 +664,11 @@ export default function Dashboard() {
             subdomains={subdomainsByParent.get(record.name) ?? []}
           />
         ))}
-        {externalParentGroups.map(([parentName, records]) => (
-          <ParentSubdomainGroup
-            key={parentName}
-            onRenewed={loadOwnedNames}
-            parentName={parentName}
-            records={records}
+        {assignedSubdomains.map((record) => (
+          <AssignedSubdomainRow
+            key={record.node}
+            primary={record.name === primaryName}
+            record={record}
           />
         ))}
       </div>

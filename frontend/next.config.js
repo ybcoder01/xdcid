@@ -29,6 +29,10 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
   webpack(config) {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@react-native-async-storage/async-storage": false
+    };
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
       ".js": [".ts", ".tsx", ".js"]

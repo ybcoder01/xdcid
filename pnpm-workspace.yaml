@@ -7,27 +7,45 @@ allowBuilds:
   utf-8-validate: false
 minimumReleaseAgeExclude:
   - postcss@8.5.23
-  - '@next/env@16.3.7'
-  - '@next/swc-darwin-arm64@16.3.7'
-  - '@next/swc-darwin-x64@16.3.7'
-  - '@next/swc-linux-arm64-gnu@16.3.7'
-  - '@next/swc-linux-arm64-musl@16.3.7'
-  - '@next/swc-linux-x64-gnu@16.3.7'
-  - '@next/swc-linux-x64-musl@16.3.7'
-  - '@next/swc-win32-arm64-msvc@16.3.7'
-  - '@next/swc-win32-x64-msvc@16.3.7'
-  - next@16.3.7
+  - '@next/env@16.3.8'
+  - '@next/swc-darwin-arm64@16.3.8'
+  - '@next/swc-darwin-x64@16.3.8'
+  - '@next/swc-linux-arm64-gnu@16.3.8'
+  - '@next/swc-linux-arm64-musl@16.3.8'
+  - '@next/swc-linux-x64-gnu@16.3.8'
+  - '@next/swc-linux-x64-musl@16.3.8'
+  - '@next/swc-win32-arm64-msvc@16.3.8'
+  - '@next/swc-win32-x64-msvc@16.3.8'
+  - next@16.3.8
 overrides:
+  adm-zip: 0.6.1
   axios: 1.20.0
   baseline-browser-mapping: 2.11.0
+  'bn.js@<5.0.0': 4.12.3
+  'brace-expansion@<2.0.0': 1.1.21
+  'brace-expansion@>=2.0.0 <3.0.0': 2.1.7
+  'brace-expansion@>=4.0.0': 5.0.12
+  browserslist: 4.29.4
   decode-uri-component: 0.5.0
-  hono: 4.13.5
+  fast-copy: 3.1.0
+  fast-uri: 3.1.8
+  follow-redirects: 1.16.1
+  handlebars: 4.7.10
+  hono: 4.13.11
+  'js-yaml@<4.0.0': 3.15.2
+  'js-yaml@>=4.0.0 <5.0.0': 4.3.2
+  lodash: 4.18.1
   nanoid: 3.3.18
+  pbkdf2: 3.1.7
   postcss: 8.5.23
+  postcss-selector-parser: 7.1.7
+  qs: 6.16.1
   qr: 0.5.5
+  serialize-javascript: 7.1.2
   sharp: 0.35.5
   source-map-js: 1.2.2
   socket.io-parser: 4.2.7
+  tmp: 0.2.7
   undici: 6.28.1
   uuid: 11.1.1
   ws: 8.21.0

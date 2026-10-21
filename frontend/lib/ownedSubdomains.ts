@@ -5,20 +5,31 @@ import {
   keccak256,
   parseAbi,
   stringToHex,
+  zeroAddress,
   type Hex,
 } from "viem";
 import {
+  activeRegistryAddress,
   activeSubdomainRegistrarAddress,
   activeXnsChainId,
+  addresses,
+  apothemSubdomainRegistrar,
   isTestnetEnvironment,
+  unifiedProtocolEnabled,
+  unifiedRegistryReadAbi,
 } from "../config/contracts";
 import { ApiInputError, ApiServiceError } from "./apiResponse";
 import { parseXnsName } from "./names";
 import { withShortCache } from "./shortCache";
+import {
+  decodeUnifiedRegisteredName,
+  unifiedRegistrationPaidEvent,
+} from "./unifiedRegistrationIndex";
 import { xdcClient } from "./xdcClient";
 
 const MAINNET_START_BLOCK = 107_000_000n;
 const APOTHEM_START_BLOCK = 86_900_000n;
+const APOTHEM_UNIFIED_V3_START_BLOCK = 83_840_000n;
 // Public XDC RPC providers cap eth_getLogs ranges at 30,000 blocks. Staying
 // below that limit keeps the index portable across the configured fallbacks.
 const LOG_BLOCK_RANGE = 25_000n;
@@ -91,7 +102,12 @@ async function loadCatalog() {
       const startBlock = isTestnetEnvironment
         ? APOTHEM_START_BLOCK
         : MAINNET_START_BLOCK;
-      const transactionHashes = new Set<Hex>();
+      const transactionSources = new Map<Hex, "legacy" | "unified">();
+      const legacyRegistrar = getAddress(
+        isTestnetEnvironment
+          ? apothemSubdomainRegistrar
+          : addresses.subdomainRegistrar,
+      );
 
       for (
         let fromBlock = startBlock;
@@ -103,26 +119,61 @@ async function loadCatalog() {
             ? latestBlock
             : fromBlock + LOG_BLOCK_RANGE - 1n;
         const logs = await xdcClient.getLogs({
-          address: getAddress(activeSubdomainRegistrarAddress),
+          address: legacyRegistrar,
           event: registeredEvent[0],
           fromBlock,
           toBlock,
         });
         logs.forEach((log) => {
-          if (log.transactionHash) transactionHashes.add(log.transactionHash);
+          if (log.transactionHash) {
+            transactionSources.set(log.transactionHash, "legacy");
+          }
         });
       }
 
+      if (unifiedProtocolEnabled) {
+        const unifiedStartBlock = isTestnetEnvironment
+          ? APOTHEM_UNIFIED_V3_START_BLOCK
+          : MAINNET_START_BLOCK;
+        for (
+          let fromBlock = unifiedStartBlock;
+          fromBlock <= latestBlock;
+          fromBlock += LOG_BLOCK_RANGE
+        ) {
+          const toBlock =
+            fromBlock + LOG_BLOCK_RANGE - 1n > latestBlock
+              ? latestBlock
+              : fromBlock + LOG_BLOCK_RANGE - 1n;
+          const logs = await xdcClient.getLogs({
+            address: getAddress(activeSubdomainRegistrarAddress),
+            event: unifiedRegistrationPaidEvent,
+            fromBlock,
+            toBlock,
+          });
+          logs.forEach((log) => {
+            if (log.transactionHash) {
+              transactionSources.set(log.transactionHash, "unified");
+            }
+          });
+        }
+      }
+
       const names = new Set<string>();
-      const hashes = Array.from(transactionHashes);
+      const hashes = Array.from(transactionSources.keys());
       for (let start = 0; start < hashes.length; start += READ_BATCH_SIZE) {
         const transactions = await Promise.all(
           hashes.slice(start, start + READ_BATCH_SIZE).map((hash) =>
             xdcClient.getTransaction({ hash }),
           ),
         );
-        transactions.forEach((transaction) => {
-          const name = registeredName(transaction.input);
+        transactions.forEach((transaction, index) => {
+          const source = transactionSources.get(hashes[start + index]);
+          const unifiedName = source === "unified"
+            ? decodeUnifiedRegisteredName(transaction.input)
+            : null;
+          const name = source === "unified"
+            ? unifiedName?.kind === "subdomain" ? unifiedName.name : null
+            : registeredName(transaction.input);
           if (name) names.add(name);
         });
       }
@@ -160,7 +211,7 @@ export async function getOwnedSubdomainsData(
   const cacheSuffix = known.slice().sort().join(",");
 
   return withShortCache(
-    `owned-subdomains:${activeXnsChainId}:${address.toLowerCase()}:${cacheSuffix}`,
+    `owned-subdomains:${unifiedProtocolEnabled ? "unified:" : "legacy:"}${activeXnsChainId}:${address.toLowerCase()}:${cacheSuffix}`,
     async () => {
       let indexedNames: string[] = [];
       try {
@@ -172,27 +223,58 @@ export async function getOwnedSubdomainsData(
       const candidates = Array.from(new Set([...indexedNames, ...known]));
       const owned: OwnedSubdomain[] = [];
       const now = BigInt(Math.floor(Date.now() / 1_000));
+      const legacyRegistrar = getAddress(
+        isTestnetEnvironment
+          ? apothemSubdomainRegistrar
+          : addresses.subdomainRegistrar,
+      );
 
       for (let start = 0; start < candidates.length; start += READ_BATCH_SIZE) {
         const batch = candidates.slice(start, start + READ_BATCH_SIZE);
         const records = await Promise.all(
           batch.map(async (name) => {
             const node = keccak256(stringToHex(name));
-            const [owner, record] = await Promise.all([
+            if (unifiedProtocolEnabled) {
+              const unifiedRecord = await xdcClient.readContract({
+                address: getAddress(activeRegistryAddress),
+                abi: unifiedRegistryReadAbi,
+                functionName: "records",
+                args: [node],
+              });
+              if (
+                unifiedRecord.owner !== zeroAddress &&
+                unifiedRecord.kind === 2
+              ) {
+                return {
+                  name,
+                  node,
+                  owner: unifiedRecord.owner,
+                  expiry: unifiedRecord.expiry,
+                };
+              }
+            }
+
+            const [legacyOwner, legacyRecord] = await Promise.all([
               xdcClient.readContract({
-                address: getAddress(activeSubdomainRegistrarAddress),
+                address: legacyRegistrar,
                 abi: recordsAbi,
                 functionName: "ownerOf",
                 args: [node],
               }),
               xdcClient.readContract({
-                address: getAddress(activeSubdomainRegistrarAddress),
+                address: legacyRegistrar,
                 abi: recordsAbi,
                 functionName: "records",
                 args: [node],
               }),
             ]);
-            return { name, node, owner, expiry: record[2] };
+
+            return {
+              name,
+              node,
+              owner: legacyOwner,
+              expiry: legacyRecord[2],
+            };
           }),
         );
 

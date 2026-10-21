@@ -1,0 +1,11 @@
+{
+  "chainId": 51,
+  "protocolGeneration": "unified-v3",
+  "registry": "0xbe394cA8615E5DC0284262aad962Ef72414b0270",
+  "resolver": "0xA31f6c0323e8f5281c228b7fF2527520890D59Ab",
+  "registrar": "0xd24d4fFF55b5D470d5B60d801ea77b60D39F8838",
+  "pricingPolicy": "0xC760c020d6865cc618B63c91622f88e2075E0513",
+  "usdc": "0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4",
+  "quoteSigner": "0x031d01283963d2fA43fe386825A056491C10994f",
+  "treasury": "0x46B738E9ACE23731582C31Fc61965c3AdE062c81"
+}

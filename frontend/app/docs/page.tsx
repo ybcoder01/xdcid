@@ -16,13 +16,13 @@ const publicEndpoints = [
     method: "GET",
     path: "/api/v1/reverse/{address}",
     title: "Reverse lookup",
-    description: "Returns the verified primary XDCID name for a wallet address, or null when no current record exists."
+    description: "Returns the wallet's verified primary display name, or null when no current record exists."
   },
   {
     method: "GET",
     path: "/api/v1/addresses/{address}/names",
     title: "Owned names",
-    description: "Returns the verified primary ID and every active XDCID name currently owned by a wallet."
+    description: "Returns the primary display name and every active XDCID name currently owned by a wallet."
   },
   {
     method: "GET",
@@ -85,10 +85,10 @@ const integrationGuides = [
 
 const paidCapabilities = [
   ["Resolve", "Resolve an XDCID name to its owner, payment address, and expiry."],
-  ["Reverse", "Find the verified primary XDCID name for an XDC address."],
+  ["Reverse", "Find the verified primary display name for an XDC address."],
   ["Availability", "Check whether a name is available and retrieve its registration price."],
   ["Profile", "Read the public profile records attached to an XDCID name."],
-  ["Owned names", "List every active XDCID name owned by an address, including its verified primary ID."]
+  ["Owned names", "List every active XDCID name owned by an address and identify its primary display name."]
 ];
 
 const supportedPaymentNetworks = [

@@ -12,9 +12,15 @@ if (report.success !== true || !Array.isArray(report.results?.detectors)) {
 // Explicitly reviewed baseline. These entries remain visible in Slither output;
 // the allowlist only prevents known results from making every CI run fail.
 const reviewedHighOrMedium = new Set([
+  // Each registrar reads the treasury from the owner-managed pricing policy and
+  // forwards the exact signed native payment. The payer cannot choose this address.
   "arbitrary-send-eth|XNSSignedQuoteRegistrar._collectPayment",
   "arbitrary-send-eth|XNSRegistrarV2._collectPayment",
   "arbitrary-send-eth|XNSSubdomainRegistrar._collectPayment",
+  "arbitrary-send-eth|XNSUnifiedRegistrar._collectPayment",
+  // Slither 0.11.4 treats the legacy tuple passthrough as an ignored return even
+  // though all three values are assigned to named returns and returned intact.
+  "unused-return|XNSRegistryV2.records",
   "unused-return|XNSPrimaryRegistrar._initializePrimary",
 ]);
 

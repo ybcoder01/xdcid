@@ -5,7 +5,18 @@ const explorerApiKey =
   process.env.XDCSCAN_API_KEY || process.env.ETHERSCAN_API_KEY || "";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.24",
+  solidity: {
+    compilers: [{ version: "0.8.24" }],
+    overrides: {
+      "contracts/XNSUnifiedRegistrar.sol": {
+        version: "0.8.24",
+        settings: {
+          optimizer: { enabled: true, runs: 1 },
+          viaIR: true
+        }
+      }
+    }
+  },
   networks: {
     apothem: {
       url: process.env.APOTHEM_RPC_URL || "https://rpc.apothem.network",

@@ -1,6 +1,6 @@
 # Contract static-analysis baseline
 
-Slither `0.11.6` runs on every pull request and on pushes to `dev` and `main`.
+Slither `0.11.4` runs on every pull request and on pushes to `dev` and `main`.
 The version is pinned in `.github/workflows/security-analysis.yml` so a tool
 release cannot silently change the release gate.
 
@@ -11,12 +11,16 @@ globally suppressed.
 
 ## Reviewed baseline
 
-- `arbitrary-send-eth` for the three payment collectors: the destination is the
+- `arbitrary-send-eth` for the four payment collectors, including the Unified
+  Registrar: the destination is the
   owner-governed treasury from the validated pricing policy, not a caller-chosen
   address. Exact payment checks and transaction reverts remain in force.
 - `unused-return` for primary-name initialization: initialization intentionally
   returns `false` when an account already has a primary name. Registration must
   remain successful without replacing that primary.
+- `unused-return` for the Registry V2 legacy tuple passthrough: all three
+  returned values are assigned to named returns and returned intact. This is a
+  Slither 0.11.4 reporting limitation rather than an ignored value.
 
 The former `reentrancy-eth` findings for Subdomain Registrar registration and
 renewal are no longer allowlisted. The registrar now commits registration or

@@ -27,3 +27,14 @@ test("the success notice is bound to the confirmed transaction target", async ()
   assert.doesNotMatch(source, /\{primaryReceipt\.isSuccess && \(/);
   assert.match(source, /resetPrimaryWrite\(\)/);
 });
+
+test("eligible owned subdomains are offered as Primary ID candidates", async () => {
+  const source = await readFile(dashboardUrl, "utf8");
+
+  assert.match(source, /const primaryCandidates = useMemo<PrimaryCandidate\[\]>/);
+  assert.match(source, /subdomains\.forEach\(\(record\) => candidates\.set/);
+  assert.match(source, /primaryCandidates\.map\(\(record\) =>/);
+  assert.match(source, /primaryCandidates\.length > 0/);
+  assert.match(source, /unifiedPrimaryNameWriteAbi/);
+  assert.match(source, /args: \[selectedRecord\.name\]/);
+});
