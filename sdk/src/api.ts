@@ -91,6 +91,7 @@ export type PricingQuoteData = {
 
 export type SerializedRegistrarQuote = {
   node: Hex;
+  parentNode?: Hex;
   payer: Address;
   nameOwner: Address;
   product: 0 | 1;
@@ -120,6 +121,7 @@ export type RegistrarQuoteData = {
   authorizedForPayment: true;
   chainId: number;
   registrar: Address;
+  protocolGeneration?: "legacy" | "unified-v3";
   policy: Address;
   product: RegistrarProduct;
   name: string;
@@ -145,6 +147,8 @@ export type SerializedSubdomainQuote = {
   parentNode: Hex;
   payer: Address;
   subdomainOwner: Address;
+  nameOwner?: Address;
+  product?: 2 | 3;
   termYears: string;
   paymentToken: Address;
   paymentAmount: string;
@@ -159,6 +163,7 @@ export type SubdomainQuoteData = {
   authorizedForPayment: true;
   chainId: number;
   registrar: Address;
+  protocolGeneration?: "legacy" | "unified-v3";
   pricingPolicy: Address;
   action: SubdomainAction;
   parentName: string;

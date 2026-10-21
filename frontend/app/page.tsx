@@ -9,12 +9,12 @@ import {
 } from "../components/HomepageConceptReview";
 import {
   addresses,
+  apothemContractsConfigured,
   apothemRegistration,
   contractsConfigured as mainnetContractsConfigured,
   registrarAbi,
   registryAbi,
   signedRegistrarEnabled,
-  zeroAddress,
 } from "../config/contracts";
 import { parseXnsName } from "../lib/names";
 import { xdcidRegistrationFromOwner } from "../lib/registryStatus";
@@ -28,7 +28,7 @@ export default function Home() {
   const registrationRegistry = apothemMode ? apothemRegistration.registry : addresses.registry;
   const registrationSignedEnabled = apothemMode || signedRegistrarEnabled;
   const registrationContractsConfigured = apothemMode
-    ? registrationRegistrar !== zeroAddress && apothemRegistration.pricingPolicy !== zeroAddress
+    ? apothemContractsConfigured
     : mainnetContractsConfigured;
 
   const parsedName = useMemo(() => parseXnsName(input), [input]);

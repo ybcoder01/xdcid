@@ -26,6 +26,10 @@ type HealthResponse = {
     healthy: boolean;
     latencyMs: number | null;
   };
+  quoteSigner: {
+    configured: boolean;
+    address: string | null;
+  };
 };
 
 function StatusBadge({
@@ -178,6 +182,26 @@ export function AdminOperations() {
               {health?.checkedAt
                 ? new Date(health.checkedAt).toLocaleString()
                 : "Waiting"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-950">Quote signer</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Server signing account (public address only)
+                </p>
+              </div>
+              <StatusBadge healthy={Boolean(health?.quoteSigner.configured)}>
+                {!health
+                  ? "Checking"
+                  : health.quoteSigner.configured
+                    ? "Configured"
+                    : "Unavailable"}
+              </StatusBadge>
+            </div>
+            <p className="mt-4 break-all font-mono text-xs text-slate-600">
+              {health?.quoteSigner.address || "No valid signer configured"}
             </p>
           </div>
         </div>

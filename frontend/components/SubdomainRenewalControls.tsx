@@ -5,6 +5,8 @@ import {
   formatEther,
   formatUnits,
   getAddress,
+  keccak256,
+  toBytes,
   zeroAddress,
   type Address,
   type Hex,
@@ -26,8 +28,13 @@ import {
   isTestnetEnvironment,
   pricingPolicyAbi,
   subdomainRegistrarAbi,
+  unifiedProtocolEnabled,
+  unifiedRegistrarAbi,
+  unifiedRegistryReadAbi,
+  unifiedSubdomainRegistryAddress,
 } from "../config/contracts";
 import { XDC_WRITE_GAS_LIMITS, xdcWriteOverrides } from "../lib/xdcWriteGas";
+import { SUBDOMAIN_PRICING_PRODUCT } from "../lib/pricingProducts";
 import { walletActionErrorMessage } from "../lib/walletErrors";
 
 type Currency = "XDC" | "USDC";
@@ -37,6 +44,8 @@ type SerializedQuote = {
   parentNode: Hex;
   payer: Address;
   subdomainOwner: Address;
+  nameOwner?: Address;
+  product?: number;
   termYears: string;
   paymentToken: Address;
   paymentAmount: string;
@@ -51,6 +60,7 @@ type QuoteResponse = {
     authorizedForPayment: boolean;
     chainId: number;
     registrar: Address;
+    protocolGeneration?: "legacy" | "unified-v3";
     action: "registration" | "renewal";
     quote: SerializedQuote;
     signature: Hex;
@@ -83,6 +93,15 @@ export function SubdomainRenewalControls({
   const [currency, setCurrency] = useState<Currency>("XDC");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const node = keccak256(toBytes(`${label}.${parentName}`));
+  const unifiedRecord = useReadContract({
+    address: unifiedSubdomainRegistryAddress,
+    chainId: activeXnsChainId,
+    abi: unifiedRegistryReadAbi,
+    functionName: "records",
+    args: [node],
+    query: { enabled: unifiedProtocolEnabled },
+  });
   const pricingPolicy = isTestnetEnvironment
     ? apothemRegistration.pricingPolicy
     : addresses.pricingPolicy;
@@ -91,7 +110,7 @@ export function SubdomainRenewalControls({
     chainId: activeXnsChainId,
     abi: pricingPolicyAbi,
     functionName: "priceUsdMicros",
-    args: [2, 1n, BigInt(termYears)],
+    args: [SUBDOMAIN_PRICING_PRODUCT, BigInt(label.length), BigInt(termYears)],
   });
   const allowedTerms = useMemo(() => {
     if (!parentExpiryTimestamp) return TERMS;
@@ -101,7 +120,16 @@ export function SubdomainRenewalControls({
   const selectedTermAllowed = allowedTerms.includes(termYears);
 
   async function renew() {
-    if (!address || !client || !selectedTermAllowed) return;
+    const subdomainOwner = unifiedProtocolEnabled
+      ? unifiedRecord.data?.owner
+      : address;
+    if (
+      !address ||
+      !client ||
+      !selectedTermAllowed ||
+      !subdomainOwner ||
+      subdomainOwner === zeroAddress
+    ) return;
     setBusy(true);
     setStatus("");
     try {
@@ -123,7 +151,7 @@ export function SubdomainRenewalControls({
           termYears,
           paymentCurrency: currency,
           payer: address,
-          subdomainOwner: address,
+          subdomainOwner,
         }),
       });
       const body = (await response.json()) as QuoteResponse;
@@ -133,7 +161,8 @@ export function SubdomainRenewalControls({
       if (
         body.data.action !== "renewal" ||
         body.data.chainId !== activeXnsChainId ||
-        getAddress(body.data.registrar) !== getAddress(activeSubdomainRegistrarAddress)
+        getAddress(body.data.registrar) !== getAddress(activeSubdomainRegistrarAddress) ||
+        (body.data.protocolGeneration === "unified-v3") !== unifiedProtocolEnabled
       ) {
         throw new Error("The quote does not match the active subdomain registrar");
       }
@@ -153,7 +182,7 @@ export function SubdomainRenewalControls({
       };
       if (
         quote.payer !== getAddress(address) ||
-        quote.subdomainOwner !== getAddress(address)
+        quote.subdomainOwner !== getAddress(subdomainOwner)
       ) {
         throw new Error("The quote is not bound to the connected wallet");
       }
@@ -195,8 +224,8 @@ export function SubdomainRenewalControls({
       );
       const hash = await writeContractAsync({
         address: activeSubdomainRegistrarAddress,
-        abi: subdomainRegistrarAbi,
-        functionName: "renewWithQuote",
+        abi: unifiedProtocolEnabled ? unifiedRegistrarAbi : subdomainRegistrarAbi,
+        functionName: unifiedProtocolEnabled ? "renewSubdomain" : "renewWithQuote",
         args: [parentName, label, quote, body.data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n,
         ...gas,
@@ -239,7 +268,11 @@ export function SubdomainRenewalControls({
       </select>
       <button
         className="rounded-md bg-slate-950 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-        disabled={busy || !selectedTermAllowed}
+        disabled={
+          busy ||
+          !selectedTermAllowed ||
+          (unifiedProtocolEnabled && !unifiedRecord.data?.owner)
+        }
         onClick={renew}
       >
         {busy ? "Processing…" : "Renew"}

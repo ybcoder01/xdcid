@@ -22,6 +22,27 @@ test("owned-name discovery follows the active registry and preserves registrar h
   assert.match(contents, /apothemRegistration\.registrar/);
 });
 
+test("admin health exposes only the quote signer's public address", async () => {
+  const route = await source("frontend/app/api/admin/health/route.ts");
+  const operations = await source("frontend/components/AdminOperations.tsx");
+
+  assert.match(route, /privateKeyToAccount/);
+  assert.match(route, /quoteSigner:\s*\{/);
+  assert.match(route, /address: quoteSignerAddress/);
+  assert.doesNotMatch(route, /address:\s*normalizedQuoteSignerKey/);
+  assert.match(operations, /Server signing account \(public address only\)/);
+});
+
+test("registrar quote health reports signer authorization without exposing secrets", async () => {
+  const route = await source("frontend/app/api/v1/registrar/quote/route.ts");
+
+  assert.match(route, /export async function GET\(\)/);
+  assert.match(route, /configuredSigner: account\.address/);
+  assert.match(route, /activeSigner: getAddress\(config\.quoteSigner\)/);
+  assert.match(route, /ready: authorized/);
+  assert.doesNotMatch(route, /configuredSigner:.*PRIVATE_KEY/);
+});
+
 test("the Apothem subdomain test surface follows the configured registrar", async () => {
   const contents = await source(
     "frontend/app/testing/apothem-subdomains/ApothemSubdomainTestingClient.tsx",
@@ -59,6 +80,21 @@ test("retired Apothem deployment consoles lead to the guarded activation page", 
     previousActivation,
     /redirect\("\/deployment\/apothem-pricing-compatibility"\)/,
   );
+});
+
+test("the unified Apothem deployment console is preview-gated and never activates the app", async () => {
+  const page = await source("frontend/app/deployment/apothem-unified-v3/page.tsx");
+  const client = await source(
+    "frontend/app/deployment/apothem-unified-v3/ApothemUnifiedDeploymentClient.tsx",
+  );
+  assert.match(page, /ENABLE_APOTHEM_UNIFIED_V3_DEPLOYMENT/);
+  assert.match(client, /Deploy clean V3 stack/);
+  assert.match(client, /Deploy Pricing Policy V2/);
+  assert.match(client, /args: \[OWNER, ZERO_ADDRESS\]/);
+  assert.match(client, /ZERO_ADDRESS,\s+deployment\.pricingPolicy/s);
+  assert.match(client, /setRegistrar/);
+  assert.doesNotMatch(client, /NEXT_PUBLIC_XNS_PROTOCOL_GENERATION.*writeContract/s);
+  assert.match(client, /Do not apply these values/);
 });
 
 test("the pricing compatibility recovery is preview-only and proposes both delays", async () => {

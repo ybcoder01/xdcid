@@ -5,6 +5,16 @@
 **Review type:** Internal source, test, configuration, bytecode, and live-state review  
 **Status:** Reviewed resolver and registrar remediations deployed and activated on XDC mainnet; multisig ownership and an independent external audit remain pending
 
+> **Next-generation follow-up (8 October 2026):** The local, undeployed
+> Registry V3 design consolidates top-level and subdomain ownership, discount
+> authorization, and all resolver modes while retaining Pricing Policy V2 as
+> a fourth independently administered contract. Its security
+> invariants, migration gates, and finding-by-finding disposition are documented
+> in [`docs/unified-protocol-v3.md`](./unified-protocol-v3.md). This work does not
+> change the reviewed mainnet deployment and must not be represented as an
+> external audit or production remediation until deployed and independently
+> reviewed.
+
 ## Post-review activation update
 
 The owner-bound forward resolver, owner-verified reverse resolver,
@@ -170,7 +180,7 @@ The repository's contract and SDK test suites pass, including 243 contract/appli
 
 **Recommendation:** Add Slither to CI, add property/invariant tests for ownership transitions and resolver freshness, and commission an independent external audit before materially increasing protocol value or dependence.
 
-**Remediation implemented:** Slither `0.11.6` now runs in a dedicated CI job on
+**Remediation implemented:** Slither `0.11.4` now runs in a dedicated CI job on
 every pull request and on pushes to `dev` and `main`. CI fails for any new High
 or Medium detector result outside an explicit function-level reviewed baseline.
 The baseline and its operational assumptions are documented in

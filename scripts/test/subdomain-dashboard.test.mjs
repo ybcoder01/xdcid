@@ -27,7 +27,10 @@ test("the dashboard discovers active subdomains and exposes owner controls", asy
   assert.match(dashboard, /subdomainsByParent\.get\(record\.name\)/);
   assert.match(dashboard, /parentExpiryTimestamp=\{record\.expiry\.timestamp\}/);
   assert.doesNotMatch(dashboard, /Child identities/);
-  assert.match(renewal, /functionName: "renewWithQuote"/);
+  assert.match(
+    renewal,
+    /unifiedProtocolEnabled \? "renewSubdomain" : "renewWithQuote"/,
+  );
   assert.match(renewal, /Parent limit:/);
   assert.match(manager, /functionName: "setAddress"/);
   assert.match(manager, /functionName: "transferSubdomain"/);

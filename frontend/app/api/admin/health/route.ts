@@ -1,4 +1,6 @@
 import { neon } from "@neondatabase/serverless";
+import { isHex, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { requireAdminSession } from "../../../../lib/adminAuth";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +36,19 @@ export async function GET(request: Request) {
     }
   }
 
+  const configuredQuoteSignerKey =
+    process.env.XNS_QUOTE_SIGNER_PRIVATE_KEY?.trim();
+  const normalizedQuoteSignerKey =
+    configuredQuoteSignerKey && /^[0-9a-fA-F]{64}$/.test(configuredQuoteSignerKey)
+      ? `0x${configuredQuoteSignerKey}`
+      : configuredQuoteSignerKey;
+  const quoteSignerAddress =
+    normalizedQuoteSignerKey &&
+    isHex(normalizedQuoteSignerKey) &&
+    normalizedQuoteSignerKey.length === 66
+      ? privateKeyToAccount(normalizedQuoteSignerKey as Hex).address
+      : null;
+
   return Response.json(
     {
       checkedAt: new Date().toISOString(),
@@ -41,6 +56,10 @@ export async function GET(request: Request) {
         configured: databaseConfigured,
         healthy: databaseHealthy,
         latencyMs: databaseConfigured ? Date.now() - startedAt : null,
+      },
+      quoteSigner: {
+        configured: quoteSignerAddress !== null,
+        address: quoteSignerAddress,
       },
     },
     {

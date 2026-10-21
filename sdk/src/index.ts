@@ -10,6 +10,7 @@ import {
   keccak256,
   toBytes,
   zeroAddress,
+  zeroHash,
   type Address,
   type Hash,
   type Hex,
@@ -358,6 +359,22 @@ const registrarQuoteComponents = [
   { name: "deadline", type: "uint256" }
 ] as const;
 
+const unifiedQuoteComponents = [
+  { name: "node", type: "bytes32" },
+  { name: "parentNode", type: "bytes32" },
+  { name: "payer", type: "address" },
+  { name: "nameOwner", type: "address" },
+  { name: "product", type: "uint8" },
+  { name: "termYears", type: "uint256" },
+  { name: "paymentToken", type: "address" },
+  { name: "paymentAmount", type: "uint256" },
+  { name: "usdMicros", type: "uint256" },
+  { name: "policyVersion", type: "uint256" },
+  { name: "nonce", type: "uint256" },
+  { name: "issuedAt", type: "uint256" },
+  { name: "deadline", type: "uint256" }
+] as const;
+
 const discountAuthorizationComponents = [
   { name: "node", type: "bytes32" },
   { name: "beneficiary", type: "address" },
@@ -416,6 +433,81 @@ export const signedRegistrarV2Abi = [
       { name: "quoteSignature", type: "bytes" },
       { name: "authorization", type: "tuple", components: discountAuthorizationComponents },
       { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
+  }
+] as const;
+
+export const unifiedRegistrarAbi = [
+  {
+    type: "function",
+    name: "register",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renew",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "registerWithDiscount",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+      { name: "quoteSignature", type: "bytes" },
+      { name: "authorization", type: "tuple", components: discountAuthorizationComponents },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewWithDiscount",
+    stateMutability: "payable",
+    inputs: [
+      { name: "name", type: "string" },
+      { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+      { name: "quoteSignature", type: "bytes" },
+      { name: "authorization", type: "tuple", components: discountAuthorizationComponents },
+      { name: "authorizationSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "registerSubdomain",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "renewSubdomain",
+    stateMutability: "payable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "quote", type: "tuple", components: unifiedQuoteComponents },
+      { name: "quoteSignature", type: "bytes" }
     ],
     outputs: []
   }
@@ -488,8 +580,8 @@ type WriteRequest<TAbi extends readonly unknown[], TFunctionName extends string,
 export type RegistrarPaymentPlan = {
   approval: WriteRequest<typeof erc20ApprovalAbi, "approve", readonly [Address, bigint]> | null;
   transaction: WriteRequest<
-    typeof signedRegistrarV2Abi,
-    "registerWithQuote" | "renewWithQuote" | "registerWithDiscountQuote" | "renewWithDiscountQuote",
+    typeof signedRegistrarV2Abi | typeof unifiedRegistrarAbi,
+    "registerWithQuote" | "renewWithQuote" | "registerWithDiscountQuote" | "renewWithDiscountQuote" | "register" | "renew" | "registerWithDiscount" | "renewWithDiscount",
     readonly unknown[]
   >;
 };
@@ -497,9 +589,9 @@ export type RegistrarPaymentPlan = {
 export type SubdomainPaymentPlan = {
   approval: WriteRequest<typeof erc20ApprovalAbi, "approve", readonly [Address, bigint]> | null;
   transaction: WriteRequest<
-    typeof subdomainRegistrarAbi,
-    "registerWithQuote" | "renewWithQuote",
-    readonly [string, string, ReturnType<typeof deserializeSubdomainQuote>, Hash]
+    typeof subdomainRegistrarAbi | typeof unifiedRegistrarAbi,
+    "registerWithQuote" | "renewWithQuote" | "registerSubdomain" | "renewSubdomain",
+    readonly unknown[]
   >;
 };
 
@@ -809,7 +901,8 @@ export class XdcidClient {
       policy: this.contracts.pricingPolicy
     });
     const name = normalizeName(data.name);
-    const quote = deserializeRegistrarQuote(data.quote);
+    const unified = data.protocolGeneration === "unified-v3";
+    const quote = deserializeRegistrarQuote(data.quote, unified);
     if (quote.node !== nodeForName(name)) {
       throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote does not match the requested name");
     }
@@ -822,14 +915,19 @@ export class XdcidClient {
     if (!isHex(data.signature, { strict: true })) {
       throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote signature is invalid");
     }
-    const baseFunction = data.product === "registration" ? "registerWithQuote" : "renewWithQuote";
-    const discountFunction = data.product === "registration"
-      ? "registerWithDiscountQuote"
-      : "renewWithDiscountQuote";
+    const baseFunction = unified
+      ? data.product === "registration" ? "register" : "renew"
+      : data.product === "registration" ? "registerWithQuote" : "renewWithQuote";
+    const discountFunction = unified
+      ? data.product === "registration" ? "registerWithDiscount" : "renewWithDiscount"
+      : data.product === "registration" ? "registerWithDiscountQuote" : "renewWithDiscountQuote";
     let discountAuthorization: ReturnType<typeof deserializeDiscountAuthorization> | undefined;
     if (data.discount) {
       if (
-        !isAddressEqual(data.discount.authorizationContract, this.contracts.discountAuthorization) ||
+        !isAddressEqual(
+          data.discount.authorizationContract,
+          unified ? data.registrar : this.contracts.discountAuthorization
+        ) ||
         !isHex(data.discount.signature, { strict: true })
       ) {
         throw new XdcidSdkError("INVALID_CONFIG", "Discount authorization context is invalid");
@@ -868,7 +966,7 @@ export class XdcidClient {
       transaction: {
         chainId: XDC_CHAIN_ID,
         address: data.registrar,
-        abi: signedRegistrarV2Abi,
+        abi: unified ? unifiedRegistrarAbi : signedRegistrarV2Abi,
         functionName: data.discount ? discountFunction : baseFunction,
         args,
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n
@@ -877,16 +975,20 @@ export class XdcidClient {
   }
 
   prepareSubdomainPayment(data: SubdomainQuoteData): SubdomainPaymentPlan {
+    const unified = data.protocolGeneration === "unified-v3";
     assertQuoteContext(data.chainId, data.registrar, data.pricingPolicy, {
-      registrar: this.contracts.subdomainRegistrar,
+      registrar: unified ? this.contracts.registrar : this.contracts.subdomainRegistrar,
       policy: this.contracts.pricingPolicy
     });
-    const quote = deserializeSubdomainQuote(data.quote);
+    const quote = deserializeSubdomainQuote(data.quote, unified);
     const parentName = normalizeName(data.parentName);
     const label = normalizeSubdomainLabel(data.label);
     if (
       quote.node !== keccak256(toBytes(`${label}.${parentName}`)) ||
       quote.parentNode !== nodeForName(parentName) ||
+      (unified &&
+        (!("product" in quote) ||
+          quote.product !== (data.action === "registration" ? 2 : 3))) ||
       quote.deadline < BigInt(Math.floor(Date.now() / 1_000)) ||
       !isHex(data.signature, { strict: true })
     ) {
@@ -905,8 +1007,10 @@ export class XdcidClient {
       transaction: {
         chainId: XDC_CHAIN_ID,
         address: data.registrar,
-        abi: subdomainRegistrarAbi,
-        functionName: data.action === "registration" ? "registerWithQuote" : "renewWithQuote",
+        abi: unified ? unifiedRegistrarAbi : subdomainRegistrarAbi,
+        functionName: unified
+          ? data.action === "registration" ? "registerSubdomain" : "renewSubdomain"
+          : data.action === "registration" ? "registerWithQuote" : "renewWithQuote",
         args: [parentName, label, quote, data.signature],
         value: quote.paymentToken === zeroAddress ? quote.paymentAmount : 0n
       }
@@ -1128,13 +1232,20 @@ function assertQuoteContext(
   }
 }
 
-function deserializeRegistrarQuote(value: SerializedRegistrarQuote) {
+function deserializeRegistrarQuote(
+  value: SerializedRegistrarQuote,
+  unified = false
+) {
   assertSerializedQuoteIdentity(value.node, value.payer, value.nameOwner);
   if (value.product !== 0 && value.product !== 1) {
     throw new XdcidSdkError("INVALID_CONFIG", "Registrar quote product is invalid");
   }
+  if (unified && value.parentNode !== zeroHash) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Unified top-level quote parent node is invalid");
+  }
   return {
     node: value.node,
+    ...(unified ? { parentNode: value.parentNode as Hash } : {}),
     payer: getAddress(value.payer),
     nameOwner: getAddress(value.nameOwner),
     product: value.product,
@@ -1174,16 +1285,28 @@ function deserializeDiscountAuthorization(value: SerializedDiscountAuthorization
   };
 }
 
-function deserializeSubdomainQuote(value: SerializedSubdomainQuote) {
+function deserializeSubdomainQuote(
+  value: SerializedSubdomainQuote,
+  unified = false
+) {
   if (!isHex(value.parentNode, { strict: true }) || value.parentNode.length !== 66) {
     throw new XdcidSdkError("INVALID_CONFIG", "Subdomain quote parent node is invalid");
   }
-  assertSerializedQuoteIdentity(value.node, value.payer, value.subdomainOwner);
+  const nameOwner = unified ? value.nameOwner : value.subdomainOwner;
+  if (!nameOwner) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Unified subdomain quote owner is missing");
+  }
+  assertSerializedQuoteIdentity(value.node, value.payer, nameOwner);
+  if (unified && value.product !== 2 && value.product !== 3) {
+    throw new XdcidSdkError("INVALID_CONFIG", "Unified subdomain quote product is invalid");
+  }
   return {
     node: value.node,
     parentNode: value.parentNode,
     payer: getAddress(value.payer),
-    subdomainOwner: getAddress(value.subdomainOwner),
+    ...(unified
+      ? { nameOwner: getAddress(nameOwner), product: value.product as 2 | 3 }
+      : { subdomainOwner: getAddress(value.subdomainOwner) }),
     termYears: parseUnsignedBigInt(value.termYears, "termYears"),
     paymentToken: getAddress(value.paymentToken),
     paymentAmount: parseUnsignedBigInt(value.paymentAmount, "paymentAmount"),
