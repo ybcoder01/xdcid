@@ -1,0 +1,105 @@
+name: Legacy migration snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_block:
+        description: Confirmed XDC block to freeze for the migration snapshot
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-migration-snapshot-${{ inputs.to_block }}
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.7.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate snapshot block
+        id: block
+        env:
+          SNAPSHOT_BLOCK: ${{ inputs.to_block }}
+        run: |
+          case "$SNAPSHOT_BLOCK" in
+            ''|*[!0-9]*)
+              echo "to_block must be an unsigned integer" >&2
+              exit 1
+              ;;
+          esac
+          if [ "$SNAPSHOT_BLOCK" -lt 48393303 ]; then
+            echo "to_block predates the legacy contract deployment" >&2
+            exit 1
+          fi
+          echo "block=$SNAPSHOT_BLOCK" >> "$GITHUB_OUTPUT"
+
+      - name: Create raw legacy snapshot
+        env:
+          LEGACY_INDEX_TO_BLOCK: ${{ steps.block.outputs.block }}
+        run: |
+          mkdir -p snapshot-output
+          pnpm index:legacy-domains > snapshot-output/legacy-domain-snapshot.json
+
+      - name: Create migration eligibility report
+        env:
+          LEGACY_SNAPSHOT_PATH: snapshot-output/legacy-domain-snapshot.json
+          LEGACY_REPORT_PATH: snapshot-output/legacy-migration-report.json
+          XDCID_REGISTRY_ADDRESS: 0x05fa64a05bc205DeDF47e023d2D90c2d119cd097
+        run: |
+          pnpm exec hardhat run --no-compile scripts/create-legacy-migration-report.ts
+
+      - name: Generate and verify checksums
+        run: |
+          (cd snapshot-output && sha256sum *.json > SHA256SUMS && sha256sum --check SHA256SUMS)
+
+      - name: Write workflow summary
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const report = JSON.parse(
+            fs.readFileSync("snapshot-output/legacy-migration-report.json", "utf8"),
+          );
+          const lines = [
+            "# Legacy migration snapshot",
+            "",
+            "- Block: " + report.snapshotBlock,
+            "- Snapshot SHA-256: " + report.sourceSnapshotSha256,
+            "- Report SHA-256: " + report.reportSha256,
+            "- Total active legacy .xdc records: " + report.counts.total,
+            "- Eligible: " + report.counts.eligible,
+            "- Invalid: " + report.counts.invalid,
+            "- Legacy duplicate records: " + report.counts.legacyDuplicates,
+            "- Existing XDCID collisions: " + report.counts.xdcidCollisions,
+            "",
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
+          NODE
+
+      - name: Upload auditable snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: legacy-migration-snapshot-block-${{ steps.block.outputs.block }}
+          path: snapshot-output/
+          if-no-files-found: error
+          retention-days: 30
