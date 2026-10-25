@@ -23,11 +23,14 @@ import {
   activeSubdomainRegistrarAddress,
   activeRegistryAddress,
   activeXnsChainId,
+  addresses,
   isTestnetEnvironment,
+  multichainResolverAbi,
   registryAbi,
   subdomainRegistrarAbi,
   supportedMultichainNetworks,
   unifiedProtocolEnabled,
+  unifiedRegistrarAbi,
   unifiedRegistryReadAbi,
   unifiedSubdomainRegistryAddress,
 } from "../config/contracts";
@@ -83,18 +86,22 @@ export function SubdomainAddressManager({
     [parentName],
   );
   const owner = useReadContract({
-    address: activeSubdomainRegistrarAddress,
+    address: unifiedProtocolEnabled
+      ? unifiedSubdomainRegistryAddress
+      : activeSubdomainRegistrarAddress,
     chainId: activeXnsChainId,
-    abi: subdomainRegistrarAbi,
+    abi: unifiedProtocolEnabled ? unifiedRegistryReadAbi : subdomainRegistrarAbi,
     functionName: "ownerOf",
     args: [node],
   });
   const addressReads = useReadContracts({
     contracts: supportedMultichainNetworks.map((network) => ({
-      address: activeSubdomainRegistrarAddress,
+      address: unifiedProtocolEnabled
+        ? addresses.multichainResolver
+        : activeSubdomainRegistrarAddress,
       chainId: activeXnsChainId,
-      abi: subdomainRegistrarAbi,
-      functionName: "addressOf",
+      abi: unifiedProtocolEnabled ? multichainResolverAbi : subdomainRegistrarAbi,
+      functionName: unifiedProtocolEnabled ? "addressFor" : "addressOf",
       args: [node, BigInt(network.chainId)],
     })),
   });
@@ -293,13 +300,29 @@ export function SubdomainAddressManager({
         activeXnsChainId,
         XDC_WRITE_GAS_LIMITS.recordUpdate,
       );
-      const hash = await writeContractAsync({
-        address: activeSubdomainRegistrarAddress,
-        abi: subdomainRegistrarAbi,
-        functionName: "setAddress",
-        args: [node, BigInt(chainIdToSave), destination],
-        ...gas,
-      });
+      const hash = unifiedProtocolEnabled
+        ? destination === zeroAddress
+          ? await writeContractAsync({
+              address: addresses.multichainResolver,
+              abi: multichainResolverAbi,
+              functionName: "clearAddress",
+              args: [node, BigInt(chainIdToSave)],
+              ...gas,
+            })
+          : await writeContractAsync({
+              address: addresses.multichainResolver,
+              abi: multichainResolverAbi,
+              functionName: "setAddress",
+              args: [node, BigInt(chainIdToSave), destination],
+              ...gas,
+            })
+        : await writeContractAsync({
+            address: activeSubdomainRegistrarAddress,
+            abi: subdomainRegistrarAbi,
+            functionName: "setAddress",
+            args: [node, BigInt(chainIdToSave), destination],
+            ...gas,
+          });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("Address update failed");
       setStatus("Receiving address updated.");
@@ -358,21 +381,37 @@ export function SubdomainAddressManager({
         activeXnsChainId,
         XDC_WRITE_GAS_LIMITS.recordUpdate,
       );
-      const hash = action === "reclaim"
-        ? await writeContractAsync({
-            address: activeSubdomainRegistrarAddress,
-            abi: subdomainRegistrarAbi,
-            functionName: "reclaimSubdomain",
-            args: [parentName, label],
-            ...gas,
-          })
-        : await writeContractAsync({
-            address: activeSubdomainRegistrarAddress,
-            abi: subdomainRegistrarAbi,
-            functionName: "assignSubdomain",
-            args: [parentName, label, destinationOwner as Address],
-            ...gas,
-          });
+      const hash = unifiedProtocolEnabled
+        ? action === "reclaim"
+          ? await writeContractAsync({
+              address: activeSubdomainRegistrarAddress,
+              abi: unifiedRegistrarAbi,
+              functionName: "recallSubdomain",
+              args: [parentName, label],
+              ...gas,
+            })
+          : await writeContractAsync({
+              address: activeSubdomainRegistrarAddress,
+              abi: unifiedRegistrarAbi,
+              functionName: "reassignSubdomain",
+              args: [parentName, label, destinationOwner as Address],
+              ...gas,
+            })
+        : action === "reclaim"
+          ? await writeContractAsync({
+              address: activeSubdomainRegistrarAddress,
+              abi: subdomainRegistrarAbi,
+              functionName: "reclaimSubdomain",
+              args: [parentName, label],
+              ...gas,
+            })
+          : await writeContractAsync({
+              address: activeSubdomainRegistrarAddress,
+              abi: subdomainRegistrarAbi,
+              functionName: "assignSubdomain",
+              args: [parentName, label, destinationOwner as Address],
+              ...gas,
+            });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error("Ownership update failed");
       setStatus(
@@ -455,7 +494,11 @@ export function SubdomainAddressManager({
                   <button
                     type="button"
                     className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-                    disabled={!valid || busyKey !== null}
+                    disabled={
+                      !valid ||
+                      busyKey !== null ||
+                      (unifiedProtocolEnabled && !isSubdomainOwner)
+                    }
                     onClick={() => saveAddress(network.chainId, getAddress(draft))}
                   >
                     {busyKey === String(network.chainId) ? "Saving…" : "Save"}
@@ -463,7 +506,10 @@ export function SubdomainAddressManager({
                   <button
                     type="button"
                     className="rounded-md border border-black/15 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
-                    disabled={busyKey !== null}
+                    disabled={
+                      busyKey !== null ||
+                      (unifiedProtocolEnabled && !isSubdomainOwner)
+                    }
                     onClick={() => saveAddress(network.chainId, zeroAddress)}
                   >
                     Use owner
@@ -475,6 +521,13 @@ export function SubdomainAddressManager({
         </div>
       </section>
 
+      {unifiedProtocolEnabled && !isParentOwner ? (
+        <section className="rounded-md border border-black/10 bg-white/90 p-5 text-sm text-neutral-600 shadow-sm">
+          Ownership assignment and recall remain controlled by the parent XDCID owner.
+          As the current subdomain owner, you can manage receiving addresses and select
+          this identity as your Primary ID.
+        </section>
+      ) : (
       <section className="rounded-md border border-black/10 bg-white/90 p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-950">
           {isParentOwner ? "Subdomain assignment" : "Transfer subdomain"}
@@ -529,6 +582,7 @@ export function SubdomainAddressManager({
           </p>
         ) : null}
       </section>
+      )}
       {status ? (
         <p className="rounded-md border border-black/10 bg-white p-4 text-sm text-neutral-700 shadow-sm">
           {status}

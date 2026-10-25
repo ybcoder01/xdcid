@@ -36,6 +36,11 @@ test("the dashboard discovers active subdomains and exposes owner controls", asy
   assert.match(manager, /functionName: "transferSubdomain"/);
   assert.match(manager, /functionName: "assignSubdomain"/);
   assert.match(manager, /functionName: "reclaimSubdomain"/);
+  assert.match(manager, /functionName: "reassignSubdomain"/);
+  assert.match(manager, /functionName: "recallSubdomain"/);
+  assert.match(manager, /unifiedProtocolEnabled \? unifiedRegistryReadAbi : subdomainRegistrarAbi/);
+  assert.match(manager, /unifiedProtocolEnabled \? multichainResolverAbi : subdomainRegistrarAbi/);
+  assert.match(manager, /unifiedProtocolEnabled && !isParentOwner/);
   assert.match(manager, /parseResolvableXnsName/);
   assert.match(manager, /Wallet address or XDCID/);
   assert.match(manager, /revalidateOwnerInput/);

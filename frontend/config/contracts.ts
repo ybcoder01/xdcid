@@ -483,7 +483,28 @@ export const unifiedRegistrarAbi = [
           ],
       outputs: []
     }),
-  )
+  ),
+  {
+    type: "function",
+    name: "reassignSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" },
+      { name: "newOwner", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "recallSubdomain",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentName", type: "string" },
+      { name: "label", type: "string" }
+    ],
+    outputs: []
+  }
 ] as const;
 
 export const discountedRegistrarAbi = [
