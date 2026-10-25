@@ -36,6 +36,10 @@ test("the dashboard discovers active subdomains and exposes owner controls", asy
   assert.match(manager, /functionName: "transferSubdomain"/);
   assert.match(manager, /functionName: "assignSubdomain"/);
   assert.match(manager, /functionName: "reclaimSubdomain"/);
+  assert.match(manager, /parseResolvableXnsName/);
+  assert.match(manager, /Wallet address or XDCID/);
+  assert.match(manager, /revalidateOwnerInput/);
+  assert.match(manager, /XDCID ownership changed before submission/);
   assert.match(manager, /Reclaim to parent owner/);
   assert.match(publicPage, /allowRenewalsWhenDisabled/);
   assert.match(
