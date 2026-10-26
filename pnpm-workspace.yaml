@@ -7,17 +7,18 @@ allowBuilds:
   utf-8-validate: false
 minimumReleaseAgeExclude:
   - postcss@8.5.23
-  - '@next/env@16.3.8'
-  - '@next/swc-darwin-arm64@16.3.8'
-  - '@next/swc-darwin-x64@16.3.8'
-  - '@next/swc-linux-arm64-gnu@16.3.8'
-  - '@next/swc-linux-arm64-musl@16.3.8'
-  - '@next/swc-linux-x64-gnu@16.3.8'
-  - '@next/swc-linux-x64-musl@16.3.8'
-  - '@next/swc-win32-arm64-msvc@16.3.8'
-  - '@next/swc-win32-x64-msvc@16.3.8'
-  - next@16.3.8
+  - '@next/env@16.4.3'
+  - '@next/swc-darwin-arm64@16.4.3'
+  - '@next/swc-darwin-x64@16.4.3'
+  - '@next/swc-linux-arm64-gnu@16.4.3'
+  - '@next/swc-linux-arm64-musl@16.4.3'
+  - '@next/swc-linux-x64-gnu@16.4.3'
+  - '@next/swc-linux-x64-musl@16.4.3'
+  - '@next/swc-win32-arm64-msvc@16.4.3'
+  - '@next/swc-win32-x64-msvc@16.4.3'
+  - next@16.4.3
 overrides:
+  '@coinbase/cdp-sdk': 1.51.2
   adm-zip: 0.6.1
   axios: 1.20.0
   baseline-browser-mapping: 2.11.0
@@ -46,9 +47,10 @@ overrides:
   source-map-js: 1.2.2
   socket.io-parser: 4.2.7
   tmp: 0.2.7
-  undici: 6.28.1
+  undici: 6.29.1
   uuid: 11.1.1
   ws: 8.21.0
+  zod@<4.6.6: ^4.6.6
 peerDependencyRules:
   allowedVersions:
     '@types/react': '19'

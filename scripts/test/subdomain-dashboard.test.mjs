@@ -21,10 +21,17 @@ test("the dashboard discovers active subdomains and exposes owner controls", asy
   assert.match(indexer, /getTransaction\(\{ hash \}\)/);
   assert.match(indexer, /functionName: "ownerOf"/);
   assert.match(indexer, /functionName: "records"/);
+  assert.match(indexer, /parentControlledByWallet/);
+  assert.match(indexer, /!ownedByWallet && !parentControlledByWallet/);
   assert.match(route, /getOwnedSubdomainsData/);
   assert.match(dashboard, /\/subdomains\/manage\?/);
   assert.match(dashboard, /<SubdomainRenewalControls/);
   assert.match(dashboard, /subdomainsByParent\.get\(record\.name\)/);
+  assert.match(dashboard, /filter\(\(record\) => record\.ownedByWallet\)/);
+  assert.match(
+    dashboard,
+    /record\.ownedByWallet &&\s*!ownedParentNames\.has\(record\.parentName\)/,
+  );
   assert.match(dashboard, /parentExpiryTimestamp=\{record\.expiry\.timestamp\}/);
   assert.doesNotMatch(dashboard, /Child identities/);
   assert.match(

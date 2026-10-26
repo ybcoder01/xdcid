@@ -60,6 +60,8 @@ type OwnedSubdomain = {
   parentName: string;
   label: string;
   node: Hex;
+  ownedByWallet: boolean;
+  parentControlledByWallet: boolean;
   expiry: { timestamp: string; iso: string };
 };
 
@@ -93,7 +95,14 @@ function SubdomainRow({
   return (
     <div className="grid gap-4 rounded-md border border-black/10 bg-white p-4 shadow-sm lg:grid-cols-[minmax(14rem,1fr)_auto] lg:items-center">
       <div className="min-w-0">
-        <p className="text-lg font-semibold text-slate-950">{record.name}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-lg font-semibold text-slate-950">{record.name}</p>
+          {!record.ownedByWallet && record.parentControlledByWallet ? (
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+              Assigned to another wallet
+            </span>
+          ) : null}
+        </div>
         <p className="text-sm text-neutral-600">
           Subdomain · Expires: {new Date(record.expiry.iso).toLocaleDateString()}
         </p>
@@ -383,9 +392,9 @@ export default function Dashboard() {
         setLookupError(body.error?.message || "Unable to load wallet names");
       }
       if (subdomainsResponse.ok && subdomainBody.data) {
-        fetchedSubdomains.forEach((record) =>
-          saveSubdomain(address, record.name),
-        );
+        fetchedSubdomains
+          .filter((record) => record.ownedByWallet)
+          .forEach((record) => saveSubdomain(address, record.name));
         setSubdomains(fetchedSubdomains);
       } else {
         setSubdomainLookupError(
@@ -394,13 +403,17 @@ export default function Dashboard() {
       }
       const candidateNames = new Set([
         ...fetchedNames.map((record) => record.name),
-        ...fetchedSubdomains.map((record) => record.name),
+        ...fetchedSubdomains
+          .filter((record) => record.ownedByWallet)
+          .map((record) => record.name),
       ]);
       const preferredPrimary = body.data?.primaryName;
       setSelectedPrimary(
         preferredPrimary && candidateNames.has(preferredPrimary)
           ? preferredPrimary
-          : fetchedNames[0]?.name || fetchedSubdomains[0]?.name || "",
+          : fetchedNames[0]?.name ||
+            fetchedSubdomains.find((record) => record.ownedByWallet)?.name ||
+            "",
       );
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -461,11 +474,13 @@ export default function Dashboard() {
       node: record.node,
       migrationRequired: record.migrationRequired,
     }));
-    subdomains.forEach((record) => candidates.set(record.node.toLowerCase(), {
-      name: record.name,
-      node: record.node,
-      migrationRequired: false,
-    }));
+    subdomains
+      .filter((record) => record.ownedByWallet)
+      .forEach((record) => candidates.set(record.node.toLowerCase(), {
+        name: record.name,
+        node: record.node,
+        migrationRequired: false,
+      }));
     return [...candidates.values()].sort((left, right) =>
       left.name.localeCompare(right.name),
     );
@@ -486,7 +501,9 @@ export default function Dashboard() {
     return {
       subdomainsByParent: grouped,
       assignedSubdomains: subdomains.filter(
-        (record) => !ownedParentNames.has(record.parentName),
+        (record) =>
+          record.ownedByWallet &&
+          !ownedParentNames.has(record.parentName),
       ),
     };
   }, [names, subdomains]);
