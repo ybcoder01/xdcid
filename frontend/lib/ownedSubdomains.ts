@@ -53,6 +53,8 @@ export type OwnedSubdomain = {
   parentName: string;
   label: string;
   node: Hex;
+  ownedByWallet: boolean;
+  parentControlledByWallet: boolean;
   expiry: { timestamp: string; iso: string };
 };
 
@@ -221,7 +223,7 @@ export async function getOwnedSubdomainsData(
       }
 
       const candidates = Array.from(new Set([...indexedNames, ...known]));
-      const owned: OwnedSubdomain[] = [];
+      const visible: OwnedSubdomain[] = [];
       const now = BigInt(Math.floor(Date.now() / 1_000));
       const legacyRegistrar = getAddress(
         isTestnetEnvironment
@@ -249,6 +251,7 @@ export async function getOwnedSubdomainsData(
                   name,
                   node,
                   owner: unifiedRecord.owner,
+                  parentNode: unifiedRecord.parentNode,
                   expiry: unifiedRecord.expiry,
                 };
               }
@@ -273,21 +276,47 @@ export async function getOwnedSubdomainsData(
               name,
               node,
               owner: legacyOwner,
+              parentNode: legacyRecord[1],
               expiry: legacyRecord[2],
             };
           }),
         );
 
-        records.forEach(({ name, node, owner, expiry }) => {
-          if (owner.toLowerCase() !== address.toLowerCase() || expiry <= now) {
+        const parentOwners = new Map<Hex, string>();
+        await Promise.all(
+          Array.from(new Set(records.map((record) => record.parentNode))).map(
+            async (parentNode) => {
+              const parentOwner = await xdcClient.readContract({
+                address: getAddress(activeRegistryAddress),
+                abi: recordsAbi,
+                functionName: "ownerOf",
+                args: [parentNode],
+              });
+              parentOwners.set(parentNode, parentOwner);
+            },
+          ),
+        );
+
+        records.forEach(({ name, node, owner, parentNode, expiry }) => {
+          const ownedByWallet =
+            owner.toLowerCase() === address.toLowerCase();
+          const parentControlledByWallet =
+            parentOwners.get(parentNode)?.toLowerCase() ===
+            address.toLowerCase();
+          if (
+            (!ownedByWallet && !parentControlledByWallet) ||
+            expiry <= now
+          ) {
             return;
           }
           const labels = name.split(".");
-          owned.push({
+          visible.push({
             name,
             label: labels[0],
             parentName: labels.slice(1).join("."),
             node,
+            ownedByWallet,
+            parentControlledByWallet,
             expiry: {
               timestamp: expiry.toString(),
               iso: new Date(Number(expiry) * 1_000).toISOString(),
@@ -302,7 +331,7 @@ export async function getOwnedSubdomainsData(
           chainId: activeXnsChainId,
           name: isTestnetEnvironment ? "XDC Apothem" : "XDC Network",
         },
-        subdomains: owned.sort((left, right) =>
+        subdomains: visible.sort((left, right) =>
           left.name.localeCompare(right.name),
         ),
       };
