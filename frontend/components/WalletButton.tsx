@@ -100,9 +100,6 @@ export function WalletButton({ compact = false }: { compact?: boolean }) {
               <div className="absolute right-0 top-full z-50 mt-2 w-60 rounded-2xl border border-slate-200 bg-white p-2 text-sm shadow-xl" role="menu">
                 <div className="border-b border-slate-100 px-3 py-2">
                   <p className="truncate font-semibold text-slate-950">{identity.name || "Connected wallet"}</p>
-                  {identity.name && !identity.isPrimary ? (
-                    <p className="mt-1 text-xs text-slate-500">Owned subdomain</p>
-                  ) : null}
                   <p className="mt-1 truncate font-mono text-xs text-slate-500">{account.address}</p>
                 </div>
                 <button
@@ -158,22 +155,7 @@ function useWalletXnsIdentity(address?: string): WalletXnsIdentity {
         setIdentity({ name: body.data.name, isPrimary: true });
         return;
       }
-
-      const ownedResponse = await fetch(`/api/v1/addresses/${address}/subdomains`, {
-        cache: "no-store",
-        signal,
-      });
-      const ownedBody = await ownedResponse.json() as {
-        data?: { subdomains?: Array<{ name?: string }> };
-      };
-      const names = ownedBody.data?.subdomains
-        ?.map((record) => record.name)
-        .filter((name): name is string => Boolean(name)) || [];
-      setIdentity(
-        ownedResponse.ok && names.length === 1
-          ? { name: names[0], isPrimary: false }
-          : EMPTY_IDENTITY,
-      );
+      setIdentity(EMPTY_IDENTITY);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         setIdentity(EMPTY_IDENTITY);
