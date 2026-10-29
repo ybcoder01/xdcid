@@ -187,7 +187,7 @@ function NameRow({
             </Link>
             {record.primary && (
               <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
-                Primary display name
+                Primary ID
               </span>
             )}
           </div>
@@ -283,7 +283,7 @@ function AssignedSubdomainRow({
           </span>
           {primary ? (
             <span className="rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-800">
-              Primary display name
+              Primary ID
             </span>
           ) : null}
         </div>
@@ -558,7 +558,7 @@ export default function Dashboard() {
       {isConnected && primaryCandidates.length > 0 && (
         <section className="mt-6 rounded-md border border-black/10 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">
-            Primary display name
+            Primary ID
           </h2>
           <p className="mt-1 text-sm text-neutral-600">
             Every active name below continues to receive at its configured
@@ -570,7 +570,7 @@ export default function Dashboard() {
             <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
               <p className="font-semibold">Finish setting up your XDCID</p>
               <p className="mt-1 text-xs leading-5">
-                Select one name as your primary display name to enable verified
+                Select one name as your Primary ID to enable verified
                 reverse lookup. Your other names will continue working.
               </p>
             </div>
@@ -608,7 +608,7 @@ export default function Dashboard() {
                 ? "Confirm in wallet"
                 : primaryReceipt.isLoading
                   ? "Saving..."
-                  : "Set display name"}
+                  : "Set Primary ID"}
             </button>
           </div>
           {selectedRecord?.migrationRequired ? (
@@ -619,7 +619,7 @@ export default function Dashboard() {
           ) : null}
           {confirmedPrimary && (
             <p className="mt-3 text-sm text-teal-700">
-              {confirmedPrimary} is now the primary display name on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
+              {confirmedPrimary} is now the Primary ID on {isTestnetDashboard ? "XDC Apothem" : "XDC Network"}.
             </p>
           )}
           {primaryWriteError && (

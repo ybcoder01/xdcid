@@ -385,11 +385,11 @@ export function SignedRegistrationControls(props: {
       {registrationHash && expectedChainId === 50 && !unifiedProtocolEnabled ? (
         <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50 p-4">
           <p className="text-sm font-semibold text-slate-950">
-            Optional: choose your primary display name
+            Optional: choose your Primary ID
           </p>
           <p className="mt-1 text-xs leading-5 text-neutral-700">
             {props.name} already resolves to its owner wallet. Set it as your
-            primary display name only if you want supported wallets and apps to
+            Primary ID only if you want supported wallets and apps to
             show it when they look up this address. Your other names will
             continue working.
           </p>

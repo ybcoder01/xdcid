@@ -193,7 +193,7 @@ export function MultichainAddressManager({
         <p className="mt-1 leading-6">
           Payments use a custom destination when one is saved. Otherwise, this
           name resolves to its current owner wallet. Selecting a different
-          primary display name does not disable or reroute this name; custom
+          Primary ID does not disable or reroute this name; custom
           records stay attached to the name where they were saved.
         </p>
       </div>
