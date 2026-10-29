@@ -1,26 +1,52 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { isAddress, keccak256, stringToHex, zeroAddress } from "viem";
-import { useAccount, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { getAddress, isAddress, keccak256, stringToHex, zeroAddress, type Address } from "viem";
+import { useAccount, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import { MultichainAddressManager } from "../../../components/MultichainAddressManager";
 import { RegistryV2MigrationAction } from "../../../components/RegistryV2MigrationAction";
 import { SignedRenewalControls } from "../../../components/SignedRenewalControls";
-import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, unifiedPrimaryNameWriteAbi, unifiedProtocolEnabled, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
-import { isNonZeroAddress } from "../../../lib/addressValidation";
-import { parseXnsName } from "../../../lib/names";
+import { activeRegistrarAddress, activeRegistryAddress, activeResolverSuiteAvailable, activeSubdomainRegistrarAddress, activeXnsChainId, addresses, isTestnetEnvironment, multichainResolverAvailable, registryAbi, resolverAbi, reverseResolverAbi, signedRegistrarEnabled, subdomainRegistrarAbi, unifiedPrimaryNameWriteAbi, unifiedProtocolEnabled, unifiedRegistryReadAbi, unifiedSubdomainRegistryAddress, verifiedResolverAvailable, verifiedReverseResolverAvailable } from "../../../config/contracts";
+import { parseResolvableXnsName, parseXnsName } from "../../../lib/names";
+import { walletActionErrorMessage } from "../../../lib/walletErrors";
 
 const textKeys = ["avatar", "website", "twitter", "telegram", "bio"] as const;
+
+function recordExpiry(record: unknown): bigint | null {
+  if (Array.isArray(record) && typeof record[2] === "bigint") {
+    return record[2];
+  }
+  if (record && typeof record === "object" && "expiry" in record) {
+    const expiry = (record as { expiry?: unknown }).expiry;
+    return typeof expiry === "bigint" ? expiry : null;
+  }
+  return null;
+}
+
+function shortAddress(value: string) {
+  return value.slice(0, 8) + "…" + value.slice(-6);
+}
+
+type ResolvedOwner = {
+  address: Address;
+  identity: string | null;
+};
 
 export default function NamePage() {
   const params = useParams<{ name: string }>();
   const parsedName = useMemo(() => parseXnsName(decodeURIComponent(params.name)), [params.name]);
   const { name, isValid, error: validationError } = parsedName;
   const { address } = useAccount();
-  const { writeContract, isPending } = useWriteContract();
+  const client = usePublicClient({ chainId: activeXnsChainId });
+  const { writeContract, writeContractAsync, isPending } = useWriteContract();
   const [addr, setAddr] = useState("");
   const [newOwner, setNewOwner] = useState("");
+  const [resolvedNewOwner, setResolvedNewOwner] = useState<ResolvedOwner | null>(null);
+  const [ownerResolution, setOwnerResolution] = useState("");
+  const [ownerResolutionPending, setOwnerResolutionPending] = useState(false);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferStatus, setTransferStatus] = useState("");
   const [records, setRecords] = useState<Record<string, string>>({});
 
   const node = useMemo(
@@ -91,6 +117,120 @@ export default function NamePage() {
   const ownerRecordsEnabled =
     isOwner && !migrationRequired && !ownershipGeneration.isLoading;
 
+  const resolveOwnerInput = useCallback(async (value: string): Promise<ResolvedOwner> => {
+    const input = value.trim();
+    if (isAddress(input)) {
+      const destination = getAddress(input);
+      if (destination === zeroAddress) throw new Error("Enter a non-zero wallet address");
+      return { address: destination, identity: null };
+    }
+    if (!client) throw new Error("XDC Network connection is unavailable");
+
+    const parsed = parseResolvableXnsName(input);
+    if (!parsed.isValid) {
+      throw new Error(parsed.error || "Enter a valid wallet address or XDCID");
+    }
+
+    const identityNode = keccak256(stringToHex(parsed.name));
+    let identityOwner: unknown;
+    let identityExpiry: bigint | null = null;
+
+    if (parsed.kind === "subdomain") {
+      if (unifiedProtocolEnabled) {
+        const [currentOwner, record] = await Promise.all([
+          client.readContract({
+            address: unifiedSubdomainRegistryAddress,
+            abi: unifiedRegistryReadAbi,
+            functionName: "ownerOf",
+            args: [identityNode],
+          }),
+          client.readContract({
+            address: unifiedSubdomainRegistryAddress,
+            abi: unifiedRegistryReadAbi,
+            functionName: "records",
+            args: [identityNode],
+          }),
+        ]);
+        identityOwner = currentOwner;
+        identityExpiry = recordExpiry(record);
+      } else {
+        const record = await client.readContract({
+          address: activeSubdomainRegistrarAddress,
+          abi: subdomainRegistrarAbi,
+          functionName: "records",
+          args: [identityNode],
+        });
+        identityOwner = Array.isArray(record) ? record[0] : undefined;
+        identityExpiry = recordExpiry(record);
+      }
+    } else {
+      [identityOwner, identityExpiry] = await Promise.all([
+        client.readContract({
+          address: activeRegistryAddress,
+          abi: registryAbi,
+          functionName: "ownerOf",
+          args: [identityNode],
+        }),
+        client.readContract({
+          address: activeRegistryAddress,
+          abi: registryAbi,
+          functionName: "expiryOf",
+          args: [identityNode],
+        }),
+      ]);
+    }
+
+    if (
+      typeof identityOwner !== "string" ||
+      !isAddress(identityOwner) ||
+      identityOwner === zeroAddress ||
+      identityExpiry === null ||
+      identityExpiry <= BigInt(Math.floor(Date.now() / 1_000))
+    ) {
+      throw new Error(`${parsed.name} is unregistered or expired`);
+    }
+
+    return { address: getAddress(identityOwner), identity: parsed.name };
+  }, [client]);
+
+  useEffect(() => {
+    const input = newOwner.trim();
+    setResolvedNewOwner(null);
+    if (!input) {
+      setOwnerResolution("");
+      setOwnerResolutionPending(false);
+      return;
+    }
+
+    let cancelled = false;
+    setOwnerResolutionPending(true);
+    setOwnerResolution(isAddress(input) ? "Checking wallet address…" : "Resolving XDCID owner…");
+    const timeout = window.setTimeout(() => {
+      void resolveOwnerInput(input)
+        .then((resolved) => {
+          if (cancelled) return;
+          setResolvedNewOwner(resolved);
+          setOwnerResolution(
+            resolved.identity
+              ? `${resolved.identity} currently belongs to ${shortAddress(resolved.address)}`
+              : `Wallet ${shortAddress(resolved.address)} is ready`,
+          );
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          setOwnerResolution(error instanceof Error ? error.message : "Unable to resolve owner");
+        })
+        .finally(() => {
+          if (!cancelled) setOwnerResolutionPending(false);
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [newOwner, resolveOwnerInput]);
+
   function saveAddress() {
     if (!node || !isAddress(addr)) return;
     writeContract({
@@ -130,15 +270,41 @@ export default function NamePage() {
     });
   }
 
-  function transferName() {
-    if (!node || !isNonZeroAddress(newOwner)) return;
-    writeContract({
-      chainId: activeXnsChainId,
-      address: activeRegistryAddress,
-      abi: registryAbi,
-      functionName: "transferName",
-      args: [node, newOwner]
-    });
+  async function transferName() {
+    if (!node || !resolvedNewOwner || !client) return;
+    setTransferBusy(true);
+    setTransferStatus("");
+    try {
+      const latest = await resolveOwnerInput(newOwner);
+      if (
+        resolvedNewOwner.identity &&
+        latest.address.toLowerCase() !== resolvedNewOwner.address.toLowerCase()
+      ) {
+        setResolvedNewOwner(latest);
+        setOwnerResolution(
+          `${latest.identity} changed owners and now belongs to ${shortAddress(latest.address)}. Review it and try again.`,
+        );
+        throw new Error("XDCID ownership changed before submission");
+      }
+      const hash = await writeContractAsync({
+        chainId: activeXnsChainId,
+        address: activeRegistryAddress,
+        abi: registryAbi,
+        functionName: "transferName",
+        args: [node, latest.address]
+      });
+      const receipt = await client.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error("Ownership transfer failed");
+      setTransferStatus(`Ownership transferred to ${latest.address}.`);
+      setNewOwner("");
+      setResolvedNewOwner(null);
+      setOwnerResolution("");
+      await owner.refetch();
+    } catch (error) {
+      setTransferStatus(walletActionErrorMessage(error, "Ownership transfer failed"));
+    } finally {
+      setTransferBusy(false);
+    }
   }
 
   if (!isValid) {
@@ -256,19 +422,36 @@ export default function NamePage() {
             <p className="mt-1 text-xs text-neutral-600">Move this .XDC name to another wallet after an off-chain sale or agreement.</p>
             <div className="mt-3 flex gap-2">
               <input
+                aria-label="New owner wallet or XDCID"
                 className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-3 py-2"
                 value={newOwner}
-                onChange={(event) => setNewOwner(event.target.value)}
-                placeholder="New owner 0x address"
+                onChange={(event) => {
+                  setNewOwner(event.target.value);
+                  setTransferStatus("");
+                }}
+                placeholder="Wallet address or XDCID"
               />
               <button
                 className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
-                disabled={isPending || !isNonZeroAddress(newOwner)}
+                disabled={isPending || transferBusy || ownerResolutionPending || !resolvedNewOwner}
                 onClick={transferName}
               >
                 Transfer
               </button>
             </div>
+            {ownerResolution ? (
+              <p
+                className={`mt-2 text-xs ${resolvedNewOwner ? "text-teal-700" : "text-amber-800"}`}
+                role="status"
+              >
+                {ownerResolution}
+              </p>
+            ) : null}
+            {transferStatus ? (
+              <p className="mt-2 text-xs text-neutral-700" role="status">
+                {transferStatus}
+              </p>
+            ) : null}
           </div>
           {verifiedResolverAvailable && <div className="mt-4 grid gap-3">
             {textKeys.map((key) => (
